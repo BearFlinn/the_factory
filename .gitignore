@@ -1,1 +1,3 @@
 /target
+/.VSCodeCounter
+src/ui_components.rs

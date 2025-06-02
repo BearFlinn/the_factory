@@ -3799,6 +3799,7 @@ name = "the_factory"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "rand",
 ]
 
 [[package]]
