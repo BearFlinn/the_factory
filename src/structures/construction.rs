@@ -41,6 +41,12 @@ pub struct PowerConsumer {
     pub amount: i32,
 }
 
+// TODO: Update to use receipes
+#[derive(Component)]
+pub struct BuildingCost {
+    pub ore: u32,
+}
+
 #[derive(Component)]
 pub struct MultiCellBuilding {
     pub width: i32,
@@ -49,6 +55,9 @@ pub struct MultiCellBuilding {
     pub center_y: i32,
 }
 
+#[derive(Component)]
+pub struct Operational(pub bool);
+
 #[derive(Clone, Debug)]
 pub struct BuildingDefinition {
     pub name: String,
@@ -56,6 +65,7 @@ pub struct BuildingDefinition {
     pub size: Vec2,
     pub color: Color,
     pub view_radius: i32,
+    pub construction_cost: Option<i32>,
     pub production_rate: Option<u32>,
     pub production_interval: Option<f32>,
     pub power_consumption: Option<i32>,
@@ -71,13 +81,14 @@ pub struct BuildingRegistry {
 impl BuildingRegistry {
     pub fn new() -> Self {
         let mut definitions = HashMap::new();
-        
-        definitions.insert("Harvester".to_string(), BuildingDefinition {
-            name: "Harvester".to_string(),
+
+        definitions.insert("Mining Drill".to_string(), BuildingDefinition {
+            name: "Mining Drill".to_string(),
             building_type: BuildingType::Harvester,
             size: Vec2::new(32.0, 32.0),
             color: Color::srgb(0.3, 0.7, 0.3),
             view_radius: 2,
+            construction_cost: Some(60),
             production_rate: Some(1),
             production_interval: Some(1.0),
             power_consumption: Some(10),
@@ -91,6 +102,7 @@ impl BuildingRegistry {
             size: Vec2::new(16.0, 16.0),
             color: Color::srgb(0.7, 0.3, 0.7),
             view_radius: 1,
+            construction_cost: Some(10),
             production_rate: None,
             production_interval: None,
             power_consumption: None,
@@ -103,7 +115,8 @@ impl BuildingRegistry {
             building_type: BuildingType::Radar,
             size: Vec2::new(32.0, 32.0),
             color: Color::srgb(0.7, 0.7, 0.3),
-            view_radius: 6,
+            view_radius: 10,
+            construction_cost: Some(150),
             production_rate: None,
             production_interval: None,
             power_consumption: Some(30),
@@ -117,6 +130,7 @@ impl BuildingRegistry {
             size: Vec2::new(32.0, 32.0),
             color: Color::srgb(0.3, 0.3, 0.7),
             view_radius: 2,
+            construction_cost: Some(60),
             production_rate: None,
             production_interval: None,
             power_consumption: None,
@@ -147,10 +161,15 @@ impl BuildingRegistry {
             Name { name: def.name.clone() },
             Position { x: grid_x, y: grid_y },
             ViewRange { radius: def.view_radius },
+            Operational(false),
             Layer(BUILDING_LAYER),
             Sprite::from_color(def.color, def.size),
             Transform::from_xyz(world_pos.x, world_pos.y, 1.0),
         ));
+
+        if let Some(construction_cost) = def.construction_cost {
+            entity_commands.insert(BuildingCost { ore: construction_cost as u32 });
+        }
         
         if let (Some(rate), Some(interval)) = (def.production_rate, def.production_interval) {
             entity_commands.insert(Producer {
@@ -247,6 +266,8 @@ pub fn place_hub(
             center_x, 
             center_y 
         },
+        PowerGenerator { amount: 200 },
+        Operational(true),
         Layer(BUILDING_LAYER),
     ))
     .insert(Sprite::from_color(Color::srgb(0.3, 0.3, 0.7), Vec2::new(120.0, 120.0)))

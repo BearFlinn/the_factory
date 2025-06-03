@@ -25,6 +25,10 @@ fn main() {
             spawn_grid, 
             structures::place_hub
         ).chain())
-        .add_systems(Update, handle_grid_expansion)
+        .add_systems(Update, (
+            handle_grid_expansion,
+            apply_deferred,
+            resources::spawn_resource_node,
+        ).chain())
         .run();
 }

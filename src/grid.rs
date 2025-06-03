@@ -10,7 +10,7 @@ pub struct Position {
 #[derive(Component)]
 pub struct Layer(pub i32);
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct CellChildren(pub Vec<Entity>);
 
 #[derive(Bundle)]
@@ -132,7 +132,7 @@ pub struct NewCellEvent {
     pub entity: Entity
 }
 
-fn spawn_cell(
+pub fn spawn_cell(
     commands: &mut Commands, 
     grid: &Grid, 
     x: i32, 
