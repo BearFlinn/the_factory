@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rand::{thread_rng, Rng};
-use crate::grid::{spawn_cell, CellChildren, Grid, Layer, NewCellEvent, Position};
+use crate::grid::{CellChildren, Grid, Layer, NewCellEvent, Position};
 
 const RESOURCE_LAYER: i32 = 0;
 
@@ -68,6 +68,6 @@ pub struct ResourcesPlugin;
 
 impl Plugin for ResourcesPlugin {
     fn build(&self, app: &mut App) {
-
+        app.add_systems(Update, spawn_resource_node);
     }
 }

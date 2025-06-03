@@ -135,7 +135,7 @@ pub fn remove_building(
             if building_layers.contains(building_entity) {
                 if let Ok(pos) = building_positions.get(building_entity) {
                     if pos.x == event.grid_x && pos.y == event.grid_y {
-                        commands.entity(building_entity).despawn();
+                        commands.entity(building_entity).despawn_recursive();
                         to_remove.push(index);
                     }
                 }

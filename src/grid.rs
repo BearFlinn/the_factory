@@ -186,3 +186,18 @@ pub fn handle_grid_expansion(
         }
     }
 }
+
+pub struct GridPlugin;
+
+impl Plugin for GridPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .add_event::<NewCellEvent>()
+            .add_event::<ExpandGridEvent>()
+            .add_systems(Startup, (
+                setup_grid,
+                spawn_grid,
+            ).chain())
+            .add_systems(Update, handle_grid_expansion);
+    }
+}

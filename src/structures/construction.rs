@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
-use crate::grid::{CellChildren, Grid, Position, Layer};
-
-const BUILDING_LAYER: i32 = 1;
+use crate::{grid::{CellChildren, Grid, Layer, Position}, structures::{NetworkChangedEvent, BUILDING_LAYER}};
 
 #[derive(Component)]
 pub struct Building;
