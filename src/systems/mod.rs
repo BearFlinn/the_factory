@@ -41,8 +41,13 @@ impl Plugin for SystemsPlugin {
                 update_operational_status_optimized
                     .in_set(SystemsSet::Operational),
                 
-                (update_inventory_display, update_operational_indicators, update_visual_network_connections)
-                    .in_set(SystemsSet::Display),
+                (update_inventory_display,
+                update_operational_indicators,
+                update_visual_network_connections,
+                update_placement_ghost,
+                display_placement_error,
+                cleanup_placement_errors
+                ).in_set(SystemsSet::Display),
             ));
     }
 }

@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use std::fmt;
 use crate::{
     grid::{CellChildren, Layer, Position}, 
     resources::ResourceNode, 
-    structures::{construction::{BuildingRegistry, BuildingType}, Hub, PlaceBuildingRequestEvent, PlacementError, BUILDING_LAYER},
+    structures::{construction::{BuildingRegistry, BuildingType}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
     items::Inventory,
     systems::{ComputeGrid, NetworkConnectivity}
 };
@@ -11,6 +12,27 @@ use crate::{
 pub struct PlaceBuildingValidationEvent {
     pub result: Result<(), PlacementError>,
     pub request: PlaceBuildingRequestEvent,
+}
+
+#[derive(Debug)]
+pub enum PlacementError {
+    CellNotFound,
+    CellOccupied,
+    NotAdjacentToNetwork,
+    RequiresResourceNode,
+    NotEnoughResources,
+}
+
+impl fmt::Display for PlacementError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PlacementError::CellNotFound => write!(f, "Cannot place building outside grid bounds!"),
+            PlacementError::CellOccupied => write!(f, "Cell is already occupied!"),
+            PlacementError::NotAdjacentToNetwork => write!(f, "Building must be placed adjacent to hub or connector!"),
+            PlacementError::RequiresResourceNode => write!(f, "Building requires resource node!"),
+            PlacementError::NotEnoughResources => write!(f, "Not enough resources to place building!"),
+        }
+    }
 }
 
 pub fn validate_placement(

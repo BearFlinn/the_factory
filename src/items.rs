@@ -110,7 +110,6 @@ pub fn transfer_items(
                 create_ore_item(), 
                 removed
             );
-            println!("Transferred {} ore", removed);
         }
     }
 }
