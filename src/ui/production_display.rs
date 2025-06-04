@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::structures::{PowerGrid, TotalProduction};
+use crate::structures::{ComputeGrid, Hub, Inventory, PowerGrid};
 
 #[derive(Component)]
 pub struct ProductionText;
@@ -8,14 +8,19 @@ pub struct ProductionText;
 #[derive(Component)]
 pub struct PowerGridText;
 
+#[derive(Component)]
+pub struct ComputeGridText;
+
 pub fn setup_production_ui(mut commands: Commands) {
-    commands.spawn(Node {
+    commands.spawn((Node {
         flex_direction: FlexDirection::Column,
         position_type: PositionType::Absolute,
         left: Val::Px(20.0),
         top: Val::Px(20.0),
         ..default()
-    }).with_children(|parent| {
+    },
+    BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.8)),
+    )).with_children(|parent| {
         parent.spawn((
             Text::new("Total Production: 0"),
             TextFont {
@@ -26,14 +31,34 @@ pub fn setup_production_ui(mut commands: Commands) {
         ));
 
         parent.spawn((
-            Text::new("Power Stats\nProduction: 0\nPower Consumption: 0\nAvailable Power: 0"),
+            Text::new("Available Power: 0"),
             TextFont {
                 font_size: 24.0,
                 ..Default::default()
             },
             PowerGridText,
         ));
+
+        parent.spawn((
+            Text::new("Available Compute: 0"),
+            TextFont {
+                font_size: 24.0,
+                ..Default::default()
+            },
+            ComputeGridText,
+        ));
     });
+}
+
+pub fn update_compute_grid_text(
+    compute_grid: Res<ComputeGrid>,
+    mut text_query: Query<&mut Text, With<ComputeGridText>>,
+) {
+    if compute_grid.is_changed() {
+        if let Ok(mut text) = text_query.get_single_mut() {
+            **text = format!("Available Compute: {}", compute_grid.available);
+        }
+    }
 }
 
 pub fn update_power_grid_text(
@@ -42,18 +67,19 @@ pub fn update_power_grid_text(
 ) {
     if power_grid.is_changed() {
         if let Ok(mut text) = text_query.get_single_mut() {
-            **text = format!("Power Stats\nProduction: {}\nPower Consumption: {}\nAvailable Power: {}", power_grid.capacity, power_grid.usage, power_grid.available);
+            **text = format!("Available Power: {}", power_grid.available);
         }
     }
 }
 
 pub fn update_production_text(
-    total_production: Res<TotalProduction>,
+    central_inventory: Query<&Inventory, (With<Hub>, Changed<Inventory>)>,
     mut text_query: Query<&mut Text, With<ProductionText>>,
 ) {
-    if total_production.is_changed() {
+    if let Ok(inventory) = central_inventory.get_single() {
         if let Ok(mut text) = text_query.get_single_mut() {
-            **text = format!("Total Production: {}", total_production.ore);
+            let ore_amount = inventory.get_item_quantity(0); // 0 is ore ID
+            **text = format!("Total Ore: {}", ore_amount);
         }
     }
 }
@@ -65,7 +91,8 @@ impl Plugin for ProductionDisplayPlugin {
         app.add_systems(PostStartup, setup_production_ui);
         app.add_systems(Update, (
             update_production_text, 
-            update_power_grid_text
+            update_power_grid_text, 
+            update_compute_grid_text
         ));
     }
 }

@@ -1,18 +1,20 @@
 use std::collections::{HashSet, VecDeque};
 
-use bevy::prelude::*;
+use bevy::{prelude::*, state::commands};
 
-use crate::grid::{Layer, Position};
+use crate::{grid::{Layer, Position}, structures::{ComputeConsumer, ComputeGenerator, Inventory, ResourceConsumer}, workers::Worker};
 
 use super::{Building, BuildingType, Hub, MultiCellBuilding, Operational, PowerConsumer, PowerGenerator, Producer, BUILDING_LAYER};
 
-#[derive(Resource, Default, Clone)]
-pub struct TotalProduction {
-    pub ore: u32,
+#[derive(Resource, Default)]
+pub struct PowerGrid {
+    pub capacity: i32,
+    pub usage: i32,
+    pub available: i32
 }
 
 #[derive(Resource, Default)]
-pub struct PowerGrid {
+pub struct ComputeGrid {
     pub capacity: i32,
     pub usage: i32,
     pub available: i32
@@ -33,6 +35,10 @@ pub struct NetworkConnectivity {
 }
 
 impl NetworkConnectivity {
+    pub fn is_cell_connected(&self, x: i32, y: i32) -> bool {
+        self.connected_cells.contains(&(x, y))
+    }
+    
     pub fn is_adjacent_to_connected_network(&self, x: i32, y: i32) -> bool {
         let adjacent_positions = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)];
         adjacent_positions.iter().any(|pos| self.connected_cells.contains(pos))
@@ -62,33 +68,148 @@ pub fn update_power_grid(
 }
 
 pub fn update_producers(
-    mut query: Query<(&mut Producer, &Operational)>,
-    mut total_production: ResMut<TotalProduction>,
+    mut query: Query<(&mut Producer, &Operational, &mut Inventory)>,
     time: Res<Time>,
 ) {
-    for (mut producer, operational) in query.iter_mut() {
+    for (mut producer, operational, mut inventory) in query.iter_mut() {
         if !operational.0 {
             continue;
         }
         
         if producer.timer.tick(time.delta()).just_finished() {
-            total_production.ore += producer.amount;
+            inventory.add_item(super::construction::create_ore_item(), producer.amount);
             producer.timer.reset();
         }
     }
 }
 
+#[derive(Component)]
+pub struct InventoryDisplay;
+
+pub fn update_inventory_display(
+    mut commands: Commands,
+    buildings_and_workers: Query<(Entity, &Inventory), Or<(With<Building>, With<Worker>)>>,
+    mut inventory_displays: Query<&mut Text2d, With<InventoryDisplay>>,
+    children: Query<&Children>,
+    changed_inventories: Query<Entity, (Or<(With<Worker>, With<Building>)>, Changed<Inventory>)>,
+) {
+    for (building_entity, inventory) in buildings_and_workers.iter() {
+        // Check if this building's inventory changed, or if we need to create initial display
+        let should_update = changed_inventories.contains(building_entity);
+        
+        let existing_display = children.get(building_entity)
+            .ok()
+            .and_then(|children| {
+                children.iter().find_map(|&child| {
+                    if inventory_displays.contains(child) {
+                        Some(child)
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        match existing_display {
+            Some(display_entity) => {
+                // Update existing display if inventory changed
+                if should_update {
+                    if let Ok(mut text) = inventory_displays.get_mut(display_entity) {
+                        text.0 = format!("{}", inventory.get_item_quantity(0));
+                    }
+                }
+            }
+            None => {
+                // Create new display
+                let display = commands.spawn((
+                    InventoryDisplay,
+                    Text2d::new(format!("{}", inventory.get_item_quantity(0))),
+                    TextFont {
+                        font_size: 16.0,
+                        ..Default::default()
+                    },
+                    TextColor(Color::srgb(1.0, 1.0, 1.0)),
+                    Transform::from_xyz(0.0, 0.0, 1.1), // Position above building
+                )).id();
+
+                commands.entity(building_entity).add_child(display);
+            }
+        }
+    }
+}
+
+pub fn update_resource_consumers(
+    mut query: Query<(&mut ResourceConsumer, &Operational)>,
+    mut central_inventory: Query<&mut Inventory, With<Hub>>,
+    time: Res<Time>,
+) {
+    let Ok(mut inventory) = central_inventory.get_single_mut() else {
+        return; // No central hub found
+    };
+
+    for (mut consumer, operational) in query.iter_mut() {
+        if !operational.0 {
+            continue;
+        }
+        
+        if consumer.timer.tick(time.delta()).just_finished() {
+            if inventory.has_item(0, consumer.amount) { // 0 is ore ID
+                inventory.remove_item(0, consumer.amount);
+                consumer.timer.reset();
+            }
+            // Note: If insufficient resources, timer continues but no consumption occurs
+            // This allows the building to resume when resources become available
+        }
+    }
+}
+
+pub fn update_compute(
+    mut compute_grid: ResMut<ComputeGrid>,
+    generators: Query<(&ComputeGenerator, &Operational)>,
+    consumers: Query<&ComputeConsumer>,
+) {
+    let mut total_compute: i32 = 0;
+    for (generator, operational) in generators.iter() {
+        if !operational.0 {
+            continue;
+        }
+        
+        total_compute += generator.amount;
+        
+    }
+
+    let total_consumption: i32 = consumers.iter().map(|c| c.amount).sum();
+
+    compute_grid.capacity = total_compute;
+    compute_grid.usage = total_consumption;
+    compute_grid.available = total_compute - total_consumption;
+}
+
 pub fn update_operational_status_optimized(
-    mut buildings: Query<(&BuildingType, &Position, &mut Operational, Option<&PowerConsumer>), With<Building>>,
+    mut buildings: Query<(&BuildingType, &Position, &mut Operational, Option<&PowerConsumer>, Option<&ResourceConsumer>), With<Building>>,
     network_connectivity: Res<NetworkConnectivity>,
     power_grid: Res<PowerGrid>,
+    central_inventory: Query<&Inventory, With<Hub>>,
 ) {
     let has_power = power_grid.available >= 0;
+    let inventory = central_inventory.get_single().ok();
     
-    for (building_type, pos, mut operational, power_consumer) in buildings.iter_mut() {
+    for (building_type, pos, mut operational, power_consumer, resource_consumer) in buildings.iter_mut() {
         if !network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y) {
             operational.0 = false;
             continue; 
+        }
+        
+        // Check resource availability for resource consumers
+        if let Some(consumer) = resource_consumer {
+            if let Some(inv) = inventory {
+                if !inv.has_item(0, consumer.amount) { // 0 is ore ID
+                    operational.0 = false;
+                    continue;
+                }
+            } else {
+                operational.0 = false;
+                continue;
+            }
         }
         
         operational.0 = match building_type {
@@ -181,6 +302,23 @@ pub fn calculate_network_connectivity(
             if has_connector {
                 connected_cells.insert((adj_x, adj_y));
                 queue.push_back((adj_x, adj_y));
+            }
+        }
+    }
+    
+    // Second pass: include all buildings adjacent to the connected network
+    let core_network = connected_cells.clone();
+    for (_, position, layer) in building_layers.iter() {
+        if layer.0 == BUILDING_LAYER {
+            let building_pos = (position.x, position.y);
+            
+            // Check if this building is adjacent to any cell in the core network
+            for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
+                let adjacent = (building_pos.0 + dx, building_pos.1 + dy);
+                if core_network.contains(&adjacent) {
+                    connected_cells.insert(building_pos);
+                    break;
+                }
             }
         }
     }

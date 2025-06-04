@@ -1,11 +1,9 @@
 use bevy::prelude::*;
 use crate::{
-    grid::{CellChildren, Layer, Position}, resources::RawMaterial, structures::{construction::{BuildingRegistry, BuildingType, Hub, MultiCellBuilding}, NetworkConnectivity}
+    grid::{CellChildren, Layer, Position}, resources::ResourceNode, structures::{construction::{BuildingRegistry, BuildingType}, ComputeGrid, Hub, Inventory, NetworkConnectivity}
 };
 
-use std::collections::{HashSet, VecDeque};
-
-use super::{PlaceBuildingRequestEvent, PlacementError, TotalProduction, BUILDING_LAYER};
+use super::{PlaceBuildingRequestEvent, PlacementError, BUILDING_LAYER};
 
 #[derive(Event)]
 pub struct PlaceBuildingValidationEvent {
@@ -19,10 +17,13 @@ pub fn validate_placement(
     registry: Res<BuildingRegistry>,
     grid_cells: Query<(Entity, &Position, &CellChildren)>,
     building_layers: Query<(&BuildingType, &Layer)>,
-    available_production: Res<TotalProduction>,
-    resources: Query<&RawMaterial>,
+    central_inventory: Query<&Inventory, With<Hub>>,
+    available_compute: Res<ComputeGrid>,
+    resources: Query<&ResourceNode>,
     network_connectivity: Res<NetworkConnectivity>,
 )  {
+    let inventory = central_inventory.get_single().ok();
+    
     for event in place_request.read() {
         let Some((_, _, cell_children)) = grid_cells
             .iter()
@@ -46,8 +47,21 @@ pub fn validate_placement(
         }
 
         if let Some(definition) = registry.get_definition(&event.building_name) {
+            // Check ore cost against central inventory
             if let Some(cost) = definition.construction_cost {
-                if cost as u32 > available_production.ore {
+                if let Some(inv) = inventory {
+                    if !inv.has_item(0, cost as u32) { // 0 is ore ID
+                        validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
+                        continue;
+                    }
+                } else {
+                    validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
+                    continue;
+                }
+            }
+
+            if let Some(cost) = definition.compute_consumption {
+                if cost > available_compute.available {
                     validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
                     continue;
                 }

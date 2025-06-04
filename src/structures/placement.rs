@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use crate::{grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, ui::SelectedBuilding};
-use super::{construction::{spawn_building, Building, BuildingRegistry}, NetworkChangedEvent, PlaceBuildingValidationEvent, TotalProduction};
+use crate::{grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, structures::{Hub, Inventory}, ui::SelectedBuilding};
+use super::{construction::{spawn_building, Building, BuildingRegistry}, NetworkChangedEvent, PlaceBuildingValidationEvent};
 
 pub const BUILDING_LAYER: i32 = 1;
 
@@ -63,9 +63,9 @@ pub fn place_building(
     grid: Res<Grid>,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
+    mut central_inventory: Query<&mut Inventory, With<Hub>>,
     mut expand_events: EventWriter<ExpandGridEvent>,
     mut network_events: EventWriter<NetworkChangedEvent>,
-    mut total_production: ResMut<TotalProduction>,
 ) {
     for event in validation_events.read() {
         match &event.result {
@@ -89,9 +89,12 @@ pub fn place_building(
                     });
                 }
 
+                // Deduct construction cost from central inventory
                 if let Some(def) = registry.get_definition(&event.request.building_name) {
                     if let Some(construction_cost) = def.construction_cost {
-                        total_production.ore -= construction_cost as u32;
+                        if let Ok(mut inventory) = central_inventory.get_single_mut() {
+                            inventory.remove_item(0, construction_cost as u32); // 0 is ore ID
+                        }
                     }
                 }
 

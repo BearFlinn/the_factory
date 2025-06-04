@@ -30,7 +30,7 @@ fn configure_building_system_sets(app: &mut App) {
 pub fn setup(mut commands: Commands) {
     commands.insert_resource(BuildingRegistry::new());
     commands.insert_resource(PowerGrid::default());
-    commands.insert_resource(TotalProduction { ore: 800 });
+    commands.insert_resource(ComputeGrid::default());
     commands.insert_resource(NetworkConnectivity::default());
 }
 
@@ -61,10 +61,13 @@ impl Plugin for BuildingsPlugin {
                 
                 (
                     update_producers,
+                    update_resource_consumers,
                     update_power_grid,
+                    update_compute,
                     update_network_connectivity,
                     update_operational_status_optimized,
                     update_operational_indicators,
+                    update_inventory_display,
                     update_visual_network_connections,
                 ).in_set(BuildingSystemSet::Operations),
             ));

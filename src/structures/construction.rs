@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
-use crate::{grid::{CellChildren, Grid, Layer, Position}, structures::{NetworkChangedEvent, BUILDING_LAYER}};
+use crate::{grid::{CellChildren, Grid, Layer, Position}, resources::Item, structures::{NetworkChangedEvent, BUILDING_LAYER}};
 
 #[derive(Component)]
 pub struct Building;
@@ -15,6 +15,7 @@ pub enum BuildingType {
     Harvester,
     Connector,
     Generator,
+    Datacenter,
     Radar,
 }
 
@@ -37,6 +38,86 @@ pub struct PowerGenerator {
 #[derive(Component)]
 pub struct PowerConsumer {
     pub amount: i32,
+}
+
+#[derive(Component)]
+pub struct ComputeGenerator {
+    pub amount: i32,
+}
+
+#[derive(Component)]
+pub struct ComputeConsumer {
+    pub amount: i32,
+}
+
+#[derive(Component)]
+pub struct Inventory {
+    pub items: Vec<(Item, u32)>,
+    pub capacity: u32,
+}
+
+impl Inventory {
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            items: Vec::new(),
+            capacity,
+        }
+    }
+
+    pub fn add_item(&mut self, item: Item, quantity: u32) -> u32 {
+        // Find existing item by id
+        if let Some((_, existing_quantity)) = self.items.iter_mut()
+            .find(|(existing_item, _)| existing_item.id == item.id) {
+            *existing_quantity += quantity;
+            return quantity;
+        }
+        
+        // Add new item if not found
+        self.items.push((item, quantity));
+        quantity
+    }
+
+    pub fn remove_item(&mut self, item_id: u32, quantity: u32) -> u32 {
+        if let Some(index) = self.items.iter()
+            .position(|(item, _)| item.id == item_id) {
+            let (_, current_quantity) = &mut self.items[index];
+            let removed = (*current_quantity).min(quantity);
+            *current_quantity -= removed;
+            
+            // Remove item if quantity reaches 0
+            if *current_quantity == 0 {
+                self.items.remove(index);
+            }
+            
+            return removed;
+        }
+        0
+    }
+
+    pub fn get_item_quantity(&self, item_id: u32) -> u32 {
+        self.items.iter()
+            .find(|(item, _)| item.id == item_id)
+            .map(|(_, quantity)| *quantity)
+            .unwrap_or(0)
+    }
+
+    pub fn has_item(&self, item_id: u32, required_quantity: u32) -> bool {
+        self.get_item_quantity(item_id) >= required_quantity
+    }
+}
+
+// Helper function to create standard items
+pub fn create_ore_item() -> Item {
+    Item {
+        id: 0,
+        name: "Ore".to_string(),
+    }
+}
+
+#[derive(Component)]
+pub struct ResourceConsumer {
+    pub amount: u32,
+    pub timer: Timer,
 }
 
 // TODO: Update to use receipes
@@ -68,6 +149,10 @@ pub struct BuildingDefinition {
     pub production_interval: Option<f32>,
     pub power_consumption: Option<i32>,
     pub power_generation: Option<i32>,
+    pub compute_generation: Option<i32>,
+    pub compute_consumption: Option<i32>,
+    pub resource_consumption: Option<(u32, f32)>,
+    pub inventory: Option<u32>,
     pub multi_cell: Option<(i32, i32)>,
 }
 
@@ -91,6 +176,10 @@ impl BuildingRegistry {
             production_interval: Some(1.0),
             power_consumption: Some(10),
             power_generation: None,
+            compute_generation: None,
+            compute_consumption: None,
+            resource_consumption: None,
+            inventory: Some(100),
             multi_cell: None,
         });
         
@@ -105,6 +194,10 @@ impl BuildingRegistry {
             production_interval: None,
             power_consumption: None,
             power_generation: None,
+            compute_generation: None,
+            compute_consumption: None,
+            resource_consumption: None,
+            inventory: None,
             multi_cell: None,
         });
         
@@ -119,9 +212,12 @@ impl BuildingRegistry {
             production_interval: None,
             power_consumption: Some(30),
             power_generation: None,
+            compute_generation: None,
+            compute_consumption: Some(50),
+            resource_consumption: None,
+            inventory: None,
             multi_cell: None,
         });
-
         definitions.insert("Generator".to_string(), BuildingDefinition {
             name: "Generator".to_string(),
             building_type: BuildingType::Generator,
@@ -133,6 +229,27 @@ impl BuildingRegistry {
             production_interval: None,
             power_consumption: None,
             power_generation: Some(40),
+            compute_generation: None,
+            compute_consumption: None,
+            resource_consumption: Some((1, 2.0)), // Consume 1 ore every 2 seconds
+            inventory: None,
+            multi_cell: None,
+        });
+        definitions.insert("Datacenter".to_string(), BuildingDefinition {
+            name: "Datacenter".to_string(),
+            building_type: BuildingType::Datacenter,
+            size: Vec2::new(48.0, 48.0),
+            color: Color::srgb(0.7, 0.3, 0.8),
+            view_radius: 2,
+            construction_cost: Some(200),
+            production_rate: None,
+            production_interval: None,
+            power_consumption: Some(100),
+            power_generation: None,
+            compute_generation: Some(100),
+            compute_consumption: None,
+            resource_consumption: None,
+            inventory: None,
             multi_cell: None,
         });
         
@@ -182,6 +299,26 @@ impl BuildingRegistry {
         
         if let Some(power_generation) = def.power_generation {
             entity_commands.insert(PowerGenerator { amount: power_generation });
+
+        }
+        
+        if let Some(compute_generation) = def.compute_generation {
+            entity_commands.insert(ComputeGenerator { amount: compute_generation });
+        }
+        
+        if let Some(compute_consumption) = def.compute_consumption {
+            entity_commands.insert(ComputeConsumer { amount: compute_consumption });
+        }
+
+        if let Some((amount, interval)) = def.resource_consumption {
+            entity_commands.insert(ResourceConsumer {
+                amount,
+                timer: Timer::from_seconds(interval, TimerMode::Repeating),
+            });
+        }
+
+        if let Some(inventory) = def.inventory {
+            entity_commands.insert(Inventory { items: Vec::new(), capacity: inventory });
         }
         
         if let Some((width, height)) = def.multi_cell {
@@ -243,6 +380,7 @@ pub fn occupy_area(
 #[derive(Component)]
 pub struct Hub;
 
+
 pub fn place_hub(
     mut commands: Commands,
     grid: Res<Grid>,
@@ -252,6 +390,10 @@ pub fn place_hub(
     let center_y = 0;
 
     let world_pos = grid.grid_to_world_coordinates(center_x, center_y);
+
+    // Create central inventory with starting ore
+    let mut central_inventory = Inventory::new(10000); // Large capacity for central storage
+    central_inventory.add_item(create_ore_item(), 800); // Starting ore amount
 
     let building_entity = commands.spawn((
         Building,
@@ -264,7 +406,9 @@ pub fn place_hub(
             center_x, 
             center_y 
         },
-        PowerGenerator { amount: 200 },
+        PowerGenerator { amount: 100 },
+        ComputeGenerator { amount: 60 },
+        central_inventory, // Add the central inventory
         Operational(true),
         Layer(BUILDING_LAYER),
     ))

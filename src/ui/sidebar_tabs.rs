@@ -205,6 +205,7 @@ fn get_building_type_hotkey(building_type: BuildingType) -> &'static str {
         BuildingType::Harvester => "[2]", 
         BuildingType::Generator => "[3]",
         BuildingType::Radar => "[4]",
+        BuildingType::Datacenter => "[5]",
     }
 }
 

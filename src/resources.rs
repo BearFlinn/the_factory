@@ -5,26 +5,30 @@ use crate::grid::{CellChildren, Grid, Layer, NewCellEvent, Position};
 const RESOURCE_LAYER: i32 = 0;
 
 #[derive(Component)]
-pub struct RawMaterial;
+pub struct ItemMarker;
 
 #[derive(Component)]
-pub enum MaterialType {
-    Ore,
+pub struct Item {
+    pub id: u32,
+    pub name: String,
 }
 
+#[derive(Component)]
+pub struct ResourceNode;
+
 #[derive(Bundle)]
-pub struct ResourceNode {
-    resource: RawMaterial,
-    resource_type: MaterialType,
+pub struct ResourceNodeBundle {
+    node: ResourceNode,
+    produces: Item,
     position: Position,
     layer: Layer,
 }
 
-impl ResourceNode {
-    pub fn new(x: i32, y: i32, resource_type: MaterialType) -> Self {
-        ResourceNode {
-            resource: RawMaterial,
-            resource_type,
+impl ResourceNodeBundle {
+    pub fn new(x: i32, y: i32, produces: Item) -> Self {
+        ResourceNodeBundle {
+            node: ResourceNode,
+            produces,
             position: Position { x, y },
             layer: Layer(RESOURCE_LAYER),
         }
@@ -53,8 +57,14 @@ pub fn spawn_resource_node(
         };
 
         let resource_node = commands.spawn(
-            ResourceNode::new(event.x, event.y, MaterialType::Ore)
-            )
+            ResourceNodeBundle::new(
+                event.x,
+                event.y,
+                Item {
+                    id: 0,
+                    name: "Ore".to_string(),
+                },
+            ))
             .insert(Sprite::from_color(Color::srgb(0.7, 0.3, 0.3), Vec2::new(48.0, 48.0)))
             .insert(Transform::from_xyz(world_pos.x, world_pos.y, 0.2)).id();
 

@@ -5,12 +5,14 @@ mod grid;
 mod ui;
 mod camera;
 mod resources;
+mod workers;
 
 use grid::GridPlugin;
 use camera::CameraPlugin;
 use structures::BuildingsPlugin;
 use ui::UIPlugin;
 use resources::ResourcesPlugin;
+use workers::WorkersPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GameplaySet {
@@ -45,6 +47,7 @@ fn main() {
             GridPlugin,
             ResourcesPlugin,
             BuildingsPlugin,
+            WorkersPlugin,
             CameraPlugin,
             UIPlugin))
         .run();
