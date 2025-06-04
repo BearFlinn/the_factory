@@ -1,17 +1,11 @@
 use bevy::prelude::*;
 use rand::{thread_rng, Rng};
-use crate::grid::{CellChildren, Grid, Layer, NewCellEvent, Position};
+use crate::{
+    grid::{CellChildren, Grid, Layer, NewCellEvent, Position},
+    items::Item,
+};
 
 const RESOURCE_LAYER: i32 = 0;
-
-#[derive(Component)]
-pub struct ItemMarker;
-
-#[derive(Component)]
-pub struct Item {
-    pub id: u32,
-    pub name: String,
-}
 
 #[derive(Component)]
 pub struct ResourceNode;

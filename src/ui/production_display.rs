@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 
-use crate::structures::{ComputeGrid, Hub, Inventory, PowerGrid};
+use crate::{
+    items::Inventory,
+    structures::Hub,
+    systems::{PowerGrid, ComputeGrid},
+};
 
 #[derive(Component)]
 pub struct ProductionText;

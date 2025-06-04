@@ -1,11 +1,11 @@
 pub mod construction;
 pub mod placement;
-pub mod systems;
+pub mod production;
 pub mod validation;
 
 pub use construction::*;
 pub use placement::*;
-pub use systems::*;
+pub use production::*;
 pub use validation::*;
 
 use bevy::prelude::*;
@@ -24,14 +24,11 @@ fn configure_building_system_sets(app: &mut App) {
         BuildingSystemSet::Validation,
         BuildingSystemSet::Placement,
         BuildingSystemSet::Operations,
-    ).chain().in_set(crate::GameplaySet::BuildingOperations));
+    ).chain().in_set(crate::GameplaySet::DomainOperations));
 }
 
 pub fn setup(mut commands: Commands) {
     commands.insert_resource(BuildingRegistry::new());
-    commands.insert_resource(PowerGrid::default());
-    commands.insert_resource(ComputeGrid::default());
-    commands.insert_resource(NetworkConnectivity::default());
 }
 
 pub struct BuildingsPlugin;
@@ -44,7 +41,6 @@ impl Plugin for BuildingsPlugin {
             .add_event::<PlaceBuildingRequestEvent>()
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
-            .add_event::<NetworkChangedEvent>()
             .add_systems(Startup, (
                 setup,
                 place_hub,
@@ -62,13 +58,6 @@ impl Plugin for BuildingsPlugin {
                 (
                     update_producers,
                     update_resource_consumers,
-                    update_power_grid,
-                    update_compute,
-                    update_network_connectivity,
-                    update_operational_status_optimized,
-                    update_operational_indicators,
-                    update_inventory_display,
-                    update_visual_network_connections,
                 ).in_set(BuildingSystemSet::Operations),
             ));
     }

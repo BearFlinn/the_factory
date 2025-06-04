@@ -1,6 +1,11 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
-use crate::{grid::{CellChildren, Grid, Layer, Position}, resources::Item, structures::{NetworkChangedEvent, BUILDING_LAYER}};
+use crate::{
+    grid::{CellChildren, Grid, Layer, Position}, 
+    structures::BUILDING_LAYER,
+    items::{Inventory, create_ore_item},
+    systems::Operational
+};
 
 #[derive(Component)]
 pub struct Building;
@@ -51,70 +56,6 @@ pub struct ComputeConsumer {
 }
 
 #[derive(Component)]
-pub struct Inventory {
-    pub items: Vec<(Item, u32)>,
-    pub capacity: u32,
-}
-
-impl Inventory {
-    pub fn new(capacity: u32) -> Self {
-        Self {
-            items: Vec::new(),
-            capacity,
-        }
-    }
-
-    pub fn add_item(&mut self, item: Item, quantity: u32) -> u32 {
-        // Find existing item by id
-        if let Some((_, existing_quantity)) = self.items.iter_mut()
-            .find(|(existing_item, _)| existing_item.id == item.id) {
-            *existing_quantity += quantity;
-            return quantity;
-        }
-        
-        // Add new item if not found
-        self.items.push((item, quantity));
-        quantity
-    }
-
-    pub fn remove_item(&mut self, item_id: u32, quantity: u32) -> u32 {
-        if let Some(index) = self.items.iter()
-            .position(|(item, _)| item.id == item_id) {
-            let (_, current_quantity) = &mut self.items[index];
-            let removed = (*current_quantity).min(quantity);
-            *current_quantity -= removed;
-            
-            // Remove item if quantity reaches 0
-            if *current_quantity == 0 {
-                self.items.remove(index);
-            }
-            
-            return removed;
-        }
-        0
-    }
-
-    pub fn get_item_quantity(&self, item_id: u32) -> u32 {
-        self.items.iter()
-            .find(|(item, _)| item.id == item_id)
-            .map(|(_, quantity)| *quantity)
-            .unwrap_or(0)
-    }
-
-    pub fn has_item(&self, item_id: u32, required_quantity: u32) -> bool {
-        self.get_item_quantity(item_id) >= required_quantity
-    }
-}
-
-// Helper function to create standard items
-pub fn create_ore_item() -> Item {
-    Item {
-        id: 0,
-        name: "Ore".to_string(),
-    }
-}
-
-#[derive(Component)]
 pub struct ResourceConsumer {
     pub amount: u32,
     pub timer: Timer,
@@ -133,9 +74,6 @@ pub struct MultiCellBuilding {
     pub center_x: i32,
     pub center_y: i32,
 }
-
-#[derive(Component)]
-pub struct Operational(pub bool);
 
 #[derive(Clone, Debug)]
 pub struct BuildingDefinition {

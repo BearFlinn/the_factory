@@ -1,6 +1,11 @@
 use bevy::prelude::*;
-use crate::{grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, structures::{Hub, Inventory}, ui::SelectedBuilding};
-use super::{construction::{spawn_building, Building, BuildingRegistry}, NetworkChangedEvent, PlaceBuildingValidationEvent};
+use crate::{
+    grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position},
+    structures::{Building, BuildingRegistry, Hub, spawn_building, PlaceBuildingValidationEvent},
+    ui::SelectedBuilding,
+    items::Inventory,
+    systems::NetworkChangedEvent,
+};
 
 pub const BUILDING_LAYER: i32 = 1;
 

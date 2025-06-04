@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use crate::{
-    grid::{CellChildren, Layer, Position}, resources::ResourceNode, structures::{construction::{BuildingRegistry, BuildingType}, ComputeGrid, Hub, Inventory, NetworkConnectivity}
+    grid::{CellChildren, Layer, Position}, 
+    resources::ResourceNode, 
+    structures::{construction::{BuildingRegistry, BuildingType}, Hub, PlaceBuildingRequestEvent, PlacementError, BUILDING_LAYER},
+    items::Inventory,
+    systems::{ComputeGrid, NetworkConnectivity}
 };
-
-use super::{PlaceBuildingRequestEvent, PlacementError, BUILDING_LAYER};
 
 #[derive(Event)]
 pub struct PlaceBuildingValidationEvent {

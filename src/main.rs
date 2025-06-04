@@ -6,6 +6,8 @@ mod ui;
 mod camera;
 mod resources;
 mod workers;
+mod items;
+mod systems;
 
 use grid::GridPlugin;
 use camera::CameraPlugin;
@@ -13,6 +15,8 @@ use structures::BuildingsPlugin;
 use ui::UIPlugin;
 use resources::ResourcesPlugin;
 use workers::WorkersPlugin;
+use items::ItemsPlugin;
+use systems::SystemsPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GameplaySet {
@@ -22,8 +26,11 @@ pub enum GameplaySet {
     /// Resource spawning - depends on grid events
     ResourceSpawning,
     
-    /// All building operations - internally ordered within structures module
-    BuildingOperations,
+    /// Infrastructure systems - power, compute, network, operational status
+    SystemsUpdate,
+    
+    /// Domain operations - buildings and workers (can run in parallel)
+    DomainOperations,
     
     /// UI updates - should run after core gameplay
     UIUpdate,
@@ -33,7 +40,8 @@ pub fn configure_system_sets(app: &mut App) {
     app.configure_sets(Update, (
         GameplaySet::GridUpdate,
         GameplaySet::ResourceSpawning,
-        GameplaySet::BuildingOperations,  // Now encompasses all building sub-phases
+        GameplaySet::SystemsUpdate,
+        GameplaySet::DomainOperations,
         GameplaySet::UIUpdate,
     ).chain());
 }
@@ -46,6 +54,8 @@ fn main() {
         .add_plugins((
             GridPlugin,
             ResourcesPlugin,
+            ItemsPlugin,
+            SystemsPlugin,
             BuildingsPlugin,
             WorkersPlugin,
             CameraPlugin,

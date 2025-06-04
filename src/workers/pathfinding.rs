@@ -1,24 +1,11 @@
-use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
+use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
-    structures::{
-        Building, BuildingType, Operational, NetworkConnectivity, Hub, MultiCellBuilding, Inventory
-    }
+    items::{transfer_items, Inventory},
+    structures::{Building, Hub, MultiCellBuilding},
+    systems::NetworkConnectivity, workers::{Harvester, Speed, Worker}
 };
-
-#[derive(Component)]
-pub struct Worker;
-
-#[derive(Component)]
-pub struct Speed {
-    pub value: f32,
-}
-
-#[derive(Component)]
-pub struct Harvester {
-    pub entity: Entity,
-}
 
 #[derive(Component)]
 pub struct WorkerPath {
@@ -30,82 +17,6 @@ pub struct WorkerPath {
 pub struct WorkerArrivedEvent {
     pub worker: Entity,
     pub position: (i32, i32),
-}
-
-#[derive(Bundle)]
-pub struct WorkerBundle {
-    pub worker: Worker,
-    pub speed: Speed,
-    pub harvester: Harvester,
-    pub path: WorkerPath,
-    pub inventory: Inventory,
-    pub sprite: Sprite,
-    pub transform: Transform,
-}
-
-impl WorkerBundle {
-    pub fn new(harvester_entity: Entity, spawn_position: Vec2) -> Self {
-        WorkerBundle {
-            worker: Worker,
-            speed: Speed { value: 100.0 }, // pixels per second
-            harvester: Harvester { entity: harvester_entity },
-            path: WorkerPath {
-                waypoints: VecDeque::new(),
-                current_target: None,
-            },
-            inventory: Inventory::new(20),
-            sprite: Sprite::from_color(Color::srgb(0.4, 0.2, 0.1), Vec2::new(16.0, 16.0)),
-            transform: Transform::from_xyz(spawn_position.x, spawn_position.y, 1.5),
-        }
-    }
-}
-
-pub fn spawn_workers_for_new_harvesters(
-    mut commands: Commands,
-    harvesters: Query<(Entity, &Position, &Operational, &BuildingType), (With<Building>, Changed<Operational>)>,
-    existing_workers: Query<&Harvester, With<Worker>>,
-    hub_query: Query<&MultiCellBuilding, With<Hub>>,
-    grid: Res<Grid>,
-) {
-    let hub = hub_query.single();
-    let hub_world_pos = grid.grid_to_world_coordinates(hub.center_x, hub.center_y);
-    
-    // Get set of harvesters that already have workers
-    let harvesters_with_workers: HashSet<Entity> = existing_workers
-        .iter()
-        .map(|h| h.entity)
-        .collect();
-    
-    for (entity, _position, operational, building_type) in harvesters.iter() {
-        // Only spawn worker for harvesters that just became operational and don't have workers yet
-        if *building_type == BuildingType::Harvester 
-            && operational.0 
-            && !harvesters_with_workers.contains(&entity) {
-            
-            commands.spawn(WorkerBundle::new(entity, hub_world_pos));
-            println!("Spawned worker for harvester {:?}", entity);
-        }
-    }
-}
-
-pub fn despawn_workers_for_removed_harvesters(
-    mut commands: Commands,
-    workers: Query<(Entity, &Harvester), With<Worker>>,
-    harvesters: Query<&Operational, With<Building>>,
-) {
-    for (worker_entity, harvester_component) in workers.iter() {
-        // Check if harvester still exists and is operational
-        if let Ok(operational) = harvesters.get(harvester_component.entity) {
-            if !operational.0 {
-                commands.entity(worker_entity).despawn();
-                println!("Despawned worker for non-operational harvester {:?}", harvester_component.entity);
-            }
-        } else {
-            // Harvester no longer exists
-            commands.entity(worker_entity).despawn();
-            println!("Despawned worker for removed harvester {:?}", harvester_component.entity);
-        }
-    }
 }
 
 pub fn move_workers(
@@ -261,60 +172,5 @@ pub fn handle_worker_arrivals(
                 transfer_items(building_entity, event.worker, &mut inventories);
             }
         }
-    }
-}
-
-fn transfer_items(
-    sender: Entity,
-    receiver: Entity,
-    inventories: &mut Query<&mut Inventory>,
-) {
-    // We need to work around the borrow checker by getting both mutable references safely
-    if sender == receiver {
-        return; // Can't transfer to self
-    }
-    
-    // Get the available ore from sender first
-    let available_ore = if let Ok(sender_inv) = inventories.get(sender) {
-        sender_inv.get_item_quantity(0)
-    } else {
-        return;
-    };
-    
-    if available_ore == 0 {
-        return;
-    }
-    
-    // Remove from sender
-    let removed = if let Ok(mut sender_inv) = inventories.get_mut(sender) {
-        sender_inv.remove_item(0, available_ore)
-    } else {
-        return;
-    };
-    
-    // Add to receiver
-    if removed > 0 {
-        if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
-            receiver_inv.add_item(
-                crate::structures::construction::create_ore_item(), 
-                removed
-            );
-            println!("Transferred {} ore", removed);
-        }
-    }
-}
-
-pub struct WorkersPlugin;
-
-impl Plugin for WorkersPlugin {
-    fn build(&self, app: &mut App) {
-        app
-            .add_event::<WorkerArrivedEvent>()
-            .add_systems(Update, (
-                spawn_workers_for_new_harvesters,
-                despawn_workers_for_removed_harvesters,
-                move_workers,
-                handle_worker_arrivals,
-            ).in_set(crate::structures::BuildingSystemSet::Operations));
     }
 }
