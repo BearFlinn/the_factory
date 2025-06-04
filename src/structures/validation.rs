@@ -93,7 +93,7 @@ pub fn validate_placement(
             }
         }
 
-        if !network_connectivity.is_adjacent_to_connected_network(event.grid_x, event.grid_y) {
+        if !network_connectivity.is_adjacent_to_core_network(event.grid_x, event.grid_y) {
             validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotAdjacentToNetwork), request: event.clone() });
             continue; 
         }

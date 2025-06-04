@@ -13,6 +13,9 @@ pub struct NetworkConnection {
 
 #[derive(Resource, Default)]
 pub struct NetworkConnectivity {
+    // Core network: only hubs and connectors (for placement validation and pathfinding)
+    core_network_cells: HashSet<(i32, i32)>,
+    // Extended network: core + buildings adjacent to core (for operational status)
     connected_cells: HashSet<(i32, i32)>,
 }
 
@@ -21,17 +24,27 @@ impl NetworkConnectivity {
         self.connected_cells.contains(&(x, y))
     }
     
+    pub fn is_core_network_cell(&self, x: i32, y: i32) -> bool {
+        self.core_network_cells.contains(&(x, y))
+    }
+    
     pub fn is_adjacent_to_connected_network(&self, x: i32, y: i32) -> bool {
         let adjacent_positions = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)];
         adjacent_positions.iter().any(|pos| self.connected_cells.contains(pos))
+    }
+    
+    // New method for placement validation - only checks adjacency to core network
+    pub fn is_adjacent_to_core_network(&self, x: i32, y: i32) -> bool {
+        let adjacent_positions = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)];
+        adjacent_positions.iter().any(|pos| self.core_network_cells.contains(pos))
     }
 }
 
 pub fn calculate_network_connectivity(
     building_layers: &Query<(&BuildingType, &Position, &Layer), With<Building>>,
     hub: &Query<(&MultiCellBuilding, &Hub)>,
-) -> HashSet<(i32, i32)> {
-    let mut connected_cells = HashSet::new();
+) -> (HashSet<(i32, i32)>, HashSet<(i32, i32)>) {
+    let mut core_network_cells = HashSet::new();
     let mut queue = VecDeque::new();
     
     // Add hub positions as starting points
@@ -39,10 +52,10 @@ pub fn calculate_network_connectivity(
         let half_width = multi_cell.width / 2;
         let half_height = multi_cell.height / 2;
         
-        for dy in -half_height..=half_height {
+        for dy in -half_width..=half_width {
             for dx in -half_width..=half_width {
                 let pos = (multi_cell.center_x + dx, multi_cell.center_y + dy);
-                if connected_cells.insert(pos) {
+                if core_network_cells.insert(pos) {
                     queue.push_back(pos);
                 }
             }
@@ -52,7 +65,7 @@ pub fn calculate_network_connectivity(
     // Flood fill to find all positions connected via connectors
     while let Some((x, y)) = queue.pop_front() {
         for (adj_x, adj_y) in [(x+1, y), (x-1, y), (x, y+1), (x, y-1)] {
-            if connected_cells.contains(&(adj_x, adj_y)) {
+            if core_network_cells.contains(&(adj_x, adj_y)) {
                 continue;
             }
             
@@ -64,22 +77,27 @@ pub fn calculate_network_connectivity(
             });
             
             if has_connector {
-                connected_cells.insert((adj_x, adj_y));
+                core_network_cells.insert((adj_x, adj_y));
                 queue.push_back((adj_x, adj_y));
             }
         }
     }
     
-    // Second pass: include all buildings adjacent to the connected network
-    let core_network = connected_cells.clone();
+    // Create extended network: include all buildings adjacent to core network
+    let mut connected_cells = core_network_cells.clone();
     for (_, position, layer) in building_layers.iter() {
         if layer.0 == BUILDING_LAYER {
             let building_pos = (position.x, position.y);
             
+            // Skip if already in core network
+            if core_network_cells.contains(&building_pos) {
+                continue;
+            }
+            
             // Check if this building is adjacent to any cell in the core network
             for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
                 let adjacent = (building_pos.0 + dx, building_pos.1 + dy);
-                if core_network.contains(&adjacent) {
+                if core_network_cells.contains(&adjacent) {
                     connected_cells.insert(building_pos);
                     break;
                 }
@@ -87,7 +105,7 @@ pub fn calculate_network_connectivity(
         }
     }
     
-    connected_cells
+    (core_network_cells, connected_cells)
 }
 
 pub fn update_network_connectivity(
@@ -97,7 +115,7 @@ pub fn update_network_connectivity(
     hub: Query<(&MultiCellBuilding, &Hub)>,
 ) {
     // Calculate on first run even without event, or when event received
-    let should_update = network_events.len() > 0 || network_connectivity.connected_cells.is_empty();
+    let should_update = network_events.len() > 0 || network_connectivity.core_network_cells.is_empty();
     
     if !should_update {
         return;
@@ -105,7 +123,9 @@ pub fn update_network_connectivity(
     
     network_events.clear();
     
-    network_connectivity.connected_cells = calculate_network_connectivity(&building_layers, &hub);
+    let (core_network, extended_network) = calculate_network_connectivity(&building_layers, &hub);
+    network_connectivity.core_network_cells = core_network;
+    network_connectivity.connected_cells = extended_network;
 }
 
 pub fn update_visual_network_connections(
@@ -124,18 +144,30 @@ pub fn update_visual_network_connections(
         commands.entity(entity).despawn();
     }
     
-    // Create visual connections between adjacent connected cells
-    let positions: Vec<_> = network_connectivity.connected_cells.iter().cloned().collect();
-    for i in 0..positions.len() {
-        for j in (i + 1)..positions.len() {
-            let (x1, y1) = positions[i];
-            let (x2, y2) = positions[j];
+    // Create selective visual connections
+    let extended_positions: Vec<_> = network_connectivity.connected_cells.iter().cloned().collect();
+    
+    for i in 0..extended_positions.len() {
+        for j in (i + 1)..extended_positions.len() {
+            let pos1 = extended_positions[i];
+            let pos2 = extended_positions[j];
             
-            let dx = (x2 - x1).abs();
-            let dy = (y2 - y1).abs();
+            let dx = (pos2.0 - pos1.0).abs();
+            let dy = (pos2.1 - pos1.1).abs();
             
-            if (dx == 1 && dy == 0) || (dx == 0 && dy == 1) {
-                spawn_connection_visual(&mut commands, (x1, y1), (x2, y2));
+            // Only process adjacent cells
+            if !((dx == 1 && dy == 0) || (dx == 0 && dy == 1)) {
+                continue;
+            }
+            
+            // Determine cell types using core network membership
+            let pos1_is_core = network_connectivity.is_core_network_cell(pos1.0, pos1.1);
+            let pos2_is_core = network_connectivity.is_core_network_cell(pos2.0, pos2.1);
+            
+            // Draw connection if at least one endpoint is core network (hub/connector)
+            // This excludes building↔building while including all core↔building connections
+            if pos1_is_core || pos2_is_core {
+                spawn_connection_visual(&mut commands, pos1, pos2);
             }
         }
     }

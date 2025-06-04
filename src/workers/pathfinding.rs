@@ -107,6 +107,11 @@ fn calculate_path(
         return Some(VecDeque::new());
     }
     
+    // Validate that start and end are in the extended network (connected to infrastructure)
+    if !network.is_cell_connected(start.0, start.1) || !network.is_cell_connected(end.0, end.1) {
+        return None;
+    }
+    
     let mut queue = VecDeque::new();
     let mut visited = HashSet::new();
     let mut parent = HashMap::new();
@@ -139,14 +144,22 @@ fn calculate_path(
         for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
             let next = (current.0 + dx, current.1 + dy);
             
-            if !visited.contains(&next) && network.is_cell_connected(next.0, next.1) {
+            if visited.contains(&next) {
+                continue;
+            }
+            
+            // Allow movement to core network cells, or to the end destination if it's in extended network
+            let can_move_to_cell = network.is_core_network_cell(next.0, next.1) || 
+                                  (next == end && network.is_cell_connected(next.0, next.1));
+            
+            if can_move_to_cell {
                 visited.insert(next);
                 parent.insert(next, current);
                 queue.push_back(next);
             }
         }
     }
-    
+    println!("No path found");
     None // No path found
 }
 
