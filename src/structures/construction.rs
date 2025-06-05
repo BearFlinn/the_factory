@@ -70,6 +70,11 @@ pub struct MultiCellBuilding {
 #[derive(Component, PartialEq)]
 pub struct NetWorkComponent;
 
+#[derive(Component, Default)]
+pub struct WorkersEnRoute {
+    pub count: u32,
+}
+
 impl BuildingRegistry {
     pub fn load_from_assets() -> Self {
         let ron_content = include_str!("../assets/buildings.ron");
@@ -126,6 +131,7 @@ pub fn place_hub(
         Hub,
         Name { name: "Command Hub".to_string() },
         Position { x: center_x, y: center_y },
+        WorkersEnRoute::default(),
         MultiCellBuilding { 
             width: 3, 
             height: 3, 

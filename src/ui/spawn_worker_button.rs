@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    grid::Grid, ui::{DynamicStyles, InteractiveUI, Selectable, SelectionBehavior}, workers::{WorkerBundle, WorkersSystemSet}
+    grid::Grid, workers::{WorkerBundle, WorkersSystemSet}
 };
 
 #[derive(Component)]
@@ -21,11 +21,7 @@ pub fn setup_spawn_worker_button(mut commands: Commands) {
             },
             Button,
             SpawnWorkerButton,
-            Selectable::new().with_behavior(SelectionBehavior::Toggle),
-            InteractiveUI::new()
-                .default(DynamicStyles::new().with_background(Color::srgb(0.2, 0.2, 0.2)))
-                .on_hover(DynamicStyles::new().with_background(Color::srgb(0.3, 0.3, 0.3)))
-                .on_click(DynamicStyles::new().with_background(Color::srgb(0.1, 0.1, 0.1))),
+            BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -41,19 +37,22 @@ pub fn setup_spawn_worker_button(mut commands: Commands) {
 
 pub fn handle_spawn_worker_button(
     mut commands: Commands,
-    button_query: Query<&Selectable, (With<SpawnWorkerButton>, Changed<Selectable>)>,
+    mut button_query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<SpawnWorkerButton>)>,
     grid: Res<Grid>,
 ) {
-    for selectable in &button_query {
-        if selectable.is_selected {
-            // Spawn worker at origin (0, 0) grid position
-            let spawn_world_pos = grid.grid_to_world_coordinates(0, 0);
-            
-            commands.spawn(WorkerBundle::new(
-                spawn_world_pos,
-            ));
-            
-            println!("Manual worker spawned at world position: {:?}", spawn_world_pos);
+    for (interaction, mut background_color) in &mut button_query {
+        match *interaction {
+            Interaction::Pressed => {
+                let spawn_world_pos = grid.grid_to_world_coordinates(0, 0);
+                commands.spawn(WorkerBundle::new(spawn_world_pos));
+                println!("Manual worker spawned at world position: {:?}", spawn_world_pos);
+            }
+            Interaction::Hovered => {
+                *background_color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
+            }
+            Interaction::None => {
+                *background_color = BackgroundColor(Color::srgb(0.2, 0.2, 0.2));
+            }
         }
     }
 }

@@ -129,6 +129,8 @@ impl BuildingRegistry {
             Position { x: grid_x, y: grid_y },
             Operational(false),
             Layer(BUILDING_LAYER),
+            // TODO: Move to dynamic components or remove
+            WorkersEnRoute::default(),
             Sprite::from_color(
                 Color::srgba(
                     def.appearance.color.0,

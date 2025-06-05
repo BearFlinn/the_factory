@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
     items::{transfer_items, Inventory, InventoryType, InventoryTypes},
-    structures::Building,
+    structures::{Building, WorkersEnRoute},
     systems::NetworkConnectivity, workers::{Speed, Worker}
 };
 
@@ -22,6 +22,7 @@ pub struct WorkerArrivedEvent {
 pub fn move_workers(
     mut workers: Query<(Entity, &mut Transform, &mut WorkerPath, &Speed, &Inventory), With<Worker>>,
     buildings: Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    mut workers_en_route: Query<&mut WorkersEnRoute>,
     grid: Res<Grid>,
     network: Res<NetworkConnectivity>,
     time: Res<Time>,
@@ -34,15 +35,11 @@ pub fn move_workers(
             let movement = direction * speed.value * time.delta_secs();
             transform.translation += movement.extend(0.0);
             
-            // Check if we've arrived (within threshold distance of target center)
             let distance_to_target = (target - transform.translation.truncate()).length();
             
             if distance_to_target <= 1.0 {
-
-                // Arrived at current target, get next waypoint
                 path.current_target = path.waypoints.pop_front();
-                    
-
+                
                 if path.current_target.is_none() {
                     if let Some(target_coords) = grid.world_to_grid_coordinates(target) {
                         arrival_events.send(WorkerArrivedEvent {
@@ -58,13 +55,22 @@ pub fn move_workers(
             if let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) {
                 let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
                 
-                
-                let destination = find_new_target(worker_pos, worker_inventory, &buildings);
+                let destination = find_new_target(worker_pos, worker_inventory, &buildings, &workers_en_route);
                 
                 if let Some(dest_pos) = destination {
                     if let Some(new_path) = calculate_path(worker_pos, dest_pos, &network, &grid) {
                         path.waypoints = new_path;
                         path.current_target = path.waypoints.pop_front();
+                        
+                        // Reserve the target building
+                        if let Some(building_entity) = buildings.iter()
+                            .find(|(_, pos, _, _)| pos.x == dest_pos.0 && pos.y == dest_pos.1)
+                            .map(|(entity, _, _, _)| entity) 
+                        {
+                            if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
+                                en_route.count += 1;
+                            }
+                        }
                     }
                 }
             }
@@ -76,42 +82,44 @@ fn find_new_target(
     worker_pos: (i32, i32),
     worker_inventory: &Inventory,
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
 ) -> Option<(i32, i32)> {
-    // Determine destination based on worker inventory state
     let destination = if worker_inventory.has_item(0, 1) {
-        if let Some((x, y)) = find_nearest_empty_requester(buildings, worker_pos) {
+        if let Some((x, y)) = find_nearest_empty_requester_with_congestion(buildings, workers_en_route, worker_pos) {
             return Some((x, y));
         } else {
-            find_nearest_building_by_type(buildings, worker_pos, InventoryTypes::Storage)
+            find_nearest_building_by_type_with_congestion(buildings, workers_en_route, worker_pos, InventoryTypes::Storage)
         }
-
     } else {
-        // Worker is empty - find nearest sender with items
-        find_nearest_sender_with_items(buildings, worker_pos)
+        find_nearest_sender_with_items_and_congestion(buildings, workers_en_route, worker_pos)
     };
     
     destination
 }
 
-fn find_nearest_building_by_type(
+// Updated helper functions that factor in congestion
+fn find_nearest_building_by_type_with_congestion(
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
     worker_pos: (i32, i32),
     target_type: InventoryTypes,
 ) -> Option<(i32, i32)> {
     buildings
         .iter()
         .filter(|(_, _, _, inv_type)| inv_type.0 == target_type)
-        .map(|(_, pos, _, _)| (pos.x, pos.y))
-        .min_by_key(|(x, y)| {
-            let dx = (*x - worker_pos.0).abs();
-            let dy = (*y - worker_pos.1).abs();
-            dx + dy // Manhattan distance
+        .map(|(entity, pos, _, _)| {
+            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
+            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
+            let score = distance + (congestion as i32 * 2); // Congestion penalty
+            (pos.x, pos.y, score)
         })
+        .min_by_key(|(_, _, score)| *score)
+        .map(|(x, y, _)| (x, y))
 }
 
-// Helper function to find nearest sender with available items
-fn find_nearest_sender_with_items(
+fn find_nearest_sender_with_items_and_congestion(
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
     worker_pos: (i32, i32),
 ) -> Option<(i32, i32)> {
     buildings
@@ -119,16 +127,21 @@ fn find_nearest_sender_with_items(
         .filter(|(_, _, inventory, inv_type)| {
             matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_item(0, 1)
         })
-        .map(|(_, pos, _, _)| (pos.x, pos.y))
-        .min_by_key(|(x, y)| {
-            let dx = (*x - worker_pos.0).abs();
-            let dy = (*y - worker_pos.1).abs();
-            dx + dy // Manhattan distance
+        .map(|(entity, pos, inventory, _)| {
+            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
+            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
+            let item_count = inventory.get_item_quantity(0); // Get actual ore count
+            let item_bonus = (item_count as i32).min(20); // Cap bonus at 20 to prevent overflow
+            let score = distance + (congestion as i32 * 2) - item_bonus; // Subtract item count for priority
+            (pos.x, pos.y, score)
         })
+        .min_by_key(|(_, _, score)| *score)
+        .map(|(x, y, _)| (x, y))
 }
 
-fn find_nearest_empty_requester(
+fn find_nearest_empty_requester_with_congestion(
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
     worker_pos: (i32, i32),
 ) -> Option<(i32, i32)> {
     buildings
@@ -136,12 +149,14 @@ fn find_nearest_empty_requester(
         .filter(|(_, _, inventory, inv_type)| {
             matches!(inv_type.0, InventoryTypes::Requester) && !inventory.has_item(0, 5)
         })
-        .map(|(_, pos, _, _)| (pos.x, pos.y))
-        .min_by_key(|(x, y)| {
-            let dx = (*x - worker_pos.0).abs();
-            let dy = (*y - worker_pos.1).abs();
-            dx + dy // Manhattan distance
+        .map(|(entity, pos, _, _)| {
+            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
+            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
+            let score = distance + (congestion as i32 * 4); // Higher penalty for requesters
+            (pos.x, pos.y, score)
         })
+        .min_by_key(|(_, _, score)| *score)
+        .map(|(x, y, _)| (x, y))
 }
 
 fn calculate_path(
@@ -216,28 +231,29 @@ pub fn handle_worker_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
     mut inventories: Query<&mut Inventory>,
     buildings: Query<(Entity, &Position, &InventoryType), With<Building>>,
+    mut workers_en_route: Query<&mut WorkersEnRoute>,
 ) {
     for event in arrival_events.read() {
-        // Find building at the arrival position
-        let building_at_position = buildings.iter()
+        if let Some((building_entity, building_inv_type)) = buildings.iter()
             .find(|(_, pos, _)| pos.x == event.position.0 && pos.y == event.position.1)
-            .map(|(entity, _, inv_type)| (entity, inv_type));
-        
-        if let Some((building_entity, building_inv_type)) = building_at_position {
+            .map(|(entity, _, inv_type)| (entity, inv_type)) 
+        {
+            // Decrement the workers en route counter
+            if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
+                en_route.count = en_route.count.saturating_sub(1);
+            }
+            
             match building_inv_type.0 {
                 InventoryTypes::Storage => {
-                    // Transfer from worker to storage
                     transfer_items(event.worker, building_entity, &mut inventories);
                 }
                 InventoryTypes::Sender => {
-                    // Transfer from sender to worker
                     transfer_items(building_entity, event.worker, &mut inventories);
                 }
                 InventoryTypes::Requester => {
-                    // Transfer from worker to requester
                     transfer_items(event.worker, building_entity, &mut inventories);
                 }
-                _ => {} // No transfer for other types yet
+                _ => {}
             }
         }
     }
