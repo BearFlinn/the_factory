@@ -2,9 +2,9 @@ use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
-    items::{transfer_items, Inventory},
-    structures::{Building, Hub, MultiCellBuilding},
-    systems::NetworkConnectivity, workers::{Harvester, Speed, Worker}
+    items::{transfer_items, Inventory, InventoryType, InventoryTypes},
+    structures::Building,
+    systems::NetworkConnectivity, workers::{Speed, Worker}
 };
 
 #[derive(Component)]
@@ -20,21 +20,14 @@ pub struct WorkerArrivedEvent {
 }
 
 pub fn move_workers(
-    mut workers: Query<(Entity, &mut Transform, &mut WorkerPath, &Speed, &Harvester), With<Worker>>,
-    harvesters: Query<&Position, With<Building>>,
-    hub_query: Query<&MultiCellBuilding, With<Hub>>,
+    mut workers: Query<(Entity, &mut Transform, &mut WorkerPath, &Speed, &Inventory), With<Worker>>,
+    buildings: Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
     grid: Res<Grid>,
     network: Res<NetworkConnectivity>,
     time: Res<Time>,
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
-    let hub = hub_query.single();
-    
-    for (worker_entity, mut transform, mut path, speed, harvester_component) in workers.iter_mut() {
-        let Ok(harvester_pos) = harvesters.get(harvester_component.entity) else {
-            continue;
-        };
-        
+    for (worker_entity, mut transform, mut path, speed, worker_inventory) in workers.iter_mut() {
         // Move toward current target
         if let Some(target) = path.current_target {
             let direction = (target - transform.translation.truncate()).normalize_or_zero();
@@ -45,54 +38,110 @@ pub fn move_workers(
             let distance_to_target = (target - transform.translation.truncate()).length();
             
             if distance_to_target <= 1.0 {
-                // Fire arrival event
-                if let Some(target_coords) = grid.world_to_grid_coordinates(target) {
-                    arrival_events.send(WorkerArrivedEvent {
-                        worker: worker_entity,
-                        position: (target_coords.grid_x, target_coords.grid_y),
-                    });
-                }
-                
+
                 // Arrived at current target, get next waypoint
                 path.current_target = path.waypoints.pop_front();
                     
-                    // If no more waypoints, calculate new path to opposite destination
-                    if path.current_target.is_none() {
-                        if let Some (worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) {
-                            let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
-                            let hub_pos = (hub.center_x, hub.center_y);
-                            let harvester_grid_pos = (harvester_pos.x, harvester_pos.y);
-                            
-                            // Determine destination: if closer to hub, go to harvester; otherwise go to hub
-                            let distance_to_hub = ((worker_pos.0 - hub_pos.0).abs() + (worker_pos.1 - hub_pos.1).abs()) as f32;
-                            let distance_to_harvester = ((worker_pos.0 - harvester_grid_pos.0).abs() + (worker_pos.1 - harvester_grid_pos.1).abs()) as f32;
-                            
-                            let destination = if distance_to_hub <= distance_to_harvester {
-                                harvester_grid_pos
-                            } else {
-                                hub_pos
-                            };
-                            
-                            if let Some(new_path) = calculate_path(worker_pos, destination, &network, &grid) {
-                                path.waypoints = new_path;
-                                path.current_target = path.waypoints.pop_front();
-                            }
-                        }
+
+                if path.current_target.is_none() {
+                    if let Some(target_coords) = grid.world_to_grid_coordinates(target) {
+                        arrival_events.send(WorkerArrivedEvent {
+                            worker: worker_entity,
+                            position: (target_coords.grid_x, target_coords.grid_y),
+                        });
                     }
+                    continue;
                 }
+            }
         } else {
-            // No current target, calculate initial path to harvester
+            // No current target, calculate new path
             if let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) {
                 let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
-                let destination = (harvester_pos.x, harvester_pos.y);
                 
-                if let Some(new_path) = calculate_path(worker_pos, destination, &network, &grid) {
-                    path.waypoints = new_path;
-                    path.current_target = path.waypoints.pop_front();
+                
+                let destination = find_new_target(worker_pos, worker_inventory, &buildings);
+                
+                if let Some(dest_pos) = destination {
+                    if let Some(new_path) = calculate_path(worker_pos, dest_pos, &network, &grid) {
+                        path.waypoints = new_path;
+                        path.current_target = path.waypoints.pop_front();
+                    }
                 }
             }
         }
     }
+}
+
+fn find_new_target(
+    worker_pos: (i32, i32),
+    worker_inventory: &Inventory,
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+) -> Option<(i32, i32)> {
+    // Determine destination based on worker inventory state
+    let destination = if worker_inventory.has_item(0, 1) {
+        if let Some((x, y)) = find_nearest_empty_requester(buildings, worker_pos) {
+            return Some((x, y));
+        } else {
+            find_nearest_building_by_type(buildings, worker_pos, InventoryTypes::Storage)
+        }
+
+    } else {
+        // Worker is empty - find nearest sender with items
+        find_nearest_sender_with_items(buildings, worker_pos)
+    };
+    
+    destination
+}
+
+fn find_nearest_building_by_type(
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    worker_pos: (i32, i32),
+    target_type: InventoryTypes,
+) -> Option<(i32, i32)> {
+    buildings
+        .iter()
+        .filter(|(_, _, _, inv_type)| inv_type.0 == target_type)
+        .map(|(_, pos, _, _)| (pos.x, pos.y))
+        .min_by_key(|(x, y)| {
+            let dx = (*x - worker_pos.0).abs();
+            let dy = (*y - worker_pos.1).abs();
+            dx + dy // Manhattan distance
+        })
+}
+
+// Helper function to find nearest sender with available items
+fn find_nearest_sender_with_items(
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    worker_pos: (i32, i32),
+) -> Option<(i32, i32)> {
+    buildings
+        .iter()
+        .filter(|(_, _, inventory, inv_type)| {
+            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_item(0, 1)
+        })
+        .map(|(_, pos, _, _)| (pos.x, pos.y))
+        .min_by_key(|(x, y)| {
+            let dx = (*x - worker_pos.0).abs();
+            let dy = (*y - worker_pos.1).abs();
+            dx + dy // Manhattan distance
+        })
+}
+
+fn find_nearest_empty_requester(
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    worker_pos: (i32, i32),
+) -> Option<(i32, i32)> {
+    buildings
+        .iter()
+        .filter(|(_, _, inventory, inv_type)| {
+            matches!(inv_type.0, InventoryTypes::Requester) && !inventory.has_item(0, 5)
+        })
+        .map(|(_, pos, _, _)| (pos.x, pos.y))
+        .min_by_key(|(x, y)| {
+            let dx = (*x - worker_pos.0).abs();
+            let dy = (*y - worker_pos.1).abs();
+            dx + dy // Manhattan distance
+        })
 }
 
 fn calculate_path(
@@ -166,23 +215,29 @@ fn calculate_path(
 pub fn handle_worker_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
     mut inventories: Query<&mut Inventory>,
-    buildings: Query<(Entity, &Position), With<Building>>,
-    hub_query: Query<Entity, With<Hub>>,
+    buildings: Query<(Entity, &Position, &InventoryType), With<Building>>,
 ) {
     for event in arrival_events.read() {
         // Find building at the arrival position
         let building_at_position = buildings.iter()
-            .find(|(_, pos)| pos.x == event.position.0 && pos.y == event.position.1)
-            .map(|(entity, _)| entity);
+            .find(|(_, pos, _)| pos.x == event.position.0 && pos.y == event.position.1)
+            .map(|(entity, _, inv_type)| (entity, inv_type));
         
-        if let Some(building_entity) = building_at_position {
-            // Check if this is the hub
-            if hub_query.contains(building_entity) {
-                // Transfer from worker to hub
-                transfer_items(event.worker, building_entity, &mut inventories);
-            } else {
-                // Transfer from building to worker
-                transfer_items(building_entity, event.worker, &mut inventories);
+        if let Some((building_entity, building_inv_type)) = building_at_position {
+            match building_inv_type.0 {
+                InventoryTypes::Storage => {
+                    // Transfer from worker to storage
+                    transfer_items(event.worker, building_entity, &mut inventories);
+                }
+                InventoryTypes::Sender => {
+                    // Transfer from sender to worker
+                    transfer_items(building_entity, event.worker, &mut inventories);
+                }
+                InventoryTypes::Requester => {
+                    // Transfer from worker to requester
+                    transfer_items(event.worker, building_entity, &mut inventories);
+                }
+                _ => {} // No transfer for other types yet
             }
         }
     }

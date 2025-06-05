@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
+use crate::items::{InventoryType, InventoryTypes};
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
     structures::{BUILDING_LAYER, building_config::*},
@@ -136,6 +137,7 @@ pub fn place_hub(
         PowerGenerator { amount: 100 },
         ComputeGenerator { amount: 60 },
         central_inventory, // Add the central inventory
+        InventoryType (InventoryTypes::Storage),
         Operational(true),
         Layer(BUILDING_LAYER),
     ))

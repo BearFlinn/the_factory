@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    structures::{Hub, ResourceConsumer, Producer},
+    structures::{ResourceConsumer, Producer},
     items::{Inventory, create_ore_item},
     systems::Operational
 };
@@ -22,15 +22,10 @@ pub fn update_producers(
 }
 
 pub fn update_resource_consumers(
-    mut query: Query<(&mut ResourceConsumer, &Operational)>,
-    mut central_inventory: Query<&mut Inventory, With<Hub>>,
+    mut query: Query<(&mut ResourceConsumer, &Operational, &mut Inventory)>,
     time: Res<Time>,
 ) {
-    let Ok(mut inventory) = central_inventory.get_single_mut() else {
-        return; // No central hub found
-    };
-
-    for (mut consumer, operational) in query.iter_mut() {
+    for (mut consumer, operational, mut inventory) in query.iter_mut() {
         if !operational.0 {
             continue;
         }

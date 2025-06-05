@@ -26,9 +26,7 @@ impl Plugin for WorkersPlugin {
                 WorkersSystemSet::Interaction,
             ).chain().in_set(crate::GameplaySet::DomainOperations))
             .add_systems(Update, (
-                (spawn_workers_for_new_harvesters, despawn_workers_for_removed_harvesters)
-                    .in_set(WorkersSystemSet::Lifecycle),
-                
+
                 move_workers
                     .in_set(WorkersSystemSet::Movement),
                 

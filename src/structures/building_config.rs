@@ -3,6 +3,12 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub use crate::grid::{Position, Layer};
+use crate::items::InventoryTypes;
+pub use crate::systems::Operational;
+pub use crate::structures::*;
+pub use crate::items::{Inventory, InventoryType};
+
 // Numerical building IDs for performance and type safety
 pub type BuildingId = u32;
 
@@ -59,6 +65,7 @@ pub enum ComponentDef {
     ComputeConsumer { amount: i32 },
     ResourceConsumer { amount: u32, interval: f32 },
     Inventory { capacity: u32 },
+    InventoryType { inv_type: InventoryTypes },
     ViewRange { radius: i32 },
     NetWorkComponent,
 }
@@ -122,7 +129,7 @@ impl BuildingRegistry {
         world_pos: Vec2,
     ) -> Option<(Entity, i32)> {
         let def = self.get_definition(building_id)?;
-        
+        println!("Spawning building: {} With Components {}", def.appearance.name, def.components.iter().map(|c| format!("{:?}", c)).collect::<Vec<String>>().join(", "));
         // Start with base building components
         let mut entity_commands = commands.spawn((
             Building { id: building_id },
@@ -191,6 +198,9 @@ impl BuildingRegistry {
                 ComponentDef::Inventory { capacity } => {
                     entity_commands.insert(Inventory::new(*capacity));
                 }
+                ComponentDef::InventoryType { inv_type } => {
+                    entity_commands.insert(InventoryType(inv_type.clone()));
+                }
                 ComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
                     view_radius = *radius;
@@ -205,9 +215,3 @@ impl BuildingRegistry {
         Some((entity, view_radius))
     }
 }
-
-// Re-export commonly used types for convenience
-pub use crate::grid::{Position, Layer};
-pub use crate::systems::Operational;
-pub use crate::structures::*;
-pub use crate::items::Inventory;

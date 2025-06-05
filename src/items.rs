@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Component)]
 pub struct ItemMarker;
@@ -9,8 +10,21 @@ pub struct Item {
     pub name: String,
 }
 
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum InventoryTypes {
+    #[default]
+    Storage,
+    Sender,
+    Requester,
+    Carrier
+} 
+
+#[derive(Component, Default, Serialize, Deserialize, Debug, Clone)]
+pub struct InventoryType(pub InventoryTypes);
+
 
 #[derive(Component)]
+#[require(InventoryType)]
 pub struct Inventory {
     pub items: Vec<(Item, u32)>,
     //TODO: Enforce capacity

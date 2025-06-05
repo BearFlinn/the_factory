@@ -16,6 +16,7 @@
             Producer(amount: 1, interval: 1.0),
             PowerConsumer(amount: 10),
             Inventory(capacity: 100),
+            InventoryType(inv_type: Sender),
             ViewRange(radius: 2),
         ]
     ),
@@ -75,6 +76,8 @@
         components: [
             PowerGenerator(amount: 40),
             ResourceConsumer(amount: 1, interval: 2.0),
+            Inventory(capacity: 100),
+            InventoryType(inv_type: Requester),
             ViewRange(radius: 2),
         ]
     ),

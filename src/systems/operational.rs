@@ -6,34 +6,27 @@ use crate::{
 #[derive(Component)]
 pub struct Operational(pub bool);
 
+pub fn update_consumer_operation(
+    mut consumer_buildings: Query<(&mut Operational, &ResourceConsumer, &Inventory), With<Building>>,
+) {
+    for (mut operational, consumer, inventory) in consumer_buildings.iter_mut() {
+        operational.0 = inventory.has_item(0, consumer.amount); // 0 is ore ID
+    }
+}
+
 pub fn update_operational_status_optimized(
-    mut buildings: Query<(&Position, &mut Operational, Option<&PowerConsumer>, Option<&ResourceConsumer>, Option<&PowerGenerator>), With<Building>>,
+    mut buildings: Query<(&Position, &mut Operational, Option<&PowerConsumer>, Option<&PowerGenerator>), (With<Building>, Without<ResourceConsumer>)>,
     network_connectivity: Res<NetworkConnectivity>,
     power_grid: Res<PowerGrid>,
-    central_inventory: Query<&Inventory, With<Hub>>,
 ) {
     let has_power = power_grid.available >= 0;
-    let inventory = central_inventory.get_single().ok();
-    
-    for (pos, mut operational, power_consumer, resource_consumer, power_generator) in buildings.iter_mut() {
+   
+    for (pos, mut operational, power_consumer, power_generator) in buildings.iter_mut() {
         if !network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y) {
             operational.0 = false;
-            continue; 
+            continue;
         }
-        
-        // Check resource availability for resource consumers
-        if let Some(consumer) = resource_consumer {
-            if let Some(inv) = inventory {
-                if !inv.has_item(0, consumer.amount) { // 0 is ore ID
-                    operational.0 = false;
-                    continue;
-                }
-            } else {
-                operational.0 = false;
-                continue;
-            }
-        }
-        
+       
         operational.0 = if power_generator.is_some() {
             true
         } else {
