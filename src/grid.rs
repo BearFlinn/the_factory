@@ -23,8 +23,6 @@ pub struct GridCell {
 pub struct GridCoordinates {
     pub grid_x: i32,
     pub grid_y: i32,
-    pub world_x: f32,
-    pub world_y: f32,
 }
 
 #[derive(Resource)]
@@ -43,10 +41,6 @@ impl Grid {
 
     pub fn add_coordinate(&mut self, x: i32, y: i32) -> bool {
         self.valid_coordinates.insert((x, y))
-    }
-    
-    pub fn get_adjacent_positions(x: i32, y: i32) -> [(i32, i32); 4] {
-        [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
     }
 
     pub fn get_cursor_grid_coordinates(
@@ -72,14 +66,9 @@ impl Grid {
         let grid_y = (world_position.y / self.cell_size).round() as i32;
         
         if self.valid_coordinates.contains(&(grid_x, grid_y)) {
-            let world_x = grid_x as f32 * self.cell_size;
-            let world_y = grid_y as f32 * self.cell_size;
-            
             Some(GridCoordinates {
                 grid_x,
                 grid_y,
-                world_x,
-                world_y,
             })
         } else {
             None
@@ -129,7 +118,6 @@ pub fn spawn_grid(
 pub struct NewCellEvent {
     pub x: i32,
     pub y: i32,
-    pub entity: Entity
 }
 
 pub fn spawn_cell(
@@ -180,8 +168,8 @@ pub fn handle_grid_expansion(
         for (x, y) in new_coordinates {
             if !grid.valid_coordinates.contains(&(x, y)) {
                 grid.add_coordinate(x, y);
-                let new_cell =spawn_cell(&mut commands, &grid, x, y);
-                cell_event.send(NewCellEvent { x, y, entity: new_cell });
+                spawn_cell(&mut commands, &grid, x, y);
+                cell_event.send(NewCellEvent { x, y });
             }
         }
     }

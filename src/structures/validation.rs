@@ -6,7 +6,7 @@ use crate::{
     resources::ResourceNode, 
     structures::{construction::{building_config::BuildingRegistry}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
     items::Inventory,
-    systems::{ComputeGrid, NetworkConnectivity}
+    systems::NetworkConnectivity
 };
 
 #[derive(Event)]

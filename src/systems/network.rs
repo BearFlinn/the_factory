@@ -53,7 +53,7 @@ pub fn calculate_network_connectivity(
         let half_height = multi_cell.height / 2;
         
         for dy in -half_width..=half_width {
-            for dx in -half_width..=half_width {
+            for dx in -half_width..=half_height {
                 let pos = (multi_cell.center_x + dx, multi_cell.center_y + dy);
                 if core_network_cells.insert(pos) {
                     queue.push_back(pos);

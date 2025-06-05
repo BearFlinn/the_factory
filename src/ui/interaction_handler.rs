@@ -4,7 +4,6 @@ use bevy::prelude::*;
 pub enum SelectionBehavior {
     Toggle,                  // Click toggles selection on/off
     Exclusive(String),       // Click selects this, deselects others in the group
-    Custom(String),          // Custom selection logic (could be extended later)
 }
 
 #[derive(Component)]
@@ -133,16 +132,6 @@ pub fn handle_interactive_ui(
                     // Store information about what needs to be deselected
                     entities_to_process.push((entity, group.clone(), interactive_ui.clone()));
                     selectable.is_selected = true;
-                }
-                SelectionBehavior::Custom(behavior_type) => {
-                    match behavior_type.as_str() {
-                        "building_button" => {
-                            selectable.is_selected = true;
-                        }
-                        _ => {
-                            selectable.is_selected = !selectable.is_selected;
-                        }
-                    }
                 }
             }
         }

@@ -1,4 +1,3 @@
-use bevy::prelude::*;
 use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,11 +13,11 @@ pub type BuildingId = u32;
 
 // Constants for building IDs - can be moved to separate file if needed
 pub const HUB: BuildingId = 0;
-pub const MINING_DRILL: BuildingId = 1;
-pub const CONNECTOR: BuildingId = 2;
-pub const RADAR: BuildingId = 3;
-pub const GENERATOR: BuildingId = 4;
-pub const DATACENTER: BuildingId = 5;
+// pub const MINING_DRILL: BuildingId = 1;
+// pub const CONNECTOR: BuildingId = 2;
+// pub const RADAR: BuildingId = 3;
+// pub const GENERATOR: BuildingId = 4;
+// pub const DATACENTER: BuildingId = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Component, Serialize, Deserialize)]
 pub enum BuildingCategory {
@@ -74,8 +73,6 @@ pub enum ComponentDef {
 #[derive(Resource)]
 pub struct BuildingRegistry {
     pub definitions: HashMap<BuildingId, BuildingDef>,
-    // Optional: maintain name lookup for UI/debugging
-    pub name_to_id: HashMap<String, BuildingId>,
 }
 
 impl BuildingRegistry {
@@ -83,23 +80,16 @@ impl BuildingRegistry {
         let definitions_vec: Vec<BuildingDef> = ron::from_str(ron_content)?;
         
         let mut definitions = HashMap::new();
-        let mut name_to_id = HashMap::new();
         
         for def in definitions_vec {
-            name_to_id.insert(def.appearance.name.clone(), def.id);
             definitions.insert(def.id, def);
         }
         
-        Ok(Self { definitions, name_to_id })
+        Ok(Self { definitions })
     }
 
     pub fn get_definition(&self, building_id: BuildingId) -> Option<&BuildingDef> {
         self.definitions.get(&building_id)
-    }
-
-    pub fn get_definition_by_name(&self, name: &str) -> Option<&BuildingDef> {
-        let id = self.name_to_id.get(name)?;
-        self.definitions.get(id)
     }
 
     pub fn get_all_building_ids(&self) -> Vec<BuildingId> {
@@ -114,6 +104,7 @@ impl BuildingRegistry {
             .collect()
     }
 
+    #[allow(dead_code)] // Is use in spawn_building_buttons, rust analyzer broky
     pub fn get_name_by_id(&self, building_id: BuildingId) -> Option<String> {
         let def = self.get_definition(building_id)?; 
         Some(def.appearance.name.clone())

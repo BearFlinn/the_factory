@@ -167,8 +167,8 @@ impl Sidebar {
 }
 
 pub fn handle_sidebar_interactions(
-    mut close_button_query: Query<&Selectable, (With<SidebarCloseButton>, Changed<Selectable>)>,
-    mut toggle_button_query: Query<&Selectable, (With<SidebarToggleButton>, Changed<Selectable>)>,
+    close_button_query: Query<&Selectable, (With<SidebarCloseButton>, Changed<Selectable>)>,
+    toggle_button_query: Query<&Selectable, (With<SidebarToggleButton>, Changed<Selectable>)>,
     mut sidebar_query: Query<(&mut Sidebar, &mut Node), With<SidebarContainer>>,
     mut toggle_text_query: Query<&mut Text, With<SidebarToggleButton>>,
 ) {

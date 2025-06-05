@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    grid::Position, items::Inventory, structures::{Building, Hub, PowerConsumer, PowerGenerator, ResourceConsumer}, systems::{power, NetworkConnectivity, PowerGrid}
+    grid::Position, items::Inventory, structures::{Building, PowerConsumer, PowerGenerator, ResourceConsumer}, systems::{NetworkConnectivity, PowerGrid}
 };
 
 #[derive(Component)]

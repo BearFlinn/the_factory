@@ -8,7 +8,6 @@ pub use construction::*;
 pub use placement::*;
 pub use production::*;
 pub use validation::*;
-pub use building_config::*;
 
 use bevy::prelude::*;
 

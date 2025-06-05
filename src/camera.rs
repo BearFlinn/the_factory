@@ -112,7 +112,6 @@ pub fn handle_camera_mouse_drag(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: EventReader<MouseMotion>,
     windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera2d>>,
     projection_query: Query<&OrthographicProjection, With<Camera2d>>,
 ) {
@@ -124,10 +123,6 @@ pub fn handle_camera_mouse_drag(
     }
 
     let Ok(window) = windows.get_single() else {
-        return;
-    };
-    
-    let Ok((camera, camera_global_transform)) = camera_q.get_single() else {
         return;
     };
     
@@ -205,7 +200,6 @@ pub fn handle_camera_zoom(
             
             // Only apply zoom if it's within bounds
             if new_scale != projection.scale {
-                let actual_zoom_factor = new_scale / projection.scale;
                 projection.scale = new_scale;
 
                 // Get cursor position in world coordinates after zoom

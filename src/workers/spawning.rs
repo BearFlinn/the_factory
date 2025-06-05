@@ -1,7 +1,7 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use bevy::prelude::*;
 use crate::{
-    grid::{Grid, Position}, items::{Inventory, InventoryType, InventoryTypes}, structures::{Building, BuildingId, Hub, MultiCellBuilding, MINING_DRILL}, systems::Operational, workers::WorkerPath
+    items::{Inventory, InventoryType, InventoryTypes}, workers::WorkerPath
 };
 
 #[derive(Component)]

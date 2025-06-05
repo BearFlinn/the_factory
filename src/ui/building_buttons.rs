@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
-use crate::structures::{Building, BuildingCategory, BuildingRegistry};
+use crate::structures::{BuildingCategory, BuildingRegistry};
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -13,9 +13,6 @@ pub struct BuildingButton {
     pub building_id: u32,
     pub is_selected: bool,
 }
-
-#[derive(Component)]
-pub struct BuildingButtonContainer;
 
 impl BuildingButton {
     pub fn new(building_id: u32) -> Self {
@@ -156,24 +153,6 @@ pub fn handle_building_selection_hotkeys(
     }
 }
 
-pub fn get_selected_building_name(button_query: &Query<&BuildingButton>, registry: &BuildingRegistry) -> Option<String> {
-    for button in button_query.iter() {
-        if button.is_selected {
-            return registry.get_name_by_id(button.building_id.clone());
-        }
-    }
-    None
-}
-
-pub fn clear_all_building_buttons(
-    mut commands: Commands,
-    button_query: Query<Entity, With<BuildingButton>>,
-) {
-    for entity in button_query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-}
-
 pub fn update_building_buttons_for_active_tab(
     commands: &mut Commands,
     active_building_type: Option<BuildingCategory>,
@@ -194,6 +173,7 @@ pub fn update_building_buttons_for_active_tab(
     }
 }
 
+#[allow(dead_code)] // Is use in spawn_building_buttons_for_category rust analyzer broky
 fn get_buildings_of_category(registry: &BuildingRegistry, building_category: BuildingCategory) -> Vec<u32> {
     let mut buildings = Vec::new();
     
