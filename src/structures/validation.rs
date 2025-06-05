@@ -49,32 +49,27 @@ pub fn validate_placement(
     grid_cells: Query<(Entity, &Position, &CellChildren)>,
     building_layers: Query<&Layer>,
     central_inventory: Query<&Inventory, With<Hub>>,
-    available_compute: Res<ComputeGrid>,
     resources: Query<&ResourceNode>,
     network_connectivity: Res<NetworkConnectivity>,
 )  {
     let inventory = central_inventory.get_single().ok();
     
-    for event in place_request.read() {
+    'event_loop: for event in place_request.read() {
         let Some((_, _, cell_children)) = grid_cells
             .iter()
             .find(|(_, pos, _)| pos.x == event.grid_x && pos.y == event.grid_y) else {
             validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::CellNotFound), request: event.clone() });
-            continue;
+            continue 'event_loop;
         };
 
-        let mut cell_occupied = false;
+        // Check if cell is occupied
         for &entity in &cell_children.0 {
-            if let Ok((layer)) = building_layers.get(entity) {
+            if let Ok(layer) = building_layers.get(entity) {
                 if layer.0 == BUILDING_LAYER {
                     validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::CellOccupied), request: event.clone() });
-                    cell_occupied = true;
-                    break;
+                    continue 'event_loop;
                 }
             }
-        }
-        if cell_occupied {
-            continue;
         }
 
         if let Some(definition) = registry.get_definition(event.building_id) {
@@ -83,18 +78,18 @@ pub fn validate_placement(
                 if let Some(inv) = inventory {
                     if !inv.has_item(0, cost.ore) { // 0 is ore ID
                         validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
-                        continue;
+                        continue 'event_loop;
                     }
                 } else {
                     validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
-                    continue;
+                    continue 'event_loop;
                 }
             }
             
+            // Validate placement rules
             for rule in &definition.placement.rules {
                 match rule {
                     PlacementRule::RequiresResource => {
-                        // Your existing resource validation logic
                         let has_resource = cell_children.0.iter()
                             .any(|&entity| resources.contains(entity));
                         if !has_resource {
@@ -102,22 +97,23 @@ pub fn validate_placement(
                                 result: Err(PlacementError::RequiresResourceNode), 
                                 request: event.clone() 
                             });
-                            continue;
+                            continue 'event_loop;
                         }
                     },
                     PlacementRule::AdjacentToNetwork => {
-                        // Your existing network validation logic
                         if !network_connectivity.is_adjacent_to_core_network(event.grid_x, event.grid_y) {
                             validation_events.send(PlaceBuildingValidationEvent { 
                                 result: Err(PlacementError::NotAdjacentToNetwork), 
                                 request: event.clone() 
                             });
-                            continue;
+                            continue 'event_loop;
                         }
                     },
                 }
             }
         }
+        
+        // All validations passed
         validation_events.send(PlaceBuildingValidationEvent { result: Ok(()), request: event.clone() });
     }
 }

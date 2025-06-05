@@ -35,6 +35,7 @@
         ),
         components: [
             ViewRange(radius: 1),
+            NetWorkComponent,
         ]
     ),
     

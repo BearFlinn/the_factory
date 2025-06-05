@@ -1,11 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
 use crate::{
-    grid::{Grid, Position}, 
-    structures::{Building, Hub, MultiCellBuilding},
-    systems::Operational,
-    workers::WorkerPath,
-    items::Inventory
+    grid::{Grid, Position}, items::Inventory, structures::{Building, BuildingId, Hub, MultiCellBuilding, MINING_DRILL}, systems::Operational, workers::WorkerPath
 };
 
 #[derive(Component)]
@@ -51,7 +47,7 @@ impl WorkerBundle {
 
 pub fn spawn_workers_for_new_harvesters(
     mut commands: Commands,
-    harvesters: Query<(Entity, &Position, &Operational, &BuildingType), (With<Building>, Changed<Operational>)>,
+    harvesters: Query<(Entity, &Position, &Operational, &Building), (With<Building>, Changed<Operational>)>,
     existing_workers: Query<&Harvester, With<Worker>>,
     hub_query: Query<&MultiCellBuilding, With<Hub>>,
     grid: Res<Grid>,
@@ -65,9 +61,9 @@ pub fn spawn_workers_for_new_harvesters(
         .map(|h| h.entity)
         .collect();
     
-    for (entity, _position, operational, building_type) in harvesters.iter() {
+    for (entity, _position, operational, building) in harvesters.iter() {
         // Only spawn worker for harvesters that just became operational and don't have workers yet
-        if *building_type == BuildingType::Harvester 
+        if building.id == MINING_DRILL
             && operational.0 
             && !harvesters_with_workers.contains(&entity) {
             

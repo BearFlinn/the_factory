@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
-use crate::structures::{BuildingRegistry};
+use crate::structures::{Building, BuildingCategory, BuildingRegistry};
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -10,7 +10,7 @@ pub struct SelectedBuilding {
 
 #[derive(Component)]
 pub struct BuildingButton {
-    pub building_name: String,
+    pub building_id: u32,
     pub is_selected: bool,
 }
 
@@ -18,14 +18,15 @@ pub struct BuildingButton {
 pub struct BuildingButtonContainer;
 
 impl BuildingButton {
-    pub fn new(building_name: String) -> Self {
+    pub fn new(building_id: u32) -> Self {
         Self {
-            building_name,
+            building_id,
             is_selected: false,
         }
     }
 
-    pub fn spawn(&self, parent: &mut ChildBuilder, definition: &BuildingDefinition) -> Entity {
+    pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
+        let definition = registry.get_definition(self.building_id).unwrap();
         // Define styles for the building button
         let button_styles = InteractiveUI::new()
             .default(DynamicStyles::new()
@@ -56,7 +57,7 @@ impl BuildingButton {
                 .with_behavior(SelectionBehavior::Exclusive("building_buttons".to_string()))
                 .with_group("building_buttons".to_string()),
             BuildingButton {
-                building_name: self.building_name.clone(),
+                building_id: self.building_id.clone(),
                 is_selected: self.is_selected,
             },
         ))
@@ -69,7 +70,7 @@ impl BuildingButton {
                     margin: UiRect::right(Val::Px(10.0)),
                     ..default()
                 },
-                BackgroundColor(definition.color),
+                BackgroundColor(Color::srgba(definition.appearance.color.0, definition.appearance.color.1, definition.appearance.color.2, 1.0)),
             ));
             
             // Building info container
@@ -81,27 +82,11 @@ impl BuildingButton {
             .with_children(|parent| {
                 // Building name
                 parent.spawn((
-                    Text::new(&definition.name),
+                    Text::new(&definition.appearance.name),
                     TextFont {
                         font_size: 16.0,
                         ..default()
                     },
-                ));
-                
-                // Building stats
-                let info_text = if let Some(rate) = definition.production_rate {
-                    format!("Produces {} units", rate)
-                } else {
-                    format!("Range: {}", definition.view_radius)
-                };
-                
-                parent.spawn((
-                    Text::new(info_text),
-                    TextFont {
-                        font_size: 12.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.7, 0.7, 0.7)),
                 ));
             });
         })
@@ -115,17 +100,17 @@ impl BuildingButton {
     }
 }
 
-pub fn spawn_building_buttons_for_type(
+pub fn spawn_building_buttons_for_category(
     parent: &mut ChildBuilder,
-    building_type: BuildingType,
+    building_category: BuildingCategory,
     registry: &BuildingRegistry,
 ) {
-    let buildings = get_buildings_of_type(registry, building_type);
+    let buildings = registry.get_buildings_by_category(building_category);
     
-    for building_name in buildings {
-        if let Some(definition) = registry.get_definition(&building_name) {
-            let button = BuildingButton::new(building_name);
-            button.spawn(parent, definition);
+    for building_id in buildings {
+        if let Some(_definition) = registry.get_definition(building_id) {
+            let button = BuildingButton::new(building_id);
+            button.spawn(parent, registry);
         }
     }
 }
@@ -137,8 +122,8 @@ pub fn handle_building_button_interactions(
     for (mut button, selectable) in &mut button_query {
         if selectable.is_selected && !button.is_selected {
             button.set_selected(true);
-            selected_building.building_name = Some(button.building_name.clone());
-            println!("Selected building: {}", button.building_name);
+            selected_building.building_id = Some(button.building_id.clone());
+            println!("Selected building: {}", button.building_id);
         }
         
         // Update selected state based on selection
@@ -146,8 +131,8 @@ pub fn handle_building_button_interactions(
         
         // If this button was deselected, clear the resource if it was this building
         if !selectable.is_selected && button.is_selected {
-            if selected_building.building_name.as_ref() == Some(&button.building_name) {
-                selected_building.building_name = None;
+            if selected_building.building_id.as_ref() == Some(&button.building_id) {
+                selected_building.building_id = None;
             }
         }
     }
@@ -166,15 +151,15 @@ pub fn handle_building_selection_hotkeys(
                 selectable.is_selected = false;
             }
         }
-        selected_building.building_name = None;
+        selected_building.building_id = None;
         println!("Cleared building selection");
     }
 }
 
-pub fn get_selected_building_name(button_query: &Query<&BuildingButton>) -> Option<String> {
+pub fn get_selected_building_name(button_query: &Query<&BuildingButton>, registry: &BuildingRegistry) -> Option<String> {
     for button in button_query.iter() {
         if button.is_selected {
-            return Some(button.building_name.clone());
+            return registry.get_name_by_id(button.building_id.clone());
         }
     }
     None
@@ -191,7 +176,7 @@ pub fn clear_all_building_buttons(
 
 pub fn update_building_buttons_for_active_tab(
     commands: &mut Commands,
-    active_building_type: Option<BuildingType>,
+    active_building_type: Option<BuildingCategory>,
     content_container: Entity,
     registry: &BuildingRegistry,
     existing_buttons: Query<Entity, With<BuildingButton>>,
@@ -202,20 +187,20 @@ pub fn update_building_buttons_for_active_tab(
     }
     
     // Spawn new buttons for the active tab
-    if let Some(building_type) = active_building_type {
+    if let Some(building_category) = active_building_type {
         commands.entity(content_container).with_children(|parent| {
-            spawn_building_buttons_for_type(parent, building_type, registry);
+            spawn_building_buttons_for_category(parent, building_category, registry);
         });
     }
 }
 
-fn get_buildings_of_type(registry: &BuildingRegistry, building_type: BuildingType) -> Vec<String> {
+fn get_buildings_of_category(registry: &BuildingRegistry, building_category: BuildingCategory) -> Vec<u32> {
     let mut buildings = Vec::new();
     
-    for building_name in registry.get_all_building_names() {
-        if let Some(definition) = registry.get_definition(&building_name) {
-            if definition.building_type == building_type {
-                buildings.push(building_name);
+    for building_id in registry.get_all_building_ids() {
+        if let Some(definition) = registry.get_definition(building_id) {
+            if definition.category == building_category {
+                buildings.push(building_id);
             }
         }
     }

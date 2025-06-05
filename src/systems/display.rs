@@ -134,7 +134,7 @@ pub fn update_placement_ghost(
                         
                         // Update sprite if building type changed
                         if ghost.building_id != *building_id {
-                            sprite.color = def.appearance.color.3(0.8);
+                            sprite.color = Color::srgba(def.appearance.color.0, def.appearance.color.1, def.appearance.color.2, 0.8);
                             sprite.custom_size = Some(def.appearance.size.into());
                             ghost.building_id = building_id.clone();
                         }
@@ -146,7 +146,7 @@ pub fn update_placement_ghost(
                             PlacementGhost {
                                 building_id: building_id.clone(),
                             },
-                            Sprite::from_color(def.color.with_alpha(0.5), def.size),
+                            Sprite::from_color(Color::srgba(def.appearance.color.0, def.appearance.color.1, def.appearance.color.2, 0.8), def.appearance.size.into()),
                             Transform::from_xyz(world_pos.x, world_pos.y, 0.5),
                         ));
                     }

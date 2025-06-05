@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
-use crate::structures::{BuildingRegistry, BuildingType};
+use crate::structures::{BuildingRegistry, BuildingCategory};
 use std::collections::HashSet;
 
 #[derive(Component)]
 pub struct SidebarTab {
-    pub building_type: BuildingType,
+    pub building_type: BuildingCategory,
     pub is_active: bool,
 }
 
@@ -13,7 +13,7 @@ pub struct SidebarTab {
 pub struct SidebarTabContainer;
 
 impl SidebarTab {
-    pub fn new(building_type: BuildingType, is_active: bool) -> Self {
+    pub fn new(building_type: BuildingCategory, is_active: bool) -> Self {
         Self {
             building_type,
             is_active,
@@ -92,7 +92,7 @@ pub fn spawn_sidebar_tabs(
     parent: &mut ChildBuilder,
     registry: &BuildingRegistry,
 ) -> Entity {
-    let available_types = get_available_building_types(registry);
+    let available_types = get_available_building_categories(registry);
 
     // Create the tab container with tabs as children
     let tab_container = parent.spawn((
@@ -141,13 +141,11 @@ pub fn handle_tab_hotkeys(
     let mut target_building_type = None;
 
     if keyboard.just_pressed(KeyCode::Digit1) {
-        target_building_type = Some(BuildingType::Connector);
+        target_building_type = Some(BuildingCategory::Logistics);
     } else if keyboard.just_pressed(KeyCode::Digit2) {
-        target_building_type = Some(BuildingType::Harvester);
+        target_building_type = Some(BuildingCategory::Production);
     } else if keyboard.just_pressed(KeyCode::Digit3) {
-        target_building_type = Some(BuildingType::Generator);
-    } else if keyboard.just_pressed(KeyCode::Digit4) {
-        target_building_type = Some(BuildingType::Radar);
+        target_building_type = Some(BuildingCategory::Utility);
     }
 
     if let Some(building_type) = target_building_type {
@@ -165,7 +163,7 @@ pub fn handle_tab_hotkeys(
     }
 }
 
-pub fn get_active_tab_type(tab_query: &Query<&SidebarTab>) -> Option<BuildingType> {
+pub fn get_active_tab_type(tab_query: &Query<&SidebarTab>) -> Option<BuildingCategory> {
     for tab in tab_query.iter() {
         if tab.is_active {
             return Some(tab.building_type);
@@ -174,38 +172,36 @@ pub fn get_active_tab_type(tab_query: &Query<&SidebarTab>) -> Option<BuildingTyp
     None
 }
 
-fn get_available_building_types(registry: &BuildingRegistry) -> Vec<BuildingType> {
+fn get_available_building_categories(registry: &BuildingRegistry) -> Vec<BuildingCategory> {
     let mut types = HashSet::new();
     
-    for building_name in registry.get_all_building_names() {
-        if let Some(definition) = registry.get_definition(&building_name) {
-            types.insert(definition.building_type);
+    for building_id in registry.get_all_building_ids() {
+        if let Some(definition) = registry.get_definition(building_id) {
+            types.insert(definition.category);
         }
     }
     
-    let mut sorted_types: Vec<BuildingType> = types.into_iter().collect();
+    let mut sorted_types: Vec<BuildingCategory> = types.into_iter().collect();
     sorted_types.sort_by_key(|t| format!("{:?}", t));
     sorted_types
 }
 
-fn get_building_type_color(registry: &BuildingRegistry, building_type: BuildingType) -> Color {
-    for building_name in registry.get_all_building_names() {
-        if let Some(definition) = registry.get_definition(&building_name) {
-            if definition.building_type == building_type {
-                return definition.color;
+fn get_building_type_color(registry: &BuildingRegistry, building_category: BuildingCategory) -> Color {
+    for building_id in registry.get_all_building_ids() {
+        if let Some(definition) = registry.get_definition(building_id) {
+            if definition.category == building_category {
+                return Color::srgb(definition.appearance.color.0, definition.appearance.color.1, definition.appearance.color.2);
             }
         }
     }
     Color::srgb(0.5, 0.5, 0.5) // Default gray if not found
 }
 
-fn get_building_type_hotkey(building_type: BuildingType) -> &'static str {
+fn get_building_type_hotkey(building_type: BuildingCategory) -> &'static str {
     match building_type {
-        BuildingType::Connector => "[1]",
-        BuildingType::Harvester => "[2]", 
-        BuildingType::Generator => "[3]",
-        BuildingType::Radar => "[4]",
-        BuildingType::Datacenter => "[5]",
+        BuildingCategory::Logistics => "[1]",
+        BuildingCategory::Production => "[2]", 
+        BuildingCategory::Utility => "[3]",
     }
 }
 

@@ -8,7 +8,9 @@ pub use crate::{
 };
 
 #[derive(Component)]
-pub struct Building;
+pub struct Building {
+    pub id: BuildingId,
+}
 
 #[derive(Component)]
 pub struct Name {
@@ -66,6 +68,9 @@ pub struct MultiCellBuilding {
     pub center_y: i32,
 }
 
+#[derive(Component, PartialEq)]
+pub struct NetWorkComponent;
+
 impl BuildingRegistry {
     pub fn load_from_assets() -> Self {
         let ron_content = include_str!("../assets/buildings.ron");
@@ -118,7 +123,7 @@ pub fn place_hub(
     central_inventory.add_item(create_ore_item(), 800); // Starting ore amount
 
     let building_entity = commands.spawn((
-        Building,
+        Building { id: HUB },
         Hub,
         Name { name: "Command Hub".to_string() },
         Position { x: center_x, y: center_y },

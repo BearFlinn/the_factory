@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub type BuildingId = u32;
 
 // Constants for building IDs - can be moved to separate file if needed
+pub const HUB: BuildingId = 0;
 pub const MINING_DRILL: BuildingId = 1;
 pub const CONNECTOR: BuildingId = 2;
 pub const RADAR: BuildingId = 3;
@@ -59,6 +60,7 @@ pub enum ComponentDef {
     ResourceConsumer { amount: u32, interval: f32 },
     Inventory { capacity: u32 },
     ViewRange { radius: i32 },
+    NetWorkComponent,
 }
 
 /// Registry that loads building definitions from RON files
@@ -105,6 +107,11 @@ impl BuildingRegistry {
             .collect()
     }
 
+    pub fn get_name_by_id(&self, building_id: BuildingId) -> Option<String> {
+        let def = self.get_definition(building_id)?; 
+        Some(def.appearance.name.clone())
+    }
+
     /// Spawn a building entity with all its components
     pub fn spawn_building(
         &self,
@@ -118,7 +125,7 @@ impl BuildingRegistry {
         
         // Start with base building components
         let mut entity_commands = commands.spawn((
-            Building,
+            Building { id: building_id },
             def.category,
             construction::Name { name: def.appearance.name.clone().to_string() },
             Position { x: grid_x, y: grid_y },
@@ -187,6 +194,9 @@ impl BuildingRegistry {
                 ComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
                     view_radius = *radius;
+                }
+                ComponentDef::NetWorkComponent => {
+                    entity_commands.insert(NetWorkComponent);
                 }
             }
         }
