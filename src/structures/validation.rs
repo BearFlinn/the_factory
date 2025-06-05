@@ -1,9 +1,10 @@
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use crate::{
     grid::{CellChildren, Layer, Position}, 
     resources::ResourceNode, 
-    structures::{construction::{BuildingRegistry, BuildingType}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
+    structures::{construction::{building_config::BuildingRegistry}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
     items::Inventory,
     systems::{ComputeGrid, NetworkConnectivity}
 };
@@ -12,6 +13,12 @@ use crate::{
 pub struct PlaceBuildingValidationEvent {
     pub result: Result<(), PlacementError>,
     pub request: PlaceBuildingRequestEvent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PlacementRule {
+    AdjacentToNetwork,
+    RequiresResource,
 }
 
 #[derive(Debug)]
@@ -40,7 +47,7 @@ pub fn validate_placement(
     mut validation_events: EventWriter<PlaceBuildingValidationEvent>,
     registry: Res<BuildingRegistry>,
     grid_cells: Query<(Entity, &Position, &CellChildren)>,
-    building_layers: Query<(&BuildingType, &Layer)>,
+    building_layers: Query<&Layer>,
     central_inventory: Query<&Inventory, With<Hub>>,
     available_compute: Res<ComputeGrid>,
     resources: Query<&ResourceNode>,
@@ -58,7 +65,7 @@ pub fn validate_placement(
 
         let mut cell_occupied = false;
         for &entity in &cell_children.0 {
-            if let Ok((_, layer)) = building_layers.get(entity) {
+            if let Ok((layer)) = building_layers.get(entity) {
                 if layer.0 == BUILDING_LAYER {
                     validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::CellOccupied), request: event.clone() });
                     cell_occupied = true;
@@ -70,11 +77,11 @@ pub fn validate_placement(
             continue;
         }
 
-        if let Some(definition) = registry.get_definition(&event.building_name) {
+        if let Some(definition) = registry.get_definition(event.building_id) {
             // Check ore cost against central inventory
-            if let Some(cost) = definition.construction_cost {
+            if let Some(cost) = &definition.placement.cost {
                 if let Some(inv) = inventory {
-                    if !inv.has_item(0, cost as u32) { // 0 is ore ID
+                    if !inv.has_item(0, cost.ore) { // 0 is ore ID
                         validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
                         continue;
                     }
@@ -83,41 +90,33 @@ pub fn validate_placement(
                     continue;
                 }
             }
-
-            if let Some(cost) = definition.compute_consumption {
-                if cost > available_compute.available {
-                    validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
-                    continue;
-                }
-            }
             
-            if definition.building_type == BuildingType::Harvester {
-                println!("Checking for resource at ({}, {})", event.grid_x, event.grid_y);
-                println!("Cell has {} entities", cell_children.0.len());
-                
-                for &entity in &cell_children.0 {
-                    if resources.contains(entity) {
-                        println!("Found resource entity: {:?}", entity);
-                    } else {
-                        println!("Non-resource entity: {:?}", entity);
-                    }
-                }
-                
-                let has_resource = cell_children.0.iter()
-                    .any(|&entity| resources.contains(entity));
-                
-                println!("Has resource: {}", has_resource);
-                
-                if !has_resource {
-                    validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::RequiresResourceNode), request: event.clone() });
-                    continue;
+            for rule in &definition.placement.rules {
+                match rule {
+                    PlacementRule::RequiresResource => {
+                        // Your existing resource validation logic
+                        let has_resource = cell_children.0.iter()
+                            .any(|&entity| resources.contains(entity));
+                        if !has_resource {
+                            validation_events.send(PlaceBuildingValidationEvent { 
+                                result: Err(PlacementError::RequiresResourceNode), 
+                                request: event.clone() 
+                            });
+                            continue;
+                        }
+                    },
+                    PlacementRule::AdjacentToNetwork => {
+                        // Your existing network validation logic
+                        if !network_connectivity.is_adjacent_to_core_network(event.grid_x, event.grid_y) {
+                            validation_events.send(PlaceBuildingValidationEvent { 
+                                result: Err(PlacementError::NotAdjacentToNetwork), 
+                                request: event.clone() 
+                            });
+                            continue;
+                        }
+                    },
                 }
             }
-        }
-
-        if !network_connectivity.is_adjacent_to_core_network(event.grid_x, event.grid_y) {
-            validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotAdjacentToNetwork), request: event.clone() });
-            continue; 
         }
         validation_events.send(PlaceBuildingValidationEvent { result: Ok(()), request: event.clone() });
     }

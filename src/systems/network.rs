@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
-use crate::{grid::{Layer, Position}, structures::{Building, BuildingType, Hub, MultiCellBuilding, BUILDING_LAYER}};
+use crate::{grid::{Layer, Position}, structures::{Building, Hub, MultiCellBuilding, BUILDING_LAYER}};
 
 #[derive(Event)]
 pub struct NetworkChangedEvent;
@@ -41,7 +41,7 @@ impl NetworkConnectivity {
 }
 
 pub fn calculate_network_connectivity(
-    building_layers: &Query<(&BuildingType, &Position, &Layer), With<Building>>,
+    building_layers: &Query<(&Position, &Layer), With<Building>>,
     hub: &Query<(&MultiCellBuilding, &Hub)>,
 ) -> (HashSet<(i32, i32)>, HashSet<(i32, i32)>) {
     let mut core_network_cells = HashSet::new();
@@ -70,7 +70,7 @@ pub fn calculate_network_connectivity(
             }
             
             // Check if this adjacent position has a connector
-            let has_connector = building_layers.iter().any(|(building_type, position, layer)| {
+            let has_connector = building_layers.iter().any(|(position, layer)| {
                 layer.0 == BUILDING_LAYER && 
                 *building_type == BuildingType::Connector &&
                 position.x == adj_x && position.y == adj_y
@@ -85,7 +85,7 @@ pub fn calculate_network_connectivity(
     
     // Create extended network: include all buildings adjacent to core network
     let mut connected_cells = core_network_cells.clone();
-    for (_, position, layer) in building_layers.iter() {
+    for (position, layer) in building_layers.iter() {
         if layer.0 == BUILDING_LAYER {
             let building_pos = (position.x, position.y);
             
@@ -111,7 +111,7 @@ pub fn calculate_network_connectivity(
 pub fn update_network_connectivity(
     mut network_connectivity: ResMut<NetworkConnectivity>,
     mut network_events: EventReader<NetworkChangedEvent>,
-    building_layers: Query<(&BuildingType, &Position, &Layer), With<Building>>,
+    building_layers: Query<(&Position, &Layer), With<Building>>,
     hub: Query<(&MultiCellBuilding, &Hub)>,
 ) {
     // Calculate on first run even without event, or when event received

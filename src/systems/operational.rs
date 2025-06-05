@@ -1,16 +1,13 @@
 use bevy::prelude::*;
 use crate::{
-    grid::Position,
-    structures::{Building, BuildingType, PowerConsumer, ResourceConsumer, Hub},
-    systems::{PowerGrid, NetworkConnectivity},
-    items::Inventory
+    grid::Position, items::Inventory, structures::{Building, Hub, PowerConsumer, PowerGenerator, ResourceConsumer}, systems::{power, NetworkConnectivity, PowerGrid}
 };
 
 #[derive(Component)]
 pub struct Operational(pub bool);
 
 pub fn update_operational_status_optimized(
-    mut buildings: Query<(&BuildingType, &Position, &mut Operational, Option<&PowerConsumer>, Option<&ResourceConsumer>), With<Building>>,
+    mut buildings: Query<(&Position, &mut Operational, Option<&PowerConsumer>, Option<&ResourceConsumer>, Option<&PowerGenerator>), With<Building>>,
     network_connectivity: Res<NetworkConnectivity>,
     power_grid: Res<PowerGrid>,
     central_inventory: Query<&Inventory, With<Hub>>,
@@ -18,7 +15,7 @@ pub fn update_operational_status_optimized(
     let has_power = power_grid.available >= 0;
     let inventory = central_inventory.get_single().ok();
     
-    for (building_type, pos, mut operational, power_consumer, resource_consumer) in buildings.iter_mut() {
+    for (pos, mut operational, power_consumer, resource_consumer, power_generator) in buildings.iter_mut() {
         if !network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y) {
             operational.0 = false;
             continue; 
@@ -37,15 +34,14 @@ pub fn update_operational_status_optimized(
             }
         }
         
-        operational.0 = match building_type {
-            BuildingType::Generator => true,
-            _ => {
-                if power_consumer.is_some() {
-                    has_power
-                } else {
-                    true
-                }
+        operational.0 = if power_generator.is_some() {
+            true
+        } else {
+            if power_consumer.is_some() {
+                has_power
+            } else {
+                true
             }
-        };
+        }
     }
 }

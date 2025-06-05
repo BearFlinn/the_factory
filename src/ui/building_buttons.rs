@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
-use crate::structures::{BuildingRegistry, BuildingType, BuildingDefinition};
+use crate::structures::{BuildingRegistry};
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
-    pub building_name: Option<String>,
+    // TODO remove option
+    pub building_id: Option<u32>,
 }
 
 #[derive(Component)]

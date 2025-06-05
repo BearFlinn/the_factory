@@ -1,0 +1,100 @@
+[
+    (
+        id: 1, // MINING_DRILL
+        category: Production,
+        appearance: (
+            name: "Mining Drill",
+            size: (32.0, 32.0),
+            color: (0.3, 0.7, 0.3, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: Some((ore: 60)),
+            rules: [RequiresResource, AdjacentToNetwork],
+        ),
+        components: [
+            Producer(amount: 1, interval: 1.0),
+            PowerConsumer(amount: 10),
+            Inventory(capacity: 100),
+            ViewRange(radius: 2),
+        ]
+    ),
+    
+    (
+        id: 2, // CONNECTOR
+        category: Logistics,
+        appearance: (
+            name: "Connector",
+            size: (16.0, 16.0),
+            color: (0.7, 0.3, 0.7, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: Some((ore: 10)),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            ViewRange(radius: 1),
+        ]
+    ),
+    
+    (
+        id: 3, // RADAR
+        category: Utility,
+        appearance: (
+            name: "Radar",
+            size: (32.0, 32.0),
+            color: (0.7, 0.7, 0.3, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: Some((ore: 150)),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            PowerConsumer(amount: 30),
+            ComputeConsumer(amount: 50),
+            ViewRange(radius: 10),
+        ]
+    ),
+    
+    (
+        id: 4, // GENERATOR
+        category: Production,
+        appearance: (
+            name: "Generator",
+            size: (32.0, 32.0),
+            color: (0.3, 0.3, 0.7, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: Some((ore: 60)),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            PowerGenerator(amount: 40),
+            ResourceConsumer(amount: 1, interval: 2.0),
+            ViewRange(radius: 2),
+        ]
+    ),
+    
+    (
+        id: 5, // DATACENTER
+        category: Production,
+        appearance: (
+            name: "Datacenter",
+            size: (48.0, 48.0),
+            color: (0.7, 0.3, 0.8, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: Some((ore: 200)),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            PowerConsumer(amount: 100),
+            ComputeGenerator(amount: 100),
+            ViewRange(radius: 2),
+        ]
+    ),
+]

@@ -2,7 +2,7 @@ use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position}, 
-    structures::{Building, BuildingType, Hub, MultiCellBuilding},
+    structures::{Building, Hub, MultiCellBuilding},
     systems::Operational,
     workers::WorkerPath,
     items::Inventory

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::{
     grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position},
-    structures::{Building, BuildingRegistry, Hub, spawn_building, PlaceBuildingValidationEvent},
+    structures::{Building, BuildingRegistry, Hub, BuildingId, PlaceBuildingValidationEvent},
     ui::SelectedBuilding,
     items::Inventory,
     systems::NetworkChangedEvent,
@@ -11,7 +11,7 @@ pub const BUILDING_LAYER: i32 = 1;
 
 #[derive(Event, Clone)]
 pub struct PlaceBuildingRequestEvent {
-    pub building_name: String,
+    pub building_id: BuildingId,  // Changed from building_name: String
     pub grid_x: i32,
     pub grid_y: i32,
 }
@@ -36,9 +36,9 @@ pub fn handle_building_input(
     };
 
     if mouse_button.just_pressed(MouseButton::Left) {
-        if let Some(building_name) = &selected_building.building_name {
+        if let Some(building_id) = &selected_building.building_id {
             place_events.send(PlaceBuildingRequestEvent {
-                building_name: building_name.clone(),
+                building_id: building_id.clone(),
                 grid_x: coords.grid_x,
                 grid_y: coords.grid_y,
             });
@@ -72,7 +72,13 @@ pub fn place_building(
             };
             let world_pos = grid.grid_to_world_coordinates(event.request.grid_x, event.request.grid_y);
 
-            let (building_entity, view_radius) = spawn_building(&mut commands, &registry, &event.request.building_name, event.request.grid_x, event.request.grid_y, world_pos);
+            let (building_entity, view_radius) = registry.spawn_building(
+                &mut commands, 
+                event.request.building_id,  // Use building_id instead of building_name
+                event.request.grid_x, 
+                event.request.grid_y, 
+                world_pos
+            ).expect("Building ID should exist");
 
             cell_children.0.push(building_entity);
 
@@ -85,10 +91,10 @@ pub fn place_building(
             }
 
             // Deduct construction cost from central inventory
-            if let Some(def) = registry.get_definition(&event.request.building_name) {
-                if let Some(construction_cost) = def.construction_cost {
+            if let Some(def) = registry.get_definition(event.request.building_id) {
+                if let Some(construction_cost) = &def.placement.cost {
                     if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_item(0, construction_cost as u32); // 0 is ore ID
+                        inventory.remove_item(0, construction_cost.ore); // 0 is ore ID
                     }
                 }
             }

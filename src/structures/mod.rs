@@ -2,11 +2,13 @@ pub mod construction;
 pub mod placement;
 pub mod production;
 pub mod validation;
+pub mod building_config;
 
 pub use construction::*;
 pub use placement::*;
 pub use production::*;
 pub use validation::*;
+pub use building_config::*;
 
 use bevy::prelude::*;
 
@@ -28,7 +30,7 @@ fn configure_building_system_sets(app: &mut App) {
 }
 
 pub fn setup(mut commands: Commands) {
-    commands.insert_resource(BuildingRegistry::new());
+
 }
 
 pub struct BuildingsPlugin;
