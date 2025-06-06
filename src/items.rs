@@ -1,13 +1,60 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use bevy::scene::ron;
 
-#[derive(Component)]
-pub struct ItemMarker;
+pub type ItemId = u32;
+
+// Item constants 
+pub const IRON_ORE: ItemId = 0;
+pub const COPPER_ORE: ItemId = 1;
+pub const COAL: ItemId = 2;
 
 #[derive(Component)]
 pub struct Item {
     pub id: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ItemDef {
+    pub id: ItemId,
     pub name: String,
+    pub tier: u32,
+    // pub stack_size: u32 (not needed yet)
+}
+
+#[derive(Resource)]
+pub struct ItemRegistry {
+    pub definitions: HashMap<ItemId, ItemDef>,
+}
+
+impl ItemRegistry {
+    pub fn from_ron(ron_content: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let definitions_vec: Vec<ItemDef> = ron::from_str(ron_content)?;
+        
+        let mut definitions = HashMap::new();
+        
+        for def in definitions_vec {
+            definitions.insert(def.id, def);
+        }
+        
+        Ok(Self { definitions })
+    }
+
+    pub fn load_from_assets() -> Self {
+        let ron_content = include_str!("assets/items.ron");
+        Self::from_ron(ron_content).expect("Failed to load item definitions")
+    }
+
+    pub fn get_definition(&self, item_id: ItemId) -> Option<&ItemDef> {
+        self.definitions.get(&item_id)
+    }
+
+    pub fn create_item(&self, item_id: ItemId) -> Option<Item> {
+        self.get_definition(item_id).map(|def| Item { id: def.id })
+    }
+
+    // TODO: Add methods for accessing individual item fields from definitions
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -26,7 +73,7 @@ pub struct InventoryType(pub InventoryTypes);
 #[derive(Component)]
 #[require(InventoryType)]
 pub struct Inventory {
-    pub items: Vec<(Item, u32)>,
+    pub items: HashMap<ItemId, u32>, 
     //TODO: Enforce capacity
     pub capacity: u32,
 }
@@ -34,44 +81,36 @@ pub struct Inventory {
 impl Inventory {
     pub fn new(capacity: u32) -> Self {
         Self {
-            items: Vec::new(),
+            items: HashMap::new(),
             capacity,
         }
     }
 
-    pub fn add_item(&mut self, item: Item, quantity: u32) -> u32 {
-        // Find existing item by id
-        if let Some((_, existing_quantity)) = self.items.iter_mut()
-            .find(|(existing_item, _)| existing_item.id == item.id) {
-            *existing_quantity += quantity;
-            return quantity;
-        }
-        
-        // Add new item if not found
-        self.items.push((item, quantity));
+    pub fn add_item(&mut self, item_id: ItemId, quantity: u32) -> u32 {
+        *self.items.entry(item_id).or_insert(0) += quantity;
         quantity
     }
 
-    pub fn remove_item(&mut self, item_id: u32, quantity: u32) -> u32 {
-        if let Some(index) = self.items.iter()
-            .position(|(item, _)| item.id == item_id) {
-            let (_, current_quantity) = &mut self.items[index];
+    pub fn remove_item(&mut self, item_id: ItemId, quantity: u32) -> u32 {
+        if let Some(current_quantity) = self.items.get_mut(&item_id) {
             let removed = (*current_quantity).min(quantity);
             *current_quantity -= removed;
-            
-            // Remove item if quantity reaches 0
             if *current_quantity == 0 {
-                self.items.remove(index);
+                self.items.remove(&item_id);
             }
-            
-            return removed;
+            removed
+        } else {
+            0
         }
-        0
+    }
+
+    pub fn get_all_items(&self) -> HashMap<ItemId, u32> {
+        self.items.clone()
     }
 
     pub fn get_item_quantity(&self, item_id: u32) -> u32 {
         self.items.iter()
-            .find(|(item, _)| item.id == item_id)
+            .find(|(item, _)| **item == item_id)
             .map(|(_, quantity)| *quantity)
             .unwrap_or(0)
     }
@@ -81,56 +120,52 @@ impl Inventory {
     }
 }
 
-// Helper function to create standard items
-pub fn create_ore_item() -> Item {
-    Item {
-        id: 0,
-        name: "Ore".to_string(),
-    }
-}
-
 pub fn transfer_items(
     sender: Entity,
     receiver: Entity,
     inventories: &mut Query<&mut Inventory>,
 ) {
-    // We need to work around the borrow checker by getting both mutable references safely
     if sender == receiver {
-        return; // Can't transfer to self
+        return;
     }
-    
-    // Get the available ore from sender first
-    let available_ore = if let Ok(sender_inv) = inventories.get(sender) {
-        sender_inv.get_item_quantity(0)
+   
+    let available_items = if let Ok(sender_inv) = inventories.get(sender) {
+        sender_inv.get_all_items()
     } else {
         return;
     };
     
-    if available_ore == 0 {
+    if available_items.is_empty() {
         return;
     }
     
-    // Remove from sender
-    let removed = if let Ok(mut sender_inv) = inventories.get_mut(sender) {
-        sender_inv.remove_item(0, available_ore)
-    } else {
-        return;
-    };
-    
-    // Add to receiver
-    if removed > 0 {
-        if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
-            receiver_inv.add_item(
-                create_ore_item(), 
-                removed
-            );
+    for (item_id, quantity) in available_items.into_iter() {
+        if quantity == 0 {
+            continue;
+        }
+        
+        let removed = if let Ok(mut sender_inv) = inventories.get_mut(sender) {
+            sender_inv.remove_item(item_id, quantity)
+        } else {
+            continue;
+        };
+        
+        if removed > 0 {
+            if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
+                receiver_inv.add_item(item_id, removed);
+            }
         }
     }
 }
 
+pub fn setup(mut commands: Commands) {
+    commands.insert_resource(ItemRegistry::load_from_assets());
+}
 pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
+        app
+            .add_systems(Startup, setup);
     }
 }

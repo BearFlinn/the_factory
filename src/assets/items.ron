@@ -1,0 +1,18 @@
+[
+    // Foundational Items
+    (
+        id: 0,
+        name: "Iron Ore",
+        tier: 0,
+    ),
+    (
+        id: 1,
+        name: "Copper Ore",
+        tier: 0
+    ),
+    (
+        id: 2,
+        name: "Coal",
+        tier: 0
+    ),
+]

@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    structures::{ResourceConsumer, Producer},
-    items::{Inventory, create_ore_item},
-    systems::Operational
+    items::{Inventory, IRON_ORE}, structures::{Producer, ResourceConsumer}, systems::Operational
 };
 
 pub fn update_producers(
@@ -15,7 +13,7 @@ pub fn update_producers(
         }
         
         if producer.timer.tick(time.delta()).just_finished() {
-            inventory.add_item(create_ore_item(), producer.amount);
+            inventory.add_item(IRON_ORE, producer.amount);
             producer.timer.reset();
         }
     }

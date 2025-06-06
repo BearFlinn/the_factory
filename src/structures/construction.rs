@@ -1,19 +1,14 @@
-use crate::items::{InventoryType, InventoryTypes};
+use crate::items::{InventoryType, InventoryTypes, IRON_ORE};
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
     structures::{BUILDING_LAYER, building_config::*},
-    items::{Inventory, create_ore_item},
+    items::{Inventory},
     systems::Operational
 };
 
 #[derive(Component)]
 pub struct Building {
     pub id: BuildingId,
-}
-
-#[derive(Component)]
-pub struct Name {
-    pub name: String,
 }
 
 #[derive(Component)]
@@ -124,12 +119,11 @@ pub fn place_hub(
 
     // Create central inventory with starting ore
     let mut central_inventory = Inventory::new(10000); // Large capacity for central storage
-    central_inventory.add_item(create_ore_item(), 800); // Starting ore amount
+    central_inventory.add_item(IRON_ORE, 800); // Starting ore amount
 
     let building_entity = commands.spawn((
         Building { id: HUB },
         Hub,
-        Name { name: "Command Hub".to_string() },
         Position { x: center_x, y: center_y },
         WorkersEnRoute::default(),
         MultiCellBuilding { 

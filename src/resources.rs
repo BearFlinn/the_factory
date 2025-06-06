@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rand::{thread_rng, Rng};
 use crate::{
     grid::{CellChildren, Grid, Layer, NewCellEvent, Position},
-    items::Item,
+    items::{Item, ItemRegistry, IRON_ORE},
 };
 
 const RESOURCE_LAYER: i32 = 0;
@@ -34,6 +34,7 @@ pub fn spawn_resource_node(
     grid: Res<Grid>,
     mut cell_event: EventReader<NewCellEvent>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
+    registry: Res<ItemRegistry>,
 ) {
     for event in cell_event.read() {
         let spawn_resource = thread_rng().gen::<f32>() < 0.025;
@@ -54,10 +55,7 @@ pub fn spawn_resource_node(
             ResourceNodeBundle::new(
                 event.x,
                 event.y,
-                Item {
-                    id: 0,
-                    name: "Ore".to_string(),
-                },
+                registry.create_item(IRON_ORE).unwrap(),
             ))
             .insert(Sprite::from_color(Color::srgb(0.7, 0.3, 0.3), Vec2::new(48.0, 48.0)))
             .insert(Transform::from_xyz(world_pos.x, world_pos.y, 0.2)).id();

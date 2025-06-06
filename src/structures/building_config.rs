@@ -32,7 +32,7 @@ pub struct BuildingDef {
     pub category: BuildingCategory,
     pub appearance: AppearanceDef,
     pub placement: PlacementDef,
-    pub components: Vec<ComponentDef>,
+    pub components: Vec<BuildingComponentDef>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -56,7 +56,7 @@ pub struct CostDef {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ComponentDef {
+pub enum BuildingComponentDef {
     Producer { amount: u32, interval: f32 },
     PowerConsumer { amount: i32 },
     PowerGenerator { amount: i32 },
@@ -120,12 +120,11 @@ impl BuildingRegistry {
         world_pos: Vec2,
     ) -> Option<(Entity, i32)> {
         let def = self.get_definition(building_id)?;
-        println!("Spawning building: {} With Components {}", def.appearance.name, def.components.iter().map(|c| format!("{:?}", c)).collect::<Vec<String>>().join(", "));
         // Start with base building components
         let mut entity_commands = commands.spawn((
             Building { id: building_id },
             def.category,
-            construction::Name { name: def.appearance.name.clone().to_string() },
+            Name::new(format!("{}",&def.appearance.name)),
             Position { x: grid_x, y: grid_y },
             Operational(false),
             Layer(BUILDING_LAYER),
@@ -164,41 +163,41 @@ impl BuildingRegistry {
         // Add dynamic components based on definition
         for component in &def.components {
             match component {
-                ComponentDef::Producer { amount, interval } => {
+                BuildingComponentDef::Producer { amount, interval } => {
                     entity_commands.insert(Producer {
                         amount: *amount,
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                     });
                 }
-                ComponentDef::PowerConsumer { amount } => {
+                BuildingComponentDef::PowerConsumer { amount } => {
                     entity_commands.insert(PowerConsumer { amount: *amount });
                 }
-                ComponentDef::PowerGenerator { amount } => {
+                BuildingComponentDef::PowerGenerator { amount } => {
                     entity_commands.insert(PowerGenerator { amount: *amount });
                 }
-                ComponentDef::ComputeGenerator { amount } => {
+                BuildingComponentDef::ComputeGenerator { amount } => {
                     entity_commands.insert(ComputeGenerator { amount: *amount });
                 }
-                ComponentDef::ComputeConsumer { amount } => {
+                BuildingComponentDef::ComputeConsumer { amount } => {
                     entity_commands.insert(ComputeConsumer { amount: *amount });
                 }
-                ComponentDef::ResourceConsumer { amount, interval } => {
+                BuildingComponentDef::ResourceConsumer { amount, interval } => {
                     entity_commands.insert(ResourceConsumer {
                         amount: *amount,
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                     });
                 }
-                ComponentDef::Inventory { capacity } => {
+                BuildingComponentDef::Inventory { capacity } => {
                     entity_commands.insert(Inventory::new(*capacity));
                 }
-                ComponentDef::InventoryType { inv_type } => {
+                BuildingComponentDef::InventoryType { inv_type } => {
                     entity_commands.insert(InventoryType(inv_type.clone()));
                 }
-                ComponentDef::ViewRange { radius } => {
+                BuildingComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
                     view_radius = *radius;
                 }
-                ComponentDef::NetWorkComponent => {
+                BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
                 }
             }
