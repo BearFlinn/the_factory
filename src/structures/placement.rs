@@ -1,17 +1,15 @@
 use bevy::prelude::*;
 use crate::{
     grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position},
-    structures::{Building, BuildingRegistry, Hub, BuildingId, PlaceBuildingValidationEvent},
-    ui::SelectedBuilding,
-    items::Inventory,
-    systems::NetworkChangedEvent,
+    materials::items::{Inventory},
+    structures::{Building, BuildingId, BuildingRegistry, Hub, PlaceBuildingValidationEvent}, 
+    systems::NetworkChangedEvent, ui::SelectedBuilding,
+    constants::items::*,
 };
-
-pub const BUILDING_LAYER: i32 = 1;
 
 #[derive(Event, Clone)]
 pub struct PlaceBuildingRequestEvent {
-    pub building_id: BuildingId,  // Changed from building_name: String
+    pub building_id: BuildingId,
     pub grid_x: i32,
     pub grid_y: i32,
 }
@@ -74,7 +72,7 @@ pub fn place_building(
 
             let (building_entity, view_radius) = registry.spawn_building(
                 &mut commands, 
-                event.request.building_id,  // Use building_id instead of building_name
+                event.request.building_id,
                 event.request.grid_x, 
                 event.request.grid_y, 
                 world_pos
@@ -90,11 +88,11 @@ pub fn place_building(
                 });
             }
 
-            // Deduct construction cost from central inventory
+            // TODO: Change building cost to recipes
             if let Some(def) = registry.get_definition(event.request.building_id) {
                 if let Some(construction_cost) = &def.placement.cost {
                     if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_item(0, construction_cost.ore); // 0 is ore ID
+                        inventory.remove_item(IRON_ORE, construction_cost.ore); // 0 is ore ID
                     }
                 }
             }

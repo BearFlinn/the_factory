@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use bevy::prelude::*;
 use crate::{
-    items::{Inventory, InventoryType, InventoryTypes}, workers::WorkerPath
+    materials::items::{Inventory, InventoryType, InventoryTypes}, workers::WorkerPath
 };
 
 #[derive(Component)]

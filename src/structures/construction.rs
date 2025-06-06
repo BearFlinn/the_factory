@@ -1,9 +1,10 @@
-use crate::items::{InventoryType, InventoryTypes, IRON_ORE};
+
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
-    structures::{BUILDING_LAYER, building_config::*},
-    items::{Inventory},
-    systems::Operational
+    structures::{building_config::*},
+    materials::items::{Inventory, InventoryType, InventoryTypes},
+    systems::Operational,
+    constants::{items::*, gridlayers::BUILDING_LAYER, structures::*},
 };
 
 #[derive(Component)]

@@ -2,10 +2,9 @@ use bevy::prelude::*;
 use rand::{thread_rng, Rng};
 use crate::{
     grid::{CellChildren, Grid, Layer, NewCellEvent, Position},
-    items::{Item, ItemRegistry, IRON_ORE},
+    materials::items::{Item, ItemRegistry},
+    constants::{items::*, gridlayers::RESOURCE_LAYER},
 };
-
-const RESOURCE_LAYER: i32 = 0;
 
 #[derive(Component)]
 pub struct ResourceNode;

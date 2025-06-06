@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    items::Inventory,
+    materials::items::Inventory,
     structures::Hub,
     systems::{PowerGrid, ComputeGrid},
 };

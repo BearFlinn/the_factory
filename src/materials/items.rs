@@ -5,11 +5,6 @@ use bevy::scene::ron;
 
 pub type ItemId = u32;
 
-// Item constants 
-pub const IRON_ORE: ItemId = 0;
-pub const COPPER_ORE: ItemId = 1;
-pub const COAL: ItemId = 2;
-
 #[derive(Component)]
 pub struct Item {
     pub id: u32,
@@ -42,7 +37,7 @@ impl ItemRegistry {
     }
 
     pub fn load_from_assets() -> Self {
-        let ron_content = include_str!("assets/items.ron");
+        let ron_content = include_str!("../assets/items.ron");
         Self::from_ron(ron_content).expect("Failed to load item definitions")
     }
 
@@ -102,6 +97,12 @@ impl Inventory {
         } else {
             0
         }
+    }
+
+    // TODO: Update producers to set operational = false when inventory is full
+    pub fn is_full(&self) -> bool {
+        let current_quantity = self.items.values().sum::<u32>();
+        current_quantity >= self.capacity
     }
 
     pub fn get_all_items(&self) -> HashMap<ItemId, u32> {

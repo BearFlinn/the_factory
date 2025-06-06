@@ -2,22 +2,14 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub use crate::grid::{Position, Layer};
-use crate::items::InventoryTypes;
-pub use crate::systems::Operational;
-pub use crate::structures::*;
-pub use crate::items::{Inventory, InventoryType};
+pub use crate::{
+    grid::{Position, Layer},
+    systems::Operational,
+    structures::*,
+    materials::items::{Inventory, InventoryType, InventoryTypes},
+};
 
-// Numerical building IDs for performance and type safety
 pub type BuildingId = u32;
-
-// Constants for building IDs - can be moved to separate file if needed
-pub const HUB: BuildingId = 0;
-// pub const MINING_DRILL: BuildingId = 1;
-// pub const CONNECTOR: BuildingId = 2;
-// pub const RADAR: BuildingId = 3;
-// pub const GENERATOR: BuildingId = 4;
-// pub const DATACENTER: BuildingId = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Component, Serialize, Deserialize)]
 pub enum BuildingCategory {

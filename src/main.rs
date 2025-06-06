@@ -6,8 +6,9 @@ mod ui;
 mod camera;
 mod resources;
 mod workers;
-mod items;
+mod materials;
 mod systems;
+mod constants;
 
 use grid::GridPlugin;
 use camera::CameraPlugin;
@@ -15,7 +16,7 @@ use structures::BuildingsPlugin;
 use ui::UIPlugin;
 use resources::ResourcesPlugin;
 use workers::WorkersPlugin;
-use items::ItemsPlugin;
+use materials::MaterialsPlugin;
 use systems::SystemsPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -54,7 +55,7 @@ fn main() {
         .add_plugins((
             GridPlugin,
             ResourcesPlugin,
-            ItemsPlugin,
+            MaterialsPlugin,
             SystemsPlugin,
             BuildingsPlugin,
             WorkersPlugin,

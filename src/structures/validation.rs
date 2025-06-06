@@ -5,7 +5,7 @@ use crate::{
     grid::{CellChildren, Layer, Position}, 
     resources::ResourceNode, 
     structures::{construction::{building_config::BuildingRegistry}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
-    items::Inventory,
+    materials::items::Inventory,
     systems::NetworkConnectivity
 };
 

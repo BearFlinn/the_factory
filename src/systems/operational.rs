@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 use crate::{
-    grid::Position, items::Inventory, structures::{Building, PowerConsumer, PowerGenerator, ResourceConsumer}, systems::{NetworkConnectivity, PowerGrid}
+    grid::Position, 
+    materials::items::Inventory, 
+    structures::{Building, PowerConsumer, PowerGenerator, ResourceConsumer, IRON_ORE}, 
+    systems::{NetworkConnectivity, PowerGrid}
 };
 
 #[derive(Component)]
@@ -10,7 +13,7 @@ pub fn update_consumer_operation(
     mut consumer_buildings: Query<(&mut Operational, &ResourceConsumer, &Inventory), With<Building>>,
 ) {
     for (mut operational, consumer, inventory) in consumer_buildings.iter_mut() {
-        operational.0 = inventory.has_item(0, consumer.amount); // 0 is ore ID
+        operational.0 = inventory.has_item(IRON_ORE, consumer.amount); // 0 is ore ID
     }
 }
 

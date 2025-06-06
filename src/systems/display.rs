@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crate::{
     structures::{Building, building_config::BuildingRegistry, PlaceBuildingValidationEvent}, 
     workers::Worker, 
-    items::Inventory, 
+    materials::items::Inventory, 
     systems::Operational,
     ui::SelectedBuilding,
     grid::Grid,

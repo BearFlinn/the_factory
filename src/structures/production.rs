@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 use crate::{
-    items::{Inventory, IRON_ORE}, structures::{Producer, ResourceConsumer}, systems::Operational
+    materials::items::{Inventory},
+    structures::{Producer, ResourceConsumer},
+    systems::Operational,
+    constants::items::*
 };
 
 pub fn update_producers(
@@ -29,7 +32,7 @@ pub fn update_resource_consumers(
         }
         
         if consumer.timer.tick(time.delta()).just_finished() {
-            if inventory.has_item(0, consumer.amount) { // 0 is ore ID
+            if inventory.has_item(IRON_ORE, consumer.amount) { // 0 is ore ID
                 inventory.remove_item(0, consumer.amount);
                 consumer.timer.reset();
             }
