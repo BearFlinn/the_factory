@@ -1,11 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    structures::{Building, building_config::BuildingRegistry, PlaceBuildingValidationEvent}, 
-    workers::Worker, 
-    materials::items::Inventory, 
-    systems::Operational,
-    ui::SelectedBuilding,
-    grid::Grid,
+    grid::Grid, materials::{items::Inventory, ItemRegistry}, structures::{building_config::BuildingRegistry, Building, PlaceBuildingValidationEvent}, systems::Operational, ui::SelectedBuilding, workers::Worker
 };
 
 #[derive(Component)]
@@ -30,9 +25,9 @@ pub fn update_inventory_display(
     mut inventory_displays: Query<&mut Text2d, With<InventoryDisplay>>,
     children: Query<&Children>,
     changed_inventories: Query<Entity, (Or<(With<Worker>, With<Building>)>, Changed<Inventory>)>,
+    item_registry: Res<ItemRegistry>,
 ) {
     for (building_entity, inventory) in buildings_and_workers.iter() {
-        // Check if this building's inventory changed, or if we need to create initial display
         let should_update = changed_inventories.contains(building_entity);
         
         let existing_display = children.get(building_entity)
@@ -47,26 +42,39 @@ pub fn update_inventory_display(
                 })
             });
 
+        // Format all items for display
+        let display_text = if inventory.items.is_empty() {
+            "Empty".to_string()
+        } else {
+            inventory.items.iter()
+                .map(|(&item_id, &quantity)| {
+                    let name = item_registry.get_definition(item_id)
+                        .map(|def| def.name.as_str())
+                        .unwrap_or("Unknown");
+                    format!("{}: {}", name, quantity)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
         match existing_display {
             Some(display_entity) => {
-                // Update existing display if inventory changed
                 if should_update {
                     if let Ok(mut text) = inventory_displays.get_mut(display_entity) {
-                        text.0 = format!("{}", inventory.get_item_quantity(0));
+                        text.0 = display_text;
                     }
                 }
             }
             None => {
-                // Create new display
                 let display = commands.spawn((
                     InventoryDisplay,
-                    Text2d::new(format!("{}", inventory.get_item_quantity(0))),
+                    Text2d::new(display_text),
                     TextFont {
-                        font_size: 16.0,
+                        font_size: 12.0, // Smaller font for multi-line display
                         ..Default::default()
                     },
-                    TextColor(Color::srgb(1.0, 1.0, 1.0)),
-                    Transform::from_xyz(0.0, 0.0, 1.1), // Position above building
+                    TextColor(Color::srgb(0.2, 0.2, 0.2)),
+                    Transform::from_xyz(0.0, 30.0, 1.1), // Higher offset for multi-line
                 )).id();
 
                 commands.entity(building_entity).add_child(display);

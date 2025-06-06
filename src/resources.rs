@@ -1,24 +1,27 @@
 use bevy::prelude::*;
 use rand::{thread_rng, Rng};
 use crate::{
-    grid::{CellChildren, Grid, Layer, NewCellEvent, Position},
-    materials::items::{Item, ItemRegistry},
-    constants::{items::*, gridlayers::RESOURCE_LAYER},
+    constants::{gridlayers::RESOURCE_LAYER, items::*}, grid::{CellChildren, Grid, Layer, NewCellEvent, Position}, materials::{items::{Item, ItemRegistry}, RecipeId, RecipeRegistry}
 };
 
 #[derive(Component)]
 pub struct ResourceNode;
 
+#[derive(Component)]
+pub struct ResourceNodeRecipe {
+    pub recipe_id: RecipeId
+}
+
 #[derive(Bundle)]
 pub struct ResourceNodeBundle {
     node: ResourceNode,
-    produces: Item,
+    produces: ResourceNodeRecipe,
     position: Position,
     layer: Layer,
 }
 
 impl ResourceNodeBundle {
-    pub fn new(x: i32, y: i32, produces: Item) -> Self {
+    pub fn new(x: i32, y: i32, produces: ResourceNodeRecipe) -> Self {
         ResourceNodeBundle {
             node: ResourceNode,
             produces,
@@ -28,12 +31,28 @@ impl ResourceNodeBundle {
     }
 }
 
+const IRON_ORE_PROBABILITY: f32 = 0.5;   // 50% of resource nodes
+const COPPER_ORE_PROBABILITY: f32 = 0.3; // 30% of resource nodes  
+const COAL_PROBABILITY: f32 = 0.2;       // 20% of resource nodes
+
+fn select_random_ore() -> (RecipeId, Color) {
+    let mut rng = thread_rng();
+    let roll = rng.gen::<f32>();
+    
+    if roll < IRON_ORE_PROBABILITY {
+        (IRON_ORE as RecipeId, Color::srgb(0.7, 0.3, 0.5))
+    } else if roll < IRON_ORE_PROBABILITY + COPPER_ORE_PROBABILITY {
+        (COPPER_ORE as RecipeId, Color::srgb(0.8, 0.5, 0.2)) 
+    } else {
+        (COAL as RecipeId, Color::srgb(0.2, 0.2, 0.2)) 
+    }
+}
+
 pub fn spawn_resource_node(
     mut commands: Commands,
     grid: Res<Grid>,
     mut cell_event: EventReader<NewCellEvent>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
-    registry: Res<ItemRegistry>,
 ) {
     for event in cell_event.read() {
         let spawn_resource = thread_rng().gen::<f32>() < 0.025;
@@ -50,15 +69,16 @@ pub fn spawn_resource_node(
             continue;
         };
 
+        let (recipe_id, color) = select_random_ore();
+
         let resource_node = commands.spawn(
             ResourceNodeBundle::new(
                 event.x,
                 event.y,
-                registry.create_item(IRON_ORE).unwrap(),
+                ResourceNodeRecipe { recipe_id },
             ))
-            .insert(Sprite::from_color(Color::srgb(0.7, 0.3, 0.3), Vec2::new(48.0, 48.0)))
+            .insert(Sprite::from_color(color, Vec2::new(48.0, 48.0)))
             .insert(Transform::from_xyz(world_pos.x, world_pos.y, 0.2)).id();
-
 
         cell_children.0.push(resource_node);
         eprintln!("spawned resource node at ({}, {})", event.x, event.y);

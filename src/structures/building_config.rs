@@ -21,6 +21,7 @@ pub enum BuildingCategory {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BuildingDef {
     pub id: BuildingId,
+    pub name: String,
     pub category: BuildingCategory,
     pub appearance: AppearanceDef,
     pub placement: PlacementDef,
@@ -29,7 +30,6 @@ pub struct BuildingDef {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppearanceDef {
-    pub name: String,
     pub size: (f32, f32),
     pub color: (f32, f32, f32, f32), // RGBA
     pub multi_cell: Option<(i32, i32)>, // (width, height)
@@ -49,16 +49,15 @@ pub struct CostDef {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum BuildingComponentDef {
-    Producer { amount: u32, interval: f32 },
     PowerConsumer { amount: i32 },
     PowerGenerator { amount: i32 },
     ComputeGenerator { amount: i32 },
     ComputeConsumer { amount: i32 },
-    ResourceConsumer { amount: u32, interval: f32 },
     Inventory { capacity: u32 },
     InventoryType { inv_type: InventoryTypes },
     ViewRange { radius: i32 },
     NetWorkComponent,
+    RecipeCrafter { recipe_id: u32, interval: f32 },
 }
 
 /// Registry that loads building definitions from RON files
@@ -99,7 +98,7 @@ impl BuildingRegistry {
     #[allow(dead_code)] // Is use in spawn_building_buttons, rust analyzer broky
     pub fn get_name_by_id(&self, building_id: BuildingId) -> Option<String> {
         let def = self.get_definition(building_id)?; 
-        Some(def.appearance.name.clone())
+        Some(def.name.clone())
     }
 
     /// Spawn a building entity with all its components
@@ -116,7 +115,7 @@ impl BuildingRegistry {
         let mut entity_commands = commands.spawn((
             Building { id: building_id },
             def.category,
-            Name::new(format!("{}",&def.appearance.name)),
+            Name::new(format!("{}",&def.name)),
             Position { x: grid_x, y: grid_y },
             Operational(false),
             Layer(BUILDING_LAYER),
@@ -155,12 +154,6 @@ impl BuildingRegistry {
         // Add dynamic components based on definition
         for component in &def.components {
             match component {
-                BuildingComponentDef::Producer { amount, interval } => {
-                    entity_commands.insert(Producer {
-                        amount: *amount,
-                        timer: Timer::from_seconds(*interval, TimerMode::Repeating),
-                    });
-                }
                 BuildingComponentDef::PowerConsumer { amount } => {
                     entity_commands.insert(PowerConsumer { amount: *amount });
                 }
@@ -172,12 +165,6 @@ impl BuildingRegistry {
                 }
                 BuildingComponentDef::ComputeConsumer { amount } => {
                     entity_commands.insert(ComputeConsumer { amount: *amount });
-                }
-                BuildingComponentDef::ResourceConsumer { amount, interval } => {
-                    entity_commands.insert(ResourceConsumer {
-                        amount: *amount,
-                        timer: Timer::from_seconds(*interval, TimerMode::Repeating),
-                    });
                 }
                 BuildingComponentDef::Inventory { capacity } => {
                     entity_commands.insert(Inventory::new(*capacity));
@@ -191,6 +178,12 @@ impl BuildingRegistry {
                 }
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
+                }
+                BuildingComponentDef::RecipeCrafter { recipe_id, interval } => {
+                    entity_commands.insert(RecipeCrafter { 
+                        recipe: *recipe_id,
+                        timer: Timer::from_seconds(*interval, TimerMode::Repeating),
+                     });
                 }
             }
         }

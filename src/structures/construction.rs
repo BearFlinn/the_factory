@@ -1,4 +1,5 @@
 
+use crate::materials::{RecipeId};
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
     structures::{building_config::*},
@@ -18,9 +19,9 @@ pub struct ViewRange {
 }
 
 #[derive(Component)]
-pub struct Producer {
-    pub amount: u32,
+pub struct RecipeCrafter {
     pub timer: Timer,
+    pub recipe: RecipeId,
 }
 
 #[derive(Component)]
@@ -41,12 +42,6 @@ pub struct ComputeGenerator {
 #[derive(Component)]
 pub struct ComputeConsumer {
     pub amount: i32,
-}
-
-#[derive(Component)]
-pub struct ResourceConsumer {
-    pub amount: u32,
-    pub timer: Timer,
 }
 
 // TODO: Update to use receipes

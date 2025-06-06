@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-    materials::items::Inventory,
+    materials::{items::Inventory, ItemRegistry},
     structures::Hub,
-    systems::{PowerGrid, ComputeGrid},
+    systems::{ComputeGrid, PowerGrid},
 };
 
 #[derive(Component)]
@@ -79,11 +79,25 @@ pub fn update_power_grid_text(
 pub fn update_production_text(
     central_inventory: Query<&Inventory, (With<Hub>, Changed<Inventory>)>,
     mut text_query: Query<&mut Text, With<ProductionText>>,
+    item_registry: Res<ItemRegistry>,
 ) {
     if let Ok(inventory) = central_inventory.get_single() {
         if let Ok(mut text) = text_query.get_single_mut() {
-            let ore_amount = inventory.get_item_quantity(0); // 0 is ore ID
-            **text = format!("Total Ore: {}", ore_amount);
+            if inventory.items.is_empty() {
+                **text = "Central Storage: Empty".to_string();
+            } else {
+                let items_text = inventory.items.iter()
+                    .map(|(&item_id, &quantity)| {
+                        let name = item_registry.get_definition(item_id)
+                            .map(|def| def.name.as_str())
+                            .unwrap_or("Unknown");
+                        format!("{}: {}", name, quantity)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                
+                **text = format!("Central Storage: {}", items_text);
+            }
         }
     }
 }

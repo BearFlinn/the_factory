@@ -53,12 +53,11 @@ impl Plugin for BuildingsPlugin {
                 validate_placement
                     .in_set(BuildingSystemSet::Validation),
                 
-                (place_building, remove_building)
+                (place_building, set_drill_recipe, remove_building).chain()
                     .in_set(BuildingSystemSet::Placement),
                 
                 (
-                    update_producers,
-                    update_resource_consumers,
+                    update_recipe_crafters
                 ).in_set(BuildingSystemSet::Operations),
             ));
     }

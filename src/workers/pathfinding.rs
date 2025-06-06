@@ -2,8 +2,8 @@ use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
-    materials::items::{transfer_items, Inventory, InventoryType, InventoryTypes},
-    structures::{Building, WorkersEnRoute},
+    materials::{items::{Inventory, InventoryType, InventoryTypes}, request_transfer_all_items, ItemTransferRequestEvent},
+    structures::{Building, WorkersEnRoute, COAL},
     systems::NetworkConnectivity, workers::{Speed, Worker}
 };
 
@@ -84,7 +84,7 @@ fn find_new_target(
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
     workers_en_route: &Query<&mut WorkersEnRoute>,
 ) -> Option<(i32, i32)> {
-    let destination = if worker_inventory.has_item(0, 1) {
+    let destination = if worker_inventory.has_any_item() {
         if let Some((x, y)) = find_nearest_empty_requester_with_congestion(buildings, workers_en_route, worker_pos) {
             return Some((x, y));
         } else {
@@ -125,12 +125,12 @@ fn find_nearest_sender_with_items_and_congestion(
     buildings
         .iter()
         .filter(|(_, _, inventory, inv_type)| {
-            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_item(0, 1)
+            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_any_item()
         })
         .map(|(entity, pos, inventory, _)| {
             let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
             let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
-            let item_count = inventory.get_item_quantity(0); // Get actual ore count
+            let item_count = inventory.get_total_quantity(); // Get actual ore count
             let item_bonus = (item_count as i32).min(20); // Cap bonus at 20 to prevent overflow
             let score = distance + (congestion as i32 * 2) - item_bonus; // Subtract item count for priority
             (pos.x, pos.y, score)
@@ -147,7 +147,7 @@ fn find_nearest_empty_requester_with_congestion(
     buildings
         .iter()
         .filter(|(_, _, inventory, inv_type)| {
-            matches!(inv_type.0, InventoryTypes::Requester) && !inventory.has_item(0, 5)
+            matches!(inv_type.0, InventoryTypes::Requester) && inventory.has_less_than(COAL, 10)
         })
         .map(|(entity, pos, _, _)| {
             let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
@@ -229,29 +229,48 @@ fn calculate_path(
 
 pub fn handle_worker_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
-    mut inventories: Query<&mut Inventory>,
+    inventories: Query<&Inventory>, // No longer need mutable access
     buildings: Query<(Entity, &Position, &InventoryType), With<Building>>,
     mut workers_en_route: Query<&mut WorkersEnRoute>,
+    mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
 ) {
     for event in arrival_events.read() {
         if let Some((building_entity, building_inv_type)) = buildings.iter()
             .find(|(_, pos, _)| pos.x == event.position.0 && pos.y == event.position.1)
-            .map(|(entity, _, inv_type)| (entity, inv_type)) 
+            .map(|(entity, _, inv_type)| (entity, inv_type)) // Fixed syntax error
         {
             // Decrement the workers en route counter
             if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
                 en_route.count = en_route.count.saturating_sub(1);
             }
-            
+           
             match building_inv_type.0 {
                 InventoryTypes::Storage => {
-                    transfer_items(event.worker, building_entity, &mut inventories);
+                    // Worker delivers items to storage building
+                    request_transfer_all_items(
+                        event.worker,
+                        building_entity,
+                        &mut transfer_requests,
+                        &inventories,
+                    );
                 }
                 InventoryTypes::Sender => {
-                    transfer_items(building_entity, event.worker, &mut inventories);
+                    // Building gives items to worker
+                    request_transfer_all_items(
+                        building_entity,
+                        event.worker,
+                        &mut transfer_requests,
+                        &inventories,
+                    );
                 }
                 InventoryTypes::Requester => {
-                    transfer_items(event.worker, building_entity, &mut inventories);
+                    // Worker delivers items to requesting building
+                    request_transfer_all_items(
+                        event.worker,
+                        building_entity,
+                        &mut transfer_requests,
+                        &inventories,
+                    );
                 }
                 _ => {}
             }

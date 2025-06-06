@@ -16,6 +16,14 @@ pub fn setup(mut commands: Commands) {
 impl Plugin for MaterialsPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_systems(Startup, setup);
+            .add_event::<ItemTransferRequestEvent>()
+            .add_event::<ItemTransferValidationEvent>()
+            .add_event::<ItemTransferEvent>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, (
+                validate_item_transfer,
+                execute_item_transfer,
+                // print_transferred_items
+            ).chain());
     }
 }

@@ -1,43 +1,39 @@
 use bevy::prelude::*;
 use crate::{
-    materials::items::{Inventory},
-    structures::{Producer, ResourceConsumer},
-    systems::Operational,
-    constants::items::*
+    materials::{items::Inventory, RecipeRegistry}, structures::{ RecipeCrafter}, systems::Operational
 };
 
-pub fn update_producers(
-    mut query: Query<(&mut Producer, &Operational, &mut Inventory)>,
+pub fn update_recipe_crafters(
+    mut query: Query<(&mut RecipeCrafter, &Operational, &mut Inventory)>,
+    recipe_registry: Res<RecipeRegistry>,
     time: Res<Time>,
 ) {
-    for (mut producer, operational, mut inventory) in query.iter_mut() {
+    for (mut crafter, operational, mut inventory) in query.iter_mut() {
         if !operational.0 {
             continue;
         }
         
-        if producer.timer.tick(time.delta()).just_finished() {
-            inventory.add_item(IRON_ORE, producer.amount);
-            producer.timer.reset();
-        }
-    }
-}
-
-pub fn update_resource_consumers(
-    mut query: Query<(&mut ResourceConsumer, &Operational, &mut Inventory)>,
-    time: Res<Time>,
-) {
-    for (mut consumer, operational, mut inventory) in query.iter_mut() {
-        if !operational.0 {
-            continue;
-        }
-        
-        if consumer.timer.tick(time.delta()).just_finished() {
-            if inventory.has_item(IRON_ORE, consumer.amount) { // 0 is ore ID
-                inventory.remove_item(0, consumer.amount);
-                consumer.timer.reset();
+        if crafter.timer.tick(time.delta()).just_finished() {
+            if let Some(recipe) = recipe_registry.get_definition(crafter.recipe) {
+                // Check if we have all required inputs
+                let can_craft = inventory.is_full() || recipe.inputs.iter().all(|(item_id, quantity)| {
+                    inventory.has_item(*item_id, *quantity)
+                });
+                
+                if can_craft {
+                    // Consume inputs
+                    for (item_id, quantity) in &recipe.inputs {
+                        inventory.remove_item(*item_id, *quantity);
+                    }
+                    
+                    // Produce outputs
+                    for (item_id, quantity) in &recipe.outputs {
+                        inventory.add_item(*item_id, *quantity);
+                    }
+                }
             }
-            // Note: If insufficient resources, timer continues but no consumption occurs
-            // This allows the building to resume when resources become available
+            
+            crafter.timer.reset();
         }
     }
 }

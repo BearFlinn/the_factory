@@ -1,24 +1,34 @@
 use bevy::prelude::*;
 use crate::{
-    grid::Position, 
-    materials::items::Inventory, 
-    structures::{Building, PowerConsumer, PowerGenerator, ResourceConsumer, IRON_ORE}, 
-    systems::{NetworkConnectivity, PowerGrid}
+    grid::Position, materials::{Inventory, RecipeRegistry}, structures::{Building, PowerConsumer, PowerGenerator, RecipeCrafter}, systems::{NetworkConnectivity, PowerGrid}
 };
 
 #[derive(Component)]
 pub struct Operational(pub bool);
 
-pub fn update_consumer_operation(
-    mut consumer_buildings: Query<(&mut Operational, &ResourceConsumer, &Inventory), With<Building>>,
+pub fn update_crafter_operational_status(
+    mut query: Query<(&RecipeCrafter, &mut Operational, &Inventory)>,
+    recipe_registry: Res<RecipeRegistry>,
 ) {
-    for (mut operational, consumer, inventory) in consumer_buildings.iter_mut() {
-        operational.0 = inventory.has_item(IRON_ORE, consumer.amount); // 0 is ore ID
+    for (crafter, mut operational, inventory) in query.iter_mut() {
+        if let Some(recipe) = recipe_registry.get_definition(crafter.recipe) {
+            let has_inputs = recipe.inputs.iter().all(|(item_id, quantity)| {
+                inventory.has_item(*item_id, *quantity)
+            });
+            
+            let has_output_space = inventory.is_full();
+            
+            // Only operational if we have inputs and output space
+            // This assumes other systems (power, network) also set operational to false if needed
+            if !has_inputs || !has_output_space {
+                operational.0 = false;
+            }
+        }
     }
 }
 
 pub fn update_operational_status_optimized(
-    mut buildings: Query<(&Position, &mut Operational, Option<&PowerConsumer>, Option<&PowerGenerator>), (With<Building>, Without<ResourceConsumer>)>,
+    mut buildings: Query<(&Position, &mut Operational, Option<&PowerConsumer>, Option<&PowerGenerator>), With<Building>>,
     network_connectivity: Res<NetworkConnectivity>,
     power_grid: Res<PowerGrid>,
 ) {

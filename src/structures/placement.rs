@@ -1,10 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position},
-    materials::items::{Inventory},
-    structures::{Building, BuildingId, BuildingRegistry, Hub, PlaceBuildingValidationEvent}, 
-    systems::NetworkChangedEvent, ui::SelectedBuilding,
-    constants::items::*,
+    constants::items::*, grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, materials::items::Inventory, resources::{ResourceNode, ResourceNodeRecipe}, structures::{Building, BuildingId, BuildingRegistry, Hub, PlaceBuildingValidationEvent, RecipeCrafter, MINING_DRILL}, systems::NetworkChangedEvent, ui::SelectedBuilding
 };
 
 #[derive(Event, Clone)]
@@ -98,6 +94,31 @@ pub fn place_building(
             }
 
             network_events.send(NetworkChangedEvent);
+        }
+    }
+}
+
+pub fn set_drill_recipe(
+    mut place_events: EventReader<PlaceBuildingValidationEvent>,
+    mut drills: Query<(&mut RecipeCrafter, &Position), With<Building>>,
+    resource_nodes: Query<(&ResourceNodeRecipe, &Position), With<ResourceNode>>,
+) {
+    for event in place_events.read() {
+        if event.result.is_ok() && event.request.building_id == MINING_DRILL {
+            // Find the drill at this position
+            if let Some((mut recipe_crafter, _)) = drills
+                .iter_mut()
+                .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
+            {
+                // Find the resource node at this position
+                if let Some((resource_recipe, _)) = resource_nodes
+                    .iter()
+                    .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
+                {
+                    recipe_crafter.recipe = resource_recipe.recipe_id;
+                    print!("Set drill recipe to {}", resource_recipe.recipe_id);
+                }
+            }
         }
     }
 }

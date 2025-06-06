@@ -79,7 +79,7 @@ impl BuildingButton {
             .with_children(|parent| {
                 // Building name
                 parent.spawn((
-                    Text::new(&definition.appearance.name),
+                    Text::new(&definition.name),
                     TextFont {
                         font_size: 16.0,
                         ..default()
