@@ -1,9 +1,9 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque, HashMap};
 use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
-    materials::{items::{Inventory, InventoryType, InventoryTypes}, request_transfer_all_items, ItemTransferRequestEvent},
-    structures::{Building, WorkersEnRoute, COAL},
+    materials::{items::{Inventory, InventoryType, InventoryTypes, ItemName}, request_transfer_all_items, request_transfer_specific_items, ItemTransferRequestEvent, RecipeRegistry},
+    structures::{Building, WorkersEnRoute, RecipeCrafter},
     systems::NetworkConnectivity, workers::{Speed, Worker}
 };
 
@@ -21,10 +21,11 @@ pub struct WorkerArrivedEvent {
 
 pub fn move_workers(
     mut workers: Query<(Entity, &mut Transform, &mut WorkerPath, &Speed, &Inventory), With<Worker>>,
-    buildings: Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    buildings: Query<(Entity, &Position, &Inventory, &InventoryType, Option<&RecipeCrafter>), With<Building>>,
     mut workers_en_route: Query<&mut WorkersEnRoute>,
     grid: Res<Grid>,
     network: Res<NetworkConnectivity>,
+    recipe_registry: Res<RecipeRegistry>,
     time: Res<Time>,
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
@@ -55,7 +56,13 @@ pub fn move_workers(
             if let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) {
                 let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
                 
-                let destination = find_new_target(worker_pos, worker_inventory, &buildings, &workers_en_route);
+                let destination = find_new_target(
+                    worker_pos, 
+                    worker_inventory, 
+                    &buildings, 
+                    &workers_en_route,
+                    &recipe_registry
+                );
                 
                 if let Some(dest_pos) = destination {
                     if let Some(new_path) = calculate_path(worker_pos, dest_pos, &network, &grid) {
@@ -64,8 +71,8 @@ pub fn move_workers(
                         
                         // Reserve the target building
                         if let Some(building_entity) = buildings.iter()
-                            .find(|(_, pos, _, _)| pos.x == dest_pos.0 && pos.y == dest_pos.1)
-                            .map(|(entity, _, _, _)| entity) 
+                            .find(|(_, pos, _, _, _)| pos.x == dest_pos.0 && pos.y == dest_pos.1)
+                            .map(|(entity, _, _, _, _)| entity) 
                         {
                             if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
                                 en_route.count += 1;
@@ -78,85 +85,143 @@ pub fn move_workers(
     }
 }
 
+// Constants for target acquisition scoring
+const CONGESTION_PENALTY_NORMAL: i32 = 2;
+const CONGESTION_PENALTY_REQUESTER: i32 = 4;
+const MAX_ITEM_BONUS: i32 = 20;
+
 fn find_new_target(
     worker_pos: (i32, i32),
     worker_inventory: &Inventory,
-    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType, Option<&RecipeCrafter>), With<Building>>,
     workers_en_route: &Query<&mut WorkersEnRoute>,
+    recipe_registry: &RecipeRegistry,
 ) -> Option<(i32, i32)> {
-    let destination = if worker_inventory.has_any_item() {
-        if let Some((x, y)) = find_nearest_empty_requester_with_congestion(buildings, workers_en_route, worker_pos) {
-            return Some((x, y));
-        } else {
-            find_nearest_building_by_type_with_congestion(buildings, workers_en_route, worker_pos, InventoryTypes::Storage)
+    if worker_inventory.has_any_item() {
+        // Compare distances to both requesters and storage, prefer closer
+        let requester_target = find_best_target_for_worker(buildings, workers_en_route, worker_pos, worker_inventory, TargetType::Requester, recipe_registry);
+        let storage_target = find_best_target_for_worker(buildings, workers_en_route, worker_pos, worker_inventory, TargetType::Storage, recipe_registry);
+        
+        match (requester_target, storage_target) {
+            (Some(req_pos), Some(stor_pos)) => {
+                let req_distance = manhattan_distance_coords(req_pos, worker_pos);
+                let stor_distance = manhattan_distance_coords(stor_pos, worker_pos);
+                // Prefer requesters if distance is equal (slight bias)
+                if req_distance <= stor_distance {
+                    Some(req_pos)
+                } else {
+                    Some(stor_pos)
+                }
+            }
+            (Some(req_pos), None) => Some(req_pos),
+            (None, Some(stor_pos)) => Some(stor_pos),
+            (None, None) => None,
         }
     } else {
-        find_nearest_sender_with_items_and_congestion(buildings, workers_en_route, worker_pos)
+        // Find a sender with items
+        find_best_target_for_worker(buildings, workers_en_route, worker_pos, worker_inventory, TargetType::Sender, recipe_registry)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TargetType {
+    Storage,
+    Sender,
+    Requester,
+}
+
+fn find_best_target_for_worker(
+    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType, Option<&RecipeCrafter>), With<Building>>,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
+    worker_pos: (i32, i32),
+    worker_inventory: &Inventory,
+    target_type: TargetType,
+    recipe_registry: &RecipeRegistry,
+) -> Option<(i32, i32)> {
+    buildings
+        .iter()
+        .filter(|(_, _, inventory, inv_type, recipe_crafter)| {
+            is_valid_target_for_worker(inventory, inv_type, recipe_crafter, worker_inventory, target_type, recipe_registry)
+        })
+        .filter_map(|(entity, pos, inventory, _, _)| {
+            let score = calculate_target_score(entity, pos, inventory, workers_en_route, worker_pos, target_type);
+            score.map(|s| (pos.x, pos.y, s))
+        })
+        .min_by_key(|(_, _, score)| *score)
+        .map(|(x, y, _)| (x, y))
+}
+
+fn is_valid_target_for_worker(
+    inventory: &Inventory,
+    inv_type: &InventoryType,
+    recipe_crafter: &Option<&RecipeCrafter>,
+    worker_inventory: &Inventory,
+    target_type: TargetType,
+    recipe_registry: &RecipeRegistry,
+) -> bool {
+    match target_type {
+        TargetType::Storage => matches!(inv_type.0, InventoryTypes::Storage),
+        TargetType::Sender => {
+            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_any_item()
+        }
+        TargetType::Requester => {
+            if !matches!(inv_type.0, InventoryTypes::Requester) {
+                return false;
+            }
+            
+            // Check if this requester needs any items AND the worker has those items
+            if let Some(crafter) = recipe_crafter {
+                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                    // Check if the worker has any items that this requester needs
+                    for (item_name, _) in &recipe_def.inputs {
+                        let current_amount = inventory.get_item_quantity(item_name);
+                        let worker_has = worker_inventory.get_item_quantity(item_name);
+                        
+                        // Worker can help if: requester needs items AND worker has them
+                        if current_amount < 10 && worker_has > 0 {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        }
+    }
+}
+
+fn calculate_target_score(
+    entity: Entity,
+    pos: &Position,
+    inventory: &Inventory,
+    workers_en_route: &Query<&mut WorkersEnRoute>,
+    worker_pos: (i32, i32),
+    target_type: TargetType,
+) -> Option<i32> {
+    let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
+    let distance = manhattan_distance(pos, worker_pos);
+    
+    let congestion_penalty = match target_type {
+        TargetType::Requester => congestion as i32 * CONGESTION_PENALTY_REQUESTER,
+        _ => congestion as i32 * CONGESTION_PENALTY_NORMAL,
     };
     
-    destination
+    let item_bonus = match target_type {
+        TargetType::Sender => {
+            let item_count = inventory.get_total_quantity() as i32;
+            item_count.min(MAX_ITEM_BONUS)
+        }
+        _ => 0,
+    };
+    
+    Some(distance + congestion_penalty - item_bonus)
 }
 
-// Updated helper functions that factor in congestion
-fn find_nearest_building_by_type_with_congestion(
-    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
-    workers_en_route: &Query<&mut WorkersEnRoute>,
-    worker_pos: (i32, i32),
-    target_type: InventoryTypes,
-) -> Option<(i32, i32)> {
-    buildings
-        .iter()
-        .filter(|(_, _, _, inv_type)| inv_type.0 == target_type)
-        .map(|(entity, pos, _, _)| {
-            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
-            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
-            let score = distance + (congestion as i32 * 2); // Congestion penalty
-            (pos.x, pos.y, score)
-        })
-        .min_by_key(|(_, _, score)| *score)
-        .map(|(x, y, _)| (x, y))
+fn manhattan_distance(pos: &Position, worker_pos: (i32, i32)) -> i32 {
+    (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs()
 }
 
-fn find_nearest_sender_with_items_and_congestion(
-    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
-    workers_en_route: &Query<&mut WorkersEnRoute>,
-    worker_pos: (i32, i32),
-) -> Option<(i32, i32)> {
-    buildings
-        .iter()
-        .filter(|(_, _, inventory, inv_type)| {
-            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_any_item()
-        })
-        .map(|(entity, pos, inventory, _)| {
-            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
-            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
-            let item_count = inventory.get_total_quantity(); // Get actual ore count
-            let item_bonus = (item_count as i32).min(20); // Cap bonus at 20 to prevent overflow
-            let score = distance + (congestion as i32 * 2) - item_bonus; // Subtract item count for priority
-            (pos.x, pos.y, score)
-        })
-        .min_by_key(|(_, _, score)| *score)
-        .map(|(x, y, _)| (x, y))
-}
-
-fn find_nearest_empty_requester_with_congestion(
-    buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
-    workers_en_route: &Query<&mut WorkersEnRoute>,
-    worker_pos: (i32, i32),
-) -> Option<(i32, i32)> {
-    buildings
-        .iter()
-        .filter(|(_, _, inventory, inv_type)| {
-            matches!(inv_type.0, InventoryTypes::Requester) && inventory.has_less_than(COAL, 10)
-        })
-        .map(|(entity, pos, _, _)| {
-            let congestion = workers_en_route.get(entity).map(|w| w.count).unwrap_or(0);
-            let distance = (pos.x - worker_pos.0).abs() + (pos.y - worker_pos.1).abs();
-            let score = distance + (congestion as i32 * 4); // Higher penalty for requesters
-            (pos.x, pos.y, score)
-        })
-        .min_by_key(|(_, _, score)| *score)
-        .map(|(x, y, _)| (x, y))
+fn manhattan_distance_coords(pos1: (i32, i32), pos2: (i32, i32)) -> i32 {
+    (pos1.0 - pos2.0).abs() + (pos1.1 - pos2.1).abs()
 }
 
 fn calculate_path(
@@ -229,15 +294,16 @@ fn calculate_path(
 
 pub fn handle_worker_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
-    inventories: Query<&Inventory>, // No longer need mutable access
-    buildings: Query<(Entity, &Position, &InventoryType), With<Building>>,
+    inventories: Query<&Inventory>,
+    buildings: Query<(Entity, &Position, &InventoryType, Option<&RecipeCrafter>), With<Building>>,
     mut workers_en_route: Query<&mut WorkersEnRoute>,
     mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
+    recipe_registry: Res<RecipeRegistry>,
 ) {
     for event in arrival_events.read() {
-        if let Some((building_entity, building_inv_type)) = buildings.iter()
-            .find(|(_, pos, _)| pos.x == event.position.0 && pos.y == event.position.1)
-            .map(|(entity, _, inv_type)| (entity, inv_type)) // Fixed syntax error
+        if let Some((building_entity, building_inv_type, recipe_crafter)) = buildings.iter()
+            .find(|(_, pos, _, _)| pos.x == event.position.0 && pos.y == event.position.1)
+            .map(|(entity, _, inv_type, recipe_crafter)| (entity, inv_type, recipe_crafter))
         {
             // Decrement the workers en route counter
             if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
@@ -264,13 +330,39 @@ pub fn handle_worker_arrivals(
                     );
                 }
                 InventoryTypes::Requester => {
-                    // Worker delivers items to requesting building
-                    request_transfer_all_items(
-                        event.worker,
-                        building_entity,
-                        &mut transfer_requests,
-                        &inventories,
-                    );
+                    // Worker delivers specific items needed by the requester's recipe
+                    if let Some(crafter) = recipe_crafter {
+                        if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                            if let Ok(worker_inventory) = inventories.get(event.worker) {
+                                let mut needed_items = HashMap::new();
+                                
+                                // Determine what items are needed based on recipe inputs
+                                for (item_name, _) in &recipe_def.inputs {
+                                    let worker_has = worker_inventory.get_item_quantity(item_name);
+                                    if worker_has > 0 {
+                                        needed_items.insert(item_name.clone(), worker_has);
+                                    }
+                                }
+                                
+                                if !needed_items.is_empty() {
+                                    request_transfer_specific_items(
+                                        event.worker,
+                                        building_entity,
+                                        needed_items,
+                                        &mut transfer_requests,
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        // Fallback to transferring all items if no recipe
+                        request_transfer_all_items(
+                            event.worker,
+                            building_entity,
+                            &mut transfer_requests,
+                            &inventories,
+                        );
+                    }
                 }
                 _ => {}
             }

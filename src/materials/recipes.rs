@@ -2,29 +2,28 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use bevy::scene::ron;
-use crate::materials::items::ItemId;
+use crate::materials::items::ItemName;
 
-pub type RecipeId = u32;
+pub type RecipeName = String;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RecipeDef {
-    pub id: RecipeId,
     pub name: String,
-    pub inputs: Vec<(ItemId, u32)>,
-    pub outputs: Vec<(ItemId, u32)>,
+    pub inputs: Vec<(ItemName, u32)>,
+    pub outputs: Vec<(ItemName, u32)>,
     pub crafting_time: f32
 }
 
 #[derive(Clone)]
 #[allow(dead_code)] // TODO: Dynamic recipes
 pub enum RecipeType {
-    Static(RecipeId),
+    Static(RecipeName),
     Dynamic(RecipeDef),
 }
 
 #[derive(Resource)]
 pub struct RecipeRegistry {
-    definitions: HashMap<RecipeId, RecipeDef>
+    definitions: HashMap<RecipeName, RecipeDef>
 }
 
 impl RecipeRegistry {
@@ -34,7 +33,7 @@ impl RecipeRegistry {
         let mut definitions = HashMap::new();
         
         for def in definitions_vec {
-            definitions.insert(def.id, def);
+            definitions.insert(def.name.clone(), def);
         }
         
         Ok(Self { definitions })
@@ -45,7 +44,7 @@ impl RecipeRegistry {
         Self::from_ron(ron_content).expect("Failed to load recipe definitions")
     }
 
-    pub fn get_definition(&self, recipe_id: RecipeId) -> Option<&RecipeDef> {
-        self.definitions.get(&recipe_id)
+    pub fn get_definition(&self, recipe_name: &str) -> Option<&RecipeDef> {
+        self.definitions.get(recipe_name)
     }
 }

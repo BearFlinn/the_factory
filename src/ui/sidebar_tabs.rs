@@ -175,8 +175,8 @@ pub fn get_active_tab_type(tab_query: &Query<&SidebarTab>) -> Option<BuildingCat
 fn get_available_building_categories(registry: &BuildingRegistry) -> Vec<BuildingCategory> {
     let mut types = HashSet::new();
     
-    for building_id in registry.get_all_building_ids() {
-        if let Some(definition) = registry.get_definition(building_id) {
+    for building_name in registry.get_all_building_names() {
+        if let Some(definition) = registry.get_definition(&building_name) {
             types.insert(definition.category);
         }
     }
@@ -187,8 +187,8 @@ fn get_available_building_categories(registry: &BuildingRegistry) -> Vec<Buildin
 }
 
 fn get_building_type_color(registry: &BuildingRegistry, building_category: BuildingCategory) -> Color {
-    for building_id in registry.get_all_building_ids() {
-        if let Some(definition) = registry.get_definition(building_id) {
+    for building_name in registry.get_all_building_names() {
+        if let Some(definition) = registry.get_definition(&building_name) {
             if definition.category == building_category {
                 return Color::srgb(definition.appearance.color.0, definition.appearance.color.1, definition.appearance.color.2);
             }

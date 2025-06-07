@@ -72,11 +72,11 @@ pub fn validate_placement(
             }
         }
 
-        if let Some(definition) = registry.get_definition(event.building_id) {
+        if let Some(definition) = registry.get_definition(&event.building_name) {
             // Check ore cost against central inventory
             if let Some(cost) = &definition.placement.cost {
                 if let Some(inv) = inventory {
-                    if !inv.has_item(0, cost.ore) { // 0 is ore ID
+                    if !inv.has_item("Iron Ore", cost.ore) { // 0 is ore ID
                         validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
                         continue 'event_loop;
                     }

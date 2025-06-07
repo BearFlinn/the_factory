@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::{thread_rng, Rng};
 use crate::{
-    constants::{gridlayers::RESOURCE_LAYER, items::*}, grid::{CellChildren, Grid, Layer, NewCellEvent, Position}, materials::{items::{Item, ItemRegistry}, RecipeId, RecipeRegistry}
+    constants::{gridlayers::RESOURCE_LAYER, items::*}, grid::{CellChildren, Grid, Layer, NewCellEvent, Position}, materials::{items::{Item, ItemRegistry}, RecipeName, RecipeRegistry}
 };
 
 #[derive(Component)]
@@ -9,7 +9,7 @@ pub struct ResourceNode;
 
 #[derive(Component)]
 pub struct ResourceNodeRecipe {
-    pub recipe_id: RecipeId
+    pub recipe_name: RecipeName
 }
 
 #[derive(Bundle)]
@@ -35,16 +35,16 @@ const IRON_ORE_PROBABILITY: f32 = 0.5;   // 50% of resource nodes
 const COPPER_ORE_PROBABILITY: f32 = 0.3; // 30% of resource nodes  
 const COAL_PROBABILITY: f32 = 0.2;       // 20% of resource nodes
 
-fn select_random_ore() -> (RecipeId, Color) {
+fn select_random_ore() -> (RecipeName, Color) {
     let mut rng = thread_rng();
     let roll = rng.gen::<f32>();
     
     if roll < IRON_ORE_PROBABILITY {
-        (IRON_ORE as RecipeId, Color::srgb(0.7, 0.3, 0.5))
+        (IRON_ORE.to_string(), Color::srgb(0.7, 0.3, 0.5))
     } else if roll < IRON_ORE_PROBABILITY + COPPER_ORE_PROBABILITY {
-        (COPPER_ORE as RecipeId, Color::srgb(0.8, 0.5, 0.2)) 
+        (COPPER_ORE.to_string(), Color::srgb(0.8, 0.5, 0.2)) 
     } else {
-        (COAL as RecipeId, Color::srgb(0.2, 0.2, 0.2)) 
+        (COAL.to_string(), Color::srgb(0.2, 0.2, 0.2)) 
     }
 }
 
@@ -69,13 +69,13 @@ pub fn spawn_resource_node(
             continue;
         };
 
-        let (recipe_id, color) = select_random_ore();
+        let (recipe_name, color) = select_random_ore();
 
         let resource_node = commands.spawn(
             ResourceNodeBundle::new(
                 event.x,
                 event.y,
-                ResourceNodeRecipe { recipe_id },
+                ResourceNodeRecipe { recipe_name },
             ))
             .insert(Sprite::from_color(color, Vec2::new(48.0, 48.0)))
             .insert(Transform::from_xyz(world_pos.x, world_pos.y, 0.2)).id();

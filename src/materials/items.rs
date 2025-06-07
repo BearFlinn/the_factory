@@ -3,16 +3,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use bevy::scene::ron;
 
-pub type ItemId = u32;
+pub type ItemName = String;
 
 #[derive(Component)]
 pub struct Item {
-    pub id: u32,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemDef {
-    pub id: ItemId,
     pub name: String,
     pub tier: u32,
     // pub stack_size: u32 (not needed yet)
@@ -20,7 +19,7 @@ pub struct ItemDef {
 
 #[derive(Resource)]
 pub struct ItemRegistry {
-    pub definitions: HashMap<ItemId, ItemDef>,
+    pub definitions: HashMap<ItemName, ItemDef>,
 }
 
 impl ItemRegistry {
@@ -30,7 +29,7 @@ impl ItemRegistry {
         let mut definitions = HashMap::new();
         
         for def in definitions_vec {
-            definitions.insert(def.id, def);
+            definitions.insert(def.name.clone(), def);
         }
         
         Ok(Self { definitions })
@@ -41,12 +40,12 @@ impl ItemRegistry {
         Self::from_ron(ron_content).expect("Failed to load item definitions")
     }
 
-    pub fn get_definition(&self, item_id: ItemId) -> Option<&ItemDef> {
-        self.definitions.get(&item_id)
+    pub fn get_definition(&self, item_name: &str) -> Option<&ItemDef> {
+        self.definitions.get(item_name)
     }
 
-    pub fn create_item(&self, item_id: ItemId) -> Option<Item> {
-        self.get_definition(item_id).map(|def| Item { id: def.id })
+    pub fn create_item(&self, item_name: &str) -> Option<Item> {
+        self.get_definition(item_name).map(|def| Item { name: def.name.clone() })
     }
 
     // TODO: Add methods for accessing individual item fields from definitions
@@ -68,7 +67,7 @@ pub struct InventoryType(pub InventoryTypes);
 #[derive(Component)]
 #[require(InventoryType)]
 pub struct Inventory {
-    pub items: HashMap<ItemId, u32>, 
+    pub items: HashMap<ItemName, u32>, 
     //TODO: Enforce capacity
     pub capacity: u32,
 }
@@ -81,17 +80,17 @@ impl Inventory {
         }
     }
 
-    pub fn add_item(&mut self, item_id: ItemId, quantity: u32) -> u32 {
-        *self.items.entry(item_id).or_insert(0) += quantity;
+    pub fn add_item(&mut self, item_name: &str, quantity: u32) -> u32 {
+        *self.items.entry(item_name.to_string()).or_insert(0) += quantity;
         quantity
     }
 
-    pub fn remove_item(&mut self, item_id: ItemId, quantity: u32) -> u32 {
-        if let Some(current_quantity) = self.items.get_mut(&item_id) {
+    pub fn remove_item(&mut self, item_name: &str, quantity: u32) -> u32 {
+        if let Some(current_quantity) = self.items.get_mut(item_name) {
             let removed = (*current_quantity).min(quantity);
             *current_quantity -= removed;
             if *current_quantity == 0 {
-                self.items.remove(&item_id);
+                self.items.remove(item_name);
             }
             removed
         } else {
@@ -104,31 +103,28 @@ impl Inventory {
         current_quantity <= self.capacity
     }
 
-    pub fn get_all_items(&self) -> HashMap<ItemId, u32> {
+    pub fn get_all_items(&self) -> HashMap<ItemName, u32> {
         self.items.clone()
     }
 
-    pub fn get_item_quantity(&self, item_id: u32) -> u32 {
-        self.items.iter()
-            .find(|(item, _)| **item == item_id)
-            .map(|(_, quantity)| *quantity)
-            .unwrap_or(0)
+    pub fn get_item_quantity(&self, item_name: &str) -> u32 {
+        self.items.get(item_name).copied().unwrap_or(0)
     }
 
     pub fn get_total_quantity(&self) -> u32 {
         self.items.values().sum::<u32>()
     }
 
-    pub fn has_item(&self, item_id: u32, required_quantity: u32) -> bool {
-        self.get_item_quantity(item_id) >= required_quantity
+    pub fn has_item(&self, item_name: &str, required_quantity: u32) -> bool {
+        self.get_item_quantity(item_name) >= required_quantity
     }
 
     pub fn has_any_item(&self) -> bool {
         self.items.values().sum::<u32>() > 0
     }
 
-    pub fn has_less_than(&self, item_id: u32, required_quantity: u32) -> bool {
-        self.get_item_quantity(item_id) < required_quantity
+    pub fn has_less_than(&self, item_name: &str, required_quantity: u32) -> bool {
+        self.get_item_quantity(item_name) < required_quantity
     }
 }
 
@@ -154,12 +150,12 @@ impl std::fmt::Display for TransferError {
 pub struct ItemTransferRequestEvent {
     pub sender: Entity,
     pub receiver: Entity,
-    pub items: HashMap<ItemId, u32>,
+    pub items: HashMap<ItemName, u32>,
 }
 
 #[derive(Event)]
 pub struct ItemTransferValidationEvent {
-    pub result: Result<HashMap<ItemId, u32>, TransferError>,
+    pub result: Result<HashMap<ItemName, u32>, TransferError>,
     pub request: ItemTransferRequestEvent,
 }
 
@@ -168,7 +164,7 @@ pub struct ItemTransferValidationEvent {
 pub struct ItemTransferEvent {
     pub sender: Entity,
     pub receiver: Entity,
-    pub items_transferred: HashMap<ItemId, u32>,
+    pub items_transferred: HashMap<ItemName, u32>,
 }
 
 #[allow(dead_code)]
@@ -209,8 +205,8 @@ pub fn validate_item_transfer(
         let mut validated_transfer = HashMap::new();
         let mut current_receiver_total = receiver_inventory.items.values().sum::<u32>();
 
-        for (&item_id, &requested_quantity) in &request.items {
-            let available = sender_inventory.get_item_quantity(item_id);
+        for (item_name, &requested_quantity) in &request.items {
+            let available = sender_inventory.get_item_quantity(item_name);
             
             if available == 0 {
                 continue;
@@ -226,13 +222,13 @@ pub fn validate_item_transfer(
             let final_quantity = transfer_quantity.min(remaining_capacity);
             
             if final_quantity > 0 {
-                validated_transfer.insert(item_id, final_quantity);
+                validated_transfer.insert(item_name.clone(), final_quantity);
                 current_receiver_total += final_quantity;
             }
         }
 
         if validated_transfer.is_empty() {
-            let error = if request.items.iter().all(|(id, _)| sender_inventory.get_item_quantity(*id) == 0) {
+            let error = if request.items.iter().all(|(name, _)| sender_inventory.get_item_quantity(name) == 0) {
                 TransferError::NotEnoughItems
             } else {
                 TransferError::InventoryFull
@@ -272,18 +268,18 @@ pub fn execute_item_transfer(
             let mut actual_transfer = HashMap::new();
 
             if let Ok(mut sender_inv) = inventories.get_mut(sender) {
-                for (&item_id, &quantity) in validated_items {
-                    let removed = sender_inv.remove_item(item_id, quantity);
+                for (item_name, &quantity) in validated_items {
+                    let removed = sender_inv.remove_item(item_name, quantity);
                     if removed > 0 {
-                        actual_transfer.insert(item_id, removed);
+                        actual_transfer.insert(item_name.clone(), removed);
                     }
                 }
             }
 
             if !actual_transfer.is_empty() {
                 if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
-                    for (&item_id, &quantity) in &actual_transfer {
-                        receiver_inv.add_item(item_id, quantity);
+                    for (item_name, &quantity) in &actual_transfer {
+                        receiver_inv.add_item(item_name, quantity);
                     }
                 }
 
@@ -318,7 +314,7 @@ pub fn request_transfer_all_items(
 pub fn request_transfer_specific_items(
     sender: Entity,
     receiver: Entity,
-    items: HashMap<ItemId, u32>,
+    items: HashMap<ItemName, u32>,
     transfer_events: &mut EventWriter<ItemTransferRequestEvent>,
 ) {
     if !items.is_empty() {

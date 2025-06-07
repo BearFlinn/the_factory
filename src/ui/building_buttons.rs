@@ -5,25 +5,25 @@ use crate::structures::{BuildingCategory, BuildingRegistry};
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
     // TODO remove option
-    pub building_id: Option<u32>,
+    pub building_name: Option<String>,
 }
 
 #[derive(Component)]
 pub struct BuildingButton {
-    pub building_id: u32,
+    pub building_name: String,
     pub is_selected: bool,
 }
 
 impl BuildingButton {
-    pub fn new(building_id: u32) -> Self {
+    pub fn new(building_name: String) -> Self {
         Self {
-            building_id,
+            building_name,
             is_selected: false,
         }
     }
 
     pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
-        let definition = registry.get_definition(self.building_id).unwrap();
+        let definition = registry.get_definition(&self.building_name).unwrap();
         // Define styles for the building button
         let button_styles = InteractiveUI::new()
             .default(DynamicStyles::new()
@@ -54,7 +54,7 @@ impl BuildingButton {
                 .with_behavior(SelectionBehavior::Exclusive("building_buttons".to_string()))
                 .with_group("building_buttons".to_string()),
             BuildingButton {
-                building_id: self.building_id.clone(),
+                building_name: self.building_name.clone(),
                 is_selected: self.is_selected,
             },
         ))
@@ -104,9 +104,9 @@ pub fn spawn_building_buttons_for_category(
 ) {
     let buildings = registry.get_buildings_by_category(building_category);
     
-    for building_id in buildings {
-        if let Some(_definition) = registry.get_definition(building_id) {
-            let button = BuildingButton::new(building_id);
+    for building_name in buildings {
+        if let Some(_definition) = registry.get_definition(&building_name) {
+            let button = BuildingButton::new(building_name);
             button.spawn(parent, registry);
         }
     }
@@ -119,8 +119,8 @@ pub fn handle_building_button_interactions(
     for (mut button, selectable) in &mut button_query {
         if selectable.is_selected && !button.is_selected {
             button.set_selected(true);
-            selected_building.building_id = Some(button.building_id.clone());
-            println!("Selected building: {}", button.building_id);
+            selected_building.building_name = Some(button.building_name.clone());
+            println!("Selected building: {}", button.building_name);
         }
         
         // Update selected state based on selection
@@ -128,8 +128,8 @@ pub fn handle_building_button_interactions(
         
         // If this button was deselected, clear the resource if it was this building
         if !selectable.is_selected && button.is_selected {
-            if selected_building.building_id.as_ref() == Some(&button.building_id) {
-                selected_building.building_id = None;
+            if selected_building.building_name.as_ref() == Some(&button.building_name) {
+                selected_building.building_name = None;
             }
         }
     }
@@ -148,7 +148,7 @@ pub fn handle_building_selection_hotkeys(
                 selectable.is_selected = false;
             }
         }
-        selected_building.building_id = None;
+        selected_building.building_name = None;
         println!("Cleared building selection");
     }
 }
@@ -174,13 +174,13 @@ pub fn update_building_buttons_for_active_tab(
 }
 
 #[allow(dead_code)] // Is use in spawn_building_buttons_for_category rust analyzer broky
-fn get_buildings_of_category(registry: &BuildingRegistry, building_category: BuildingCategory) -> Vec<u32> {
+fn get_buildings_of_category(registry: &BuildingRegistry, building_category: BuildingCategory) -> Vec<String> {
     let mut buildings = Vec::new();
     
-    for building_id in registry.get_all_building_ids() {
-        if let Some(definition) = registry.get_definition(building_id) {
+    for building_name in registry.get_all_building_names() {
+        if let Some(definition) = registry.get_definition(&building_name) {
             if definition.category == building_category {
-                buildings.push(building_id);
+                buildings.push(building_name);
             }
         }
     }

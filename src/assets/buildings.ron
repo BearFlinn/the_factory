@@ -1,9 +1,8 @@
 [
     (
-        id: 1, // MINING_DRILL
+        name: "Mining Drill",
         category: Production,
         appearance: (
-            name: "Mining Drill",
             size: (32.0, 32.0),
             color: (0.3, 0.7, 0.3, 1.0),
             multi_cell: None,
@@ -17,15 +16,14 @@
             Inventory(capacity: 100),
             InventoryType(inv_type: Sender),
             ViewRange(radius: 2),
-            RecipeCrafter(recipe_id: 1, interval: 1.0),
+            RecipeCrafter(recipe_name: "Iron Ore", interval: 1.0),
         ]
     ),
     
     (
-        id: 2, // CONNECTOR
+        name: "Connector",
         category: Logistics,
         appearance: (
-            name: "Connector",
             size: (16.0, 16.0),
             color: (0.7, 0.3, 0.7, 1.0),
             multi_cell: None,
@@ -41,10 +39,9 @@
     ),
     
     (
-        id: 3, // RADAR
+        name: "Radar",
         category: Utility,
         appearance: (
-            name: "Radar",
             size: (32.0, 32.0),
             color: (0.7, 0.7, 0.3, 1.0),
             multi_cell: None,
@@ -61,10 +58,9 @@
     ),
     
     (
-        id: 4, // GENERATOR
+        name: "Generator",
         category: Production,
         appearance: (
-            name: "Generator",
             size: (32.0, 32.0),
             color: (0.3, 0.3, 0.7, 1.0),
             multi_cell: None,
@@ -75,7 +71,7 @@
         ),
         components: [
             PowerGenerator(amount: 40),
-            RecipeCrafter(recipe_id: 3, interval: 2.0),
+            RecipeCrafter(recipe_name: "Power", interval: 2.0),
             Inventory(capacity: 100),
             InventoryType(inv_type: Requester),
             ViewRange(radius: 2),
@@ -83,10 +79,9 @@
     ),
     
     (
-        id: 5, // DATACENTER
+        name: "Datacenter",
         category: Production,
         appearance: (
-            name: "Datacenter",
             size: (48.0, 48.0),
             color: (0.7, 0.3, 0.8, 1.0),
             multi_cell: None,

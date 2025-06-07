@@ -1,25 +1,18 @@
 #![allow(dead_code)]
 
-use crate::materials::items::ItemId;
-use crate::structures::BuildingId;
-
 pub mod items {
-    use super::ItemId;
-    
-    pub const IRON_ORE: ItemId = 0;
-    pub const COPPER_ORE: ItemId = 1;
-    pub const COAL: ItemId = 2;
+    pub const IRON_ORE: &str = "Iron Ore";
+    pub const COPPER_ORE: &str = "Copper Ore";
+    pub const COAL: &str = "Coal";
 }
 
 pub mod structures {
-    use super::BuildingId;
-
-    pub const HUB: BuildingId = 0;
-    pub const MINING_DRILL: BuildingId = 1;
-    pub const CONNECTOR: BuildingId = 2;
-    pub const RADAR: BuildingId = 3;
-    pub const GENERATOR: BuildingId = 4;
-    pub const DATACENTER: BuildingId = 5;
+    pub const HUB: &str = "Hub";
+    pub const MINING_DRILL: &str = "Mining Drill";
+    pub const CONNECTOR: &str = "Connector";
+    pub const RADAR: &str = "Radar";
+    pub const GENERATOR: &str = "Generator";
+    pub const DATACENTER: &str = "Datacenter";
 }
 
 

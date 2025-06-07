@@ -1,29 +1,25 @@
 [
     (
-        id: 0,
         name: "Iron Ore",
         inputs: [],
-        outputs: [(0, 1)],
+        outputs: [("Iron Ore", 1)],
         crafting_time: 1.0,
     ),
     (
-        id: 1,
         name: "Copper Ore",
         inputs: [],
-        outputs: [(1, 1)],
+        outputs: [("Copper Ore", 1)],
         crafting_time: 1.0,
     ),
     (
-        id: 2,
         name: "Coal",
         inputs: [],
-        outputs: [(2, 1)],
+        outputs: [("Coal", 1)],
         crafting_time: 1.0,
     ),
     (
-        id: 3,
         name: "Power",
-        inputs: [(2, 1)],
+        inputs: [("Coal", 1)],
         outputs: [],
         crafting_time: 1.0,
     )

@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 use crate::{
-    constants::items::*, grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, materials::items::Inventory, resources::{ResourceNode, ResourceNodeRecipe}, structures::{Building, BuildingId, BuildingRegistry, Hub, PlaceBuildingValidationEvent, RecipeCrafter, MINING_DRILL}, systems::NetworkChangedEvent, ui::SelectedBuilding
+    constants::items::*, grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, materials::items::Inventory, resources::{ResourceNode, ResourceNodeRecipe}, structures::{Building, BuildingRegistry, Hub, PlaceBuildingValidationEvent, RecipeCrafter, MINING_DRILL}, systems::NetworkChangedEvent, ui::SelectedBuilding
 };
 
 #[derive(Event, Clone)]
 pub struct PlaceBuildingRequestEvent {
-    pub building_id: BuildingId,
+    pub building_name: String,
     pub grid_x: i32,
     pub grid_y: i32,
 }
@@ -30,9 +30,9 @@ pub fn handle_building_input(
     };
 
     if mouse_button.just_pressed(MouseButton::Left) {
-        if let Some(building_id) = &selected_building.building_id {
+        if let Some(building_name) = &selected_building.building_name {
             place_events.send(PlaceBuildingRequestEvent {
-                building_id: building_id.clone(),
+                building_name: building_name.clone(),
                 grid_x: coords.grid_x,
                 grid_y: coords.grid_y,
             });
@@ -68,11 +68,11 @@ pub fn place_building(
 
             let (building_entity, view_radius) = registry.spawn_building(
                 &mut commands, 
-                event.request.building_id,
+                &event.request.building_name,
                 event.request.grid_x, 
                 event.request.grid_y, 
                 world_pos
-            ).expect("Building ID should exist");
+            ).expect("Building name should exist");
 
             cell_children.0.push(building_entity);
 
@@ -85,10 +85,10 @@ pub fn place_building(
             }
 
             // TODO: Change building cost to recipes
-            if let Some(def) = registry.get_definition(event.request.building_id) {
+            if let Some(def) = registry.get_definition(&event.request.building_name) {
                 if let Some(construction_cost) = &def.placement.cost {
                     if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_item(IRON_ORE, construction_cost.ore); // 0 is ore ID
+                        inventory.remove_item(IRON_ORE, construction_cost.ore);
                     }
                 }
             }
@@ -104,7 +104,7 @@ pub fn set_drill_recipe(
     resource_nodes: Query<(&ResourceNodeRecipe, &Position), With<ResourceNode>>,
 ) {
     for event in place_events.read() {
-        if event.result.is_ok() && event.request.building_id == MINING_DRILL {
+        if event.result.is_ok() && event.request.building_name == MINING_DRILL {
             // Find the drill at this position
             if let Some((mut recipe_crafter, _)) = drills
                 .iter_mut()
@@ -115,8 +115,8 @@ pub fn set_drill_recipe(
                     .iter()
                     .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
                 {
-                    recipe_crafter.recipe = resource_recipe.recipe_id;
-                    print!("Set drill recipe to {}", resource_recipe.recipe_id);
+                    recipe_crafter.recipe = resource_recipe.recipe_name.clone();
+                    print!("Set drill recipe to {}", resource_recipe.recipe_name.clone());
                 }
             }
         }

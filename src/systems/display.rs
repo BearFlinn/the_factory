@@ -11,7 +11,7 @@ pub struct NonOperationalIndicator;
 
 #[derive(Component)]
 pub struct PlacementGhost {
-    pub building_id: u32,
+    pub building_name: String,
 }
 
 #[derive(Component)]
@@ -47,8 +47,8 @@ pub fn update_inventory_display(
             "Empty".to_string()
         } else {
             inventory.items.iter()
-                .map(|(&item_id, &quantity)| {
-                    let name = item_registry.get_definition(item_id)
+                .map(|(item_name, &quantity)| {
+                    let name = item_registry.get_definition(&item_name)
                         .map(|def| def.name.as_str())
                         .unwrap_or("Unknown");
                     format!("{}: {}", name, quantity)
@@ -130,10 +130,10 @@ pub fn update_placement_ghost(
 ) {
     let cursor_coords = grid.get_cursor_grid_coordinates(&windows, &camera_q);
     
-    match (&selected_building.building_id, cursor_coords) {
-        (Some(building_id), Some(coords)) => {
+    match (&selected_building.building_name, cursor_coords) {
+        (Some(building_name), Some(coords)) => {
             // Building selected and cursor on valid grid - show/update ghost
-            if let Some(def) = building_registry.get_definition(*building_id) {
+            if let Some(def) = building_registry.get_definition(building_name) {
                 match ghost_query.get_single_mut() {
                     Ok((_, mut transform, mut sprite, mut ghost)) => {
                         // Update existing ghost position
@@ -141,10 +141,10 @@ pub fn update_placement_ghost(
                         transform.translation = Vec3::new(world_pos.x, world_pos.y, 0.5);
                         
                         // Update sprite if building type changed
-                        if ghost.building_id != *building_id {
+                        if ghost.building_name != *building_name {
                             sprite.color = Color::srgba(def.appearance.color.0, def.appearance.color.1, def.appearance.color.2, 0.8);
                             sprite.custom_size = Some(def.appearance.size.into());
-                            ghost.building_id = building_id.clone();
+                            ghost.building_name = building_name.clone();
                         }
                     }
                     Err(_) => {
@@ -152,7 +152,7 @@ pub fn update_placement_ghost(
                         let world_pos = grid.grid_to_world_coordinates(coords.grid_x, coords.grid_y);
                         commands.spawn((
                             PlacementGhost {
-                                building_id: building_id.clone(),
+                                building_name: building_name.clone(),
                             },
                             Sprite::from_color(Color::srgba(def.appearance.color.0, def.appearance.color.1, def.appearance.color.2, 0.8), def.appearance.size.into()),
                             Transform::from_xyz(world_pos.x, world_pos.y, 0.5),

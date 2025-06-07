@@ -228,7 +228,7 @@ pub fn update_camera_control(
     });
     
     // Disable panning if a building is selected for placement
-    let building_selected = selected_building.building_id.is_some();
+    let building_selected = selected_building.building_name.is_some();
     
     camera_control.panning_enabled = !ui_active && !building_selected;
 }

@@ -11,9 +11,9 @@ pub fn update_crafter_operational_status(
     recipe_registry: Res<RecipeRegistry>,
 ) {
     for (crafter, mut operational, inventory) in query.iter_mut() {
-        if let Some(recipe) = recipe_registry.get_definition(crafter.recipe) {
-            let has_inputs = recipe.inputs.iter().all(|(item_id, quantity)| {
-                inventory.has_item(*item_id, *quantity)
+        if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
+            let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
+                inventory.has_item(item_name, *quantity)
             });
             
             let has_output_space = inventory.is_full();

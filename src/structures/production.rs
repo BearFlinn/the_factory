@@ -14,21 +14,21 @@ pub fn update_recipe_crafters(
         }
         
         if crafter.timer.tick(time.delta()).just_finished() {
-            if let Some(recipe) = recipe_registry.get_definition(crafter.recipe) {
+            if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
                 // Check if we have all required inputs
-                let can_craft = inventory.is_full() || recipe.inputs.iter().all(|(item_id, quantity)| {
-                    inventory.has_item(*item_id, *quantity)
+                let can_craft = inventory.is_full() || recipe.inputs.iter().all(|(item_name, quantity)| {
+                    inventory.has_item(item_name, *quantity)
                 });
                 
                 if can_craft {
                     // Consume inputs
-                    for (item_id, quantity) in &recipe.inputs {
-                        inventory.remove_item(*item_id, *quantity);
+                    for (item_name, quantity) in &recipe.inputs {
+                        inventory.remove_item(item_name, *quantity);
                     }
                     
                     // Produce outputs
-                    for (item_id, quantity) in &recipe.outputs {
-                        inventory.add_item(*item_id, *quantity);
+                    for (item_name, quantity) in &recipe.outputs {
+                        inventory.add_item(item_name, *quantity);
                     }
                 }
             }

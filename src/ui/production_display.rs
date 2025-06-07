@@ -87,8 +87,8 @@ pub fn update_production_text(
                 **text = "Central Storage: Empty".to_string();
             } else {
                 let items_text = inventory.items.iter()
-                    .map(|(&item_id, &quantity)| {
-                        let name = item_registry.get_definition(item_id)
+                    .map(|(item_name, &quantity)| {
+                        let name = item_registry.get_definition(&item_name)
                             .map(|def| def.name.as_str())
                             .unwrap_or("Unknown");
                         format!("{}: {}", name, quantity)

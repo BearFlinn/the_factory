@@ -9,7 +9,7 @@ pub use crate::{
     materials::items::{Inventory, InventoryType, InventoryTypes},
 };
 
-pub type BuildingId = u32;
+pub type BuildingName = String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Component, Serialize, Deserialize)]
 pub enum BuildingCategory {
@@ -20,7 +20,6 @@ pub enum BuildingCategory {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BuildingDef {
-    pub id: BuildingId,
     pub name: String,
     pub category: BuildingCategory,
     pub appearance: AppearanceDef,
@@ -57,13 +56,13 @@ pub enum BuildingComponentDef {
     InventoryType { inv_type: InventoryTypes },
     ViewRange { radius: i32 },
     NetWorkComponent,
-    RecipeCrafter { recipe_id: u32, interval: f32 },
+    RecipeCrafter { recipe_name: String, interval: f32 },
 }
 
 /// Registry that loads building definitions from RON files
 #[derive(Resource)]
 pub struct BuildingRegistry {
-    pub definitions: HashMap<BuildingId, BuildingDef>,
+    pub definitions: HashMap<BuildingName, BuildingDef>,
 }
 
 impl BuildingRegistry {
@@ -73,31 +72,31 @@ impl BuildingRegistry {
         let mut definitions = HashMap::new();
         
         for def in definitions_vec {
-            definitions.insert(def.id, def);
+            definitions.insert(def.name.clone(), def);
         }
         
         Ok(Self { definitions })
     }
 
-    pub fn get_definition(&self, building_id: BuildingId) -> Option<&BuildingDef> {
-        self.definitions.get(&building_id)
+    pub fn get_definition(&self, building_name: &str) -> Option<&BuildingDef> {
+        self.definitions.get(building_name)
     }
 
-    pub fn get_all_building_ids(&self) -> Vec<BuildingId> {
+    pub fn get_all_building_names(&self) -> Vec<BuildingName> {
         self.definitions.keys().cloned().collect()
     }
 
-    pub fn get_buildings_by_category(&self, category: BuildingCategory) -> Vec<BuildingId> {
+    pub fn get_buildings_by_category(&self, category: BuildingCategory) -> Vec<BuildingName> {
         self.definitions
             .iter()
             .filter(|(_, def)| def.category == category)
-            .map(|(id, _)| *id)
+            .map(|(name, _)| name.clone())
             .collect()
     }
 
     #[allow(dead_code)] // Is use in spawn_building_buttons, rust analyzer broky
-    pub fn get_name_by_id(&self, building_id: BuildingId) -> Option<String> {
-        let def = self.get_definition(building_id)?; 
+    pub fn get_name_by_name(&self, building_name: &str) -> Option<String> {
+        let def = self.get_definition(building_name)?; 
         Some(def.name.clone())
     }
 
@@ -105,15 +104,15 @@ impl BuildingRegistry {
     pub fn spawn_building(
         &self,
         commands: &mut Commands,
-        building_id: BuildingId,
+        building_name: &str,
         grid_x: i32,
         grid_y: i32,
         world_pos: Vec2,
     ) -> Option<(Entity, i32)> {
-        let def = self.get_definition(building_id)?;
+        let def = self.get_definition(building_name)?;
         // Start with base building components
         let mut entity_commands = commands.spawn((
-            Building { id: building_id },
+            Building { name: building_name.to_string() },
             def.category,
             Name::new(format!("{}",&def.name)),
             Position { x: grid_x, y: grid_y },
@@ -179,9 +178,9 @@ impl BuildingRegistry {
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
                 }
-                BuildingComponentDef::RecipeCrafter { recipe_id, interval } => {
+                BuildingComponentDef::RecipeCrafter { recipe_name, interval } => {
                     entity_commands.insert(RecipeCrafter { 
-                        recipe: *recipe_id,
+                        recipe: recipe_name.clone(),
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                      });
                 }
