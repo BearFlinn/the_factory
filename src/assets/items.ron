@@ -12,4 +12,9 @@
         name: "Coal",
         tier: 0
     ),
+    // Crafted Items
+    (
+        name: "Iron Ingot",
+        tier: 1
+    )
 ]

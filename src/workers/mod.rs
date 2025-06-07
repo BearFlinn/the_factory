@@ -1,4 +1,3 @@
-// workers/mod.rs
 pub mod spawning;
 pub mod pathfinding;
 
@@ -26,10 +25,8 @@ impl Plugin for WorkersPlugin {
                 WorkersSystemSet::Interaction,
             ).chain().in_set(crate::GameplaySet::DomainOperations))
             .add_systems(Update, (
-
                 move_workers
                     .in_set(WorkersSystemSet::Movement),
-                
                 handle_worker_arrivals
                     .in_set(WorkersSystemSet::Interaction),
             ));

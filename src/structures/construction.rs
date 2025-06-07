@@ -1,5 +1,5 @@
 
-use crate::materials::{RecipeName};
+use crate::materials::{RecipeDef, RecipeName};
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
     structures::{building_config::*},
@@ -47,7 +47,7 @@ pub struct ComputeConsumer {
 // TODO: Update to use receipes
 #[derive(Component)]
 pub struct BuildingCost {
-    pub ore: u32,
+    pub cost: RecipeDef,
 }
 
 #[derive(Component)]
@@ -115,7 +115,8 @@ pub fn place_hub(
 
     // Create central inventory with starting ore
     let mut central_inventory = Inventory::new(10000); // Large capacity for central storage
-    central_inventory.add_item("Iron Ore", 800); // Starting ore amount
+    central_inventory.add_item("Iron Ore", 400);
+    central_inventory.add_item("Copper Ore", 400);
 
     let building_entity = commands.spawn((
         Building { name: "Hub".to_string() },

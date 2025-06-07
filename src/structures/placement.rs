@@ -88,7 +88,7 @@ pub fn place_building(
             if let Some(def) = registry.get_definition(&event.request.building_name) {
                 if let Some(construction_cost) = &def.placement.cost {
                     if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_item(IRON_ORE, construction_cost.ore);
+                        inventory.remove_items_for_recipe(&construction_cost.cost.inputs);
                     }
                 }
             }
@@ -116,7 +116,6 @@ pub fn set_drill_recipe(
                     .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
                 {
                     recipe_crafter.recipe = resource_recipe.recipe_name.clone();
-                    print!("Set drill recipe to {}", resource_recipe.recipe_name.clone());
                 }
             }
         }

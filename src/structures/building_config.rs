@@ -2,6 +2,7 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::materials::RecipeDef;
 pub use crate::{
     grid::{Position, Layer},
     systems::Operational,
@@ -42,8 +43,7 @@ pub struct PlacementDef {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CostDef {
-    pub ore: u32,
-    // Future: could add more resource types
+    pub cost: RecipeDef,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -134,7 +134,7 @@ impl BuildingRegistry {
 
         // Add cost component if specified
         if let Some(cost) = &def.placement.cost {
-            entity_commands.insert(BuildingCost { ore: cost.ore });
+            entity_commands.insert(BuildingCost { cost: cost.cost.clone() });
         }
 
         // Add multi-cell component if specified

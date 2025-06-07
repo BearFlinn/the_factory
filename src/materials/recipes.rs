@@ -9,8 +9,8 @@ pub type RecipeName = String;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RecipeDef {
     pub name: String,
-    pub inputs: Vec<(ItemName, u32)>,
-    pub outputs: Vec<(ItemName, u32)>,
+    pub inputs: HashMap<ItemName, u32>,
+    pub outputs: HashMap<ItemName, u32>,
     pub crafting_time: f32
 }
 

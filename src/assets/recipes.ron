@@ -1,26 +1,32 @@
 [
     (
         name: "Iron Ore",
-        inputs: [],
-        outputs: [("Iron Ore", 1)],
+        inputs: {},
+        outputs: {"Iron Ore": 1},
         crafting_time: 1.0,
     ),
     (
         name: "Copper Ore",
-        inputs: [],
-        outputs: [("Copper Ore", 1)],
+        inputs: {},
+        outputs: {"Copper Ore": 1},
         crafting_time: 1.0,
     ),
     (
         name: "Coal",
-        inputs: [],
-        outputs: [("Coal", 1)],
+        inputs: {},
+        outputs: {"Coal": 1},
         crafting_time: 1.0,
     ),
     (
         name: "Power",
-        inputs: [("Coal", 1)],
-        outputs: [],
+        inputs: {"Coal": 1},
+        outputs: {},
         crafting_time: 1.0,
+    ),
+    (
+        name: "Iron Ingot",
+        inputs: {"Iron Ore": 2, "Coal": 1},
+        outputs: {"Iron Ingot": 1},
+        crafting_time: 2.0,
     )
 ]

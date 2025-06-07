@@ -57,8 +57,9 @@ pub enum InventoryTypes {
     Storage,
     Sender,
     Requester,
-    Carrier
-} 
+    Carrier,
+    Producer,
+}
 
 #[derive(Component, Default, Serialize, Deserialize, Debug, Clone)]
 pub struct InventoryType(pub InventoryTypes);
@@ -68,7 +69,6 @@ pub struct InventoryType(pub InventoryTypes);
 #[require(InventoryType)]
 pub struct Inventory {
     pub items: HashMap<ItemName, u32>, 
-    //TODO: Enforce capacity
     pub capacity: u32,
 }
 
@@ -96,6 +96,19 @@ impl Inventory {
         } else {
             0
         }
+    }
+
+    pub fn has_items_for_recipe(&self, recipe: &HashMap<ItemName, u32>) -> bool {
+        recipe.iter().all(|(item_name, quantity)| self.has_item(item_name, *quantity))
+    }
+
+    pub fn remove_items_for_recipe(&mut self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
+        let mut removed = HashMap::new();
+        for (item_name, quantity) in recipe {
+            let removed_quantity = self.remove_item(item_name, *quantity);
+            removed.insert(item_name.clone(), removed_quantity);
+        }
+        removed
     }
 
     pub fn is_full(&self) -> bool {

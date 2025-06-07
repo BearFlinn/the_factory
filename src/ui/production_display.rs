@@ -94,9 +94,9 @@ pub fn update_production_text(
                         format!("{}: {}", name, quantity)
                     })
                     .collect::<Vec<_>>()
-                    .join(", ");
+                    .join(",\n");
                 
-                **text = format!("Central Storage: {}", items_text);
+                **text = format!("Central Storage:\n{}", items_text);
             }
         }
     }

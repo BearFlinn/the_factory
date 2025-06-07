@@ -162,29 +162,65 @@ fn is_valid_target_for_worker(
     match target_type {
         TargetType::Storage => matches!(inv_type.0, InventoryTypes::Storage),
         TargetType::Sender => {
-            matches!(inv_type.0, InventoryTypes::Sender) && inventory.has_any_item()
-        }
-        TargetType::Requester => {
-            if !matches!(inv_type.0, InventoryTypes::Requester) {
-                return false;
-            }
-            
-            // Check if this requester needs any items AND the worker has those items
-            if let Some(crafter) = recipe_crafter {
-                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                    // Check if the worker has any items that this requester needs
-                    for (item_name, _) in &recipe_def.inputs {
-                        let current_amount = inventory.get_item_quantity(item_name);
-                        let worker_has = worker_inventory.get_item_quantity(item_name);
-                        
-                        // Worker can help if: requester needs items AND worker has them
-                        if current_amount < 10 && worker_has > 0 {
-                            return true;
+            match inv_type.0 {
+                InventoryTypes::Sender => inventory.has_any_item(),
+                InventoryTypes::Producer => {
+                    // Producer acts as sender if it has output items
+                    if let Some(crafter) = recipe_crafter {
+                        if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                            // Check if we have any output items
+                            recipe_def.outputs.keys().any(|output_item| {
+                                inventory.get_item_quantity(output_item) > 0
+                            })
+                        } else {
+                            false
                         }
+                    } else {
+                        false
                     }
                 }
+                _ => false,
             }
-            false
+        }
+        TargetType::Requester => {
+            match inv_type.0 {
+                InventoryTypes::Requester => {
+                    if let Some(crafter) = recipe_crafter {
+                        if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                            // Check if the worker has any items that this requester needs
+                            for (item_name, _) in &recipe_def.inputs {
+                                let current_amount = inventory.get_item_quantity(item_name);
+                                let worker_has = worker_inventory.get_item_quantity(item_name);
+                                
+                                // Worker can help if: requester needs items AND worker has them
+                                if current_amount < 10 && worker_has > 0 {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    false
+                }
+                InventoryTypes::Producer => {
+                    // Producer acts as requester if it needs input items
+                    if let Some(crafter) = recipe_crafter {
+                        if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                            // Check if worker has items we need and we have space
+                            for (item_name, needed_amount) in &recipe_def.inputs {
+                                let current_amount = inventory.get_item_quantity(item_name);
+                                let worker_has = worker_inventory.get_item_quantity(item_name);
+                                
+                                // Need more items and worker has them
+                                if current_amount < needed_amount * 10 && worker_has > 0 {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    false
+                }
+                _ => false,
+            }
         }
     }
 }
@@ -224,7 +260,7 @@ fn manhattan_distance_coords(pos1: (i32, i32), pos2: (i32, i32)) -> i32 {
     (pos1.0 - pos2.0).abs() + (pos1.1 - pos2.1).abs()
 }
 
-fn calculate_path(
+pub fn calculate_path(
     start: (i32, i32),
     end: (i32, i32),
     network: &NetworkConnectivity,
@@ -362,6 +398,53 @@ pub fn handle_worker_arrivals(
                             &mut transfer_requests,
                             &inventories,
                         );
+                    }
+                }
+                InventoryTypes::Producer => {
+                    // Producer receives needed inputs and gives away outputs
+                    if let Some(crafter) = recipe_crafter {
+                        if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                            if let Ok(worker_inventory) = inventories.get(event.worker) {
+                                if let Ok(building_inventory) = inventories.get(building_entity) {
+                                    let mut items_to_give = HashMap::new();
+                                    let mut items_to_take = HashMap::new();
+                                    
+                                    // Check what inputs the worker can provide
+                                    for (item_name, _) in &recipe_def.inputs {
+                                        let worker_has = worker_inventory.get_item_quantity(item_name);
+                                        if worker_has > 0 {
+                                            items_to_give.insert(item_name.clone(), worker_has);
+                                        }
+                                    }
+                                    
+                                    // Check what outputs the building can provide
+                                    for (item_name, _) in &recipe_def.outputs {
+                                        let building_has = building_inventory.get_item_quantity(item_name);
+                                        if building_has > 0 {
+                                            items_to_take.insert(item_name.clone(), building_has);
+                                        }
+                                    }
+                                    
+                                    // Prioritize giving inputs if worker has them
+                                    if !items_to_give.is_empty() {
+                                        request_transfer_specific_items(
+                                            event.worker,
+                                            building_entity,
+                                            items_to_give,
+                                            &mut transfer_requests,
+                                        );
+                                    } else if !items_to_take.is_empty() {
+                                        // Otherwise take outputs
+                                        request_transfer_specific_items(
+                                            building_entity,
+                                            event.worker,
+                                            items_to_take,
+                                            &mut transfer_requests,
+                                        );
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 _ => {}
