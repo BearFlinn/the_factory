@@ -120,7 +120,6 @@ pub fn handle_building_button_interactions(
         if selectable.is_selected && !button.is_selected {
             button.set_selected(true);
             selected_building.building_name = Some(button.building_name.clone());
-            println!("Selected building: {}", button.building_name);
         }
         
         // Update selected state based on selection
@@ -149,7 +148,6 @@ pub fn handle_building_selection_hotkeys(
             }
         }
         selected_building.building_name = None;
-        println!("Cleared building selection");
     }
 }
 

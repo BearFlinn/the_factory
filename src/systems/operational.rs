@@ -85,7 +85,7 @@ fn check_crafter_condition(
                 inventory.has_item(item_name, *quantity)
             });
             
-            let has_output_space = inventory.is_full();
+            let has_output_space = !inventory.is_full();
             
             return has_inputs && has_output_space;
         }

@@ -93,7 +93,7 @@ impl Sidebar {
 
         // Create the close button text
         let close_button_text = commands.spawn((
-            Text::new("×"),
+            Text::new("x"),
             TextFont {
                 font_size: 20.0,
                 ..default()
@@ -182,10 +182,8 @@ pub fn handle_sidebar_interactions(
             
             // Update toggle button text
             for mut text in &mut toggle_text_query {
-                **text = "▲".to_string();
+                **text = "x".to_string();
             }
-            
-            println!("Sidebar closed");
         }
     }
 
@@ -200,11 +198,10 @@ pub fn handle_sidebar_interactions(
             // Update toggle button text
             for mut text in &mut toggle_text_query {
                 let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
-                **text = if sidebar_visible { "▼" } else { "▲" }.to_string();
+                **text = if sidebar_visible { ">" } else { "<" }.to_string();
             }
             
             let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
-            println!("Sidebar toggled: {}", if sidebar_visible { "visible" } else { "hidden" });
         }
     }
 }
@@ -223,11 +220,10 @@ pub fn handle_sidebar_hotkeys(
         // Update toggle button text
         for mut text in &mut toggle_text_query {
             let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
-            **text = if sidebar_visible { "▼" } else { "▲" }.to_string();
+            **text = if sidebar_visible { ">" } else { "<" }.to_string();
         }
         
         let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
-        println!("Sidebar toggled via hotkey: {}", if sidebar_visible { "visible" } else { "hidden" });
     }
 }
 

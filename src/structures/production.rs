@@ -16,7 +16,7 @@ pub fn update_recipe_crafters(
         if crafter.timer.tick(time.delta()).just_finished() {
             if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
                 // Check if we have all required inputs
-                let can_craft = inventory.is_full() || recipe.inputs.iter().all(|(item_name, quantity)| {
+                let can_craft = !inventory.is_full() || recipe.inputs.iter().all(|(item_name, quantity)| {
                     inventory.has_item(item_name, *quantity)
                 });
                 
