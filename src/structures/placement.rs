@@ -22,9 +22,18 @@ pub fn handle_building_input(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     grid: Res<Grid>,
     selected_building: Res<SelectedBuilding>,
+    ui_interactions: Query<&Interaction, With<Button>>,
     mut place_events: EventWriter<PlaceBuildingRequestEvent>,
     mut remove_events: EventWriter<RemoveBuildingEvent>,
 ) {
+    let ui_active = ui_interactions.iter().any(|interaction| {
+        matches!(interaction, Interaction::Pressed | Interaction::Hovered)
+    });
+    
+    if ui_active {
+        return;
+    }
+
     let Some(coords) = grid.get_cursor_grid_coordinates(&windows, &camera_q) else {
         return;
     };

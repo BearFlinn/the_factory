@@ -113,7 +113,7 @@ impl Inventory {
 
     pub fn is_full(&self) -> bool {
         let current_quantity = self.items.values().sum::<u32>();
-        current_quantity <= self.capacity
+        current_quantity == self.capacity
     }
 
     pub fn get_all_items(&self) -> HashMap<ItemName, u32> {
