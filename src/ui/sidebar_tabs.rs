@@ -123,7 +123,6 @@ pub fn handle_tab_interactions(
     for (mut tab, selectable) in &mut tab_query {
         if selectable.is_selected && !tab.is_active {
             tab.set_active(true);
-            println!("Switched to tab: {:?}", tab.building_type);
             
             // The InteractiveUI system with Exclusive selection behavior
             // will automatically handle deselecting other tabs in the group
@@ -154,7 +153,6 @@ pub fn handle_tab_hotkeys(
             if tab.building_type == building_type {
                 selectable.is_selected = true;
                 tab.set_active(true);
-                println!("Switched to tab via hotkey: {:?}", building_type);
             } else {
                 selectable.is_selected = false;
                 tab.set_active(false);
