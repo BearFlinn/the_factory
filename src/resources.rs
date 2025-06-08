@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::{thread_rng, Rng};
 use crate::{
-    constants::{gridlayers::RESOURCE_LAYER, items::*}, grid::{CellChildren, Grid, Layer, NewCellEvent, Position}, materials::{items::{Item, ItemRegistry}, RecipeName, RecipeRegistry}
+    constants::{gridlayers::RESOURCE_LAYER, items::*}, grid::{CellChildren, Grid, Layer, NewCellEvent, Position}, materials::RecipeName
 };
 
 #[derive(Component)]
@@ -31,16 +31,16 @@ impl ResourceNodeBundle {
     }
 }
 
-const IRON_ORE_PROBABILITY: f32 = 0.5;   // 50% of resource nodes
-const COPPER_ORE_PROBABILITY: f32 = 0.3; // 30% of resource nodes  
-const COAL_PROBABILITY: f32 = 0.2;       // 20% of resource nodes
+const IRON_ORE_PROBABILITY: f32 = 0.4;   
+const COPPER_ORE_PROBABILITY: f32 = 0.3;   
+const COAL_PROBABILITY: f32 = 0.3;       
 
 fn select_random_ore() -> (RecipeName, Color) {
     let mut rng = thread_rng();
     let roll = rng.gen::<f32>();
     
     if roll < IRON_ORE_PROBABILITY {
-        (IRON_ORE.to_string(), Color::srgb(0.7, 0.3, 0.5))
+        (IRON_ORE.to_string(), Color::srgb(0.2, 0.3, 0.5))
     } else if roll < IRON_ORE_PROBABILITY + COPPER_ORE_PROBABILITY {
         (COPPER_ORE.to_string(), Color::srgb(0.8, 0.5, 0.2)) 
     } else {
@@ -48,6 +48,7 @@ fn select_random_ore() -> (RecipeName, Color) {
     }
 }
 
+// TODO: Add clustering
 pub fn spawn_resource_node(
     mut commands: Commands,
     grid: Res<Grid>,
@@ -55,7 +56,7 @@ pub fn spawn_resource_node(
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
 ) {
     for event in cell_event.read() {
-        let spawn_resource = thread_rng().gen::<f32>() < 0.025;
+        let spawn_resource = thread_rng().gen::<f32>() < 0.028;
         let world_pos = grid.grid_to_world_coordinates(event.x, event.y);
         
         if !spawn_resource {
