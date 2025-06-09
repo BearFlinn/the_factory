@@ -51,6 +51,36 @@ pub fn move_workers(
                     continue;
                 }
             }
+        } else {
+            // No current target, calculate new path
+            if let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) {
+                let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
+                
+                let destination = find_new_target(
+                    worker_pos, 
+                    worker_inventory, 
+                    &buildings, 
+                    &workers_en_route,
+                    &recipe_registry
+                );
+                
+                if let Some(dest_pos) = destination {
+                    if let Some(new_path) = calculate_path(worker_pos, dest_pos, &network, &grid) {
+                        path.waypoints = new_path;
+                        path.current_target = path.waypoints.pop_front();
+                        
+                        // Reserve the target building
+                        if let Some(building_entity) = buildings.iter()
+                            .find(|(_, pos, _, _, _)| pos.x == dest_pos.0 && pos.y == dest_pos.1)
+                            .map(|(entity, _, _, _, _)| entity) 
+                        {
+                            if let Ok(mut en_route) = workers_en_route.get_mut(building_entity) {
+                                en_route.count += 1;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
