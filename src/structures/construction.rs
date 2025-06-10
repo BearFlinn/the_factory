@@ -5,13 +5,11 @@ pub use crate::{
     structures::{building_config::*},
     materials::items::{Inventory, InventoryType, InventoryTypes},
     systems::Operational,
-    constants::{items::*, gridlayers::BUILDING_LAYER, structures::*},
+    constants::gridlayers::BUILDING_LAYER,
 };
 
 #[derive(Component)]
-pub struct Building {
-    pub name: String,
-}
+pub struct Building;
 
 #[derive(Component)]
 pub struct ViewRange {
@@ -44,8 +42,9 @@ pub struct ComputeConsumer {
     pub amount: i32,
 }
 
-// TODO: Update to use receipes
+
 #[derive(Component)]
+#[allow(dead_code)] // TODO: Remove
 pub struct BuildingCost {
     pub cost: RecipeDef,
 }
@@ -60,11 +59,6 @@ pub struct MultiCellBuilding {
 
 #[derive(Component, PartialEq)]
 pub struct NetWorkComponent;
-
-#[derive(Component, Default)]
-pub struct WorkersEnRoute {
-    pub count: u32,
-}
 
 impl BuildingRegistry {
     pub fn load_from_assets() -> Self {
@@ -113,16 +107,14 @@ pub fn place_hub(
 
     let world_pos = grid.grid_to_world_coordinates(center_x, center_y);
 
-    // Create central inventory with starting ore
-    let mut central_inventory = Inventory::new(10000); // Large capacity for central storage
+    let mut central_inventory = Inventory::new(10000);
     central_inventory.add_item("Iron Ore", 400);
     central_inventory.add_item("Copper Ore", 400);
 
     let building_entity = commands.spawn((
-        Building { name: "Hub".to_string() },
+        Building,
         Hub,
         Position { x: center_x, y: center_y },
-        WorkersEnRoute::default(),
         MultiCellBuilding { 
             width: 3, 
             height: 3, 
@@ -131,7 +123,7 @@ pub fn place_hub(
         },
         PowerGenerator { amount: 100 },
         ComputeGenerator { amount: 60 },
-        central_inventory, // Add the central inventory
+        central_inventory,
         InventoryType (InventoryTypes::Storage),
         Operational(true),
         Layer(BUILDING_LAYER),

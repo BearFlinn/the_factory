@@ -33,7 +33,7 @@ impl ResourceNodeBundle {
 
 const IRON_ORE_PROBABILITY: f32 = 0.4;   
 const COPPER_ORE_PROBABILITY: f32 = 0.3;   
-const COAL_PROBABILITY: f32 = 0.3;       
+// const COAL_PROBABILITY: f32 = 0.3;       
 
 fn select_random_ore() -> (RecipeName, Color) {
     let mut rng = thread_rng();

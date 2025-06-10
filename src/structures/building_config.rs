@@ -14,9 +14,9 @@ pub type BuildingName = String;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Component, Serialize, Deserialize)]
 pub enum BuildingCategory {
-    Production,  // Harvesters, Generators, Datacenters
-    Logistics,   // Connectors, Transport
-    Utility,     // Radar, Defense
+    Production,
+    Logistics,
+    Utility,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -59,7 +59,6 @@ pub enum BuildingComponentDef {
     RecipeCrafter { recipe_name: String, interval: f32 },
 }
 
-/// Registry that loads building definitions from RON files
 #[derive(Resource)]
 pub struct BuildingRegistry {
     pub definitions: HashMap<BuildingName, BuildingDef>,
@@ -94,13 +93,12 @@ impl BuildingRegistry {
             .collect()
     }
 
-    #[allow(dead_code)] // Is use in spawn_building_buttons, rust analyzer broky
+    #[allow(dead_code)] // Is used in spawn_building_buttons, rust analyzer broky
     pub fn get_name_by_name(&self, building_name: &str) -> Option<String> {
         let def = self.get_definition(building_name)?; 
         Some(def.name.clone())
     }
 
-    /// Spawn a building entity with all its components
     pub fn spawn_building(
         &self,
         commands: &mut Commands,
@@ -110,16 +108,13 @@ impl BuildingRegistry {
         world_pos: Vec2,
     ) -> Option<(Entity, i32)> {
         let def = self.get_definition(building_name)?;
-        // Start with base building components
         let mut entity_commands = commands.spawn((
-            Building { name: building_name.to_string() },
+            Building,
             def.category,
             Name::new(format!("{}",&def.name)),
             Position { x: grid_x, y: grid_y },
             Operational(false),
             Layer(BUILDING_LAYER),
-            // TODO: Move to dynamic components or remove
-            WorkersEnRoute::default(),
             Sprite::from_color(
                 Color::srgba(
                     def.appearance.color.0,
@@ -132,12 +127,10 @@ impl BuildingRegistry {
             Transform::from_xyz(world_pos.x, world_pos.y, 1.0),
         ));
 
-        // Add cost component if specified
         if let Some(cost) = &def.placement.cost {
             entity_commands.insert(BuildingCost { cost: cost.cost.clone() });
         }
 
-        // Add multi-cell component if specified
         if let Some((width, height)) = def.appearance.multi_cell {
             entity_commands.insert(MultiCellBuilding {
                 width,
@@ -147,10 +140,8 @@ impl BuildingRegistry {
             });
         }
 
-        // Track view radius for return value
         let mut view_radius = 0;
 
-        // Add dynamic components based on definition
         for component in &def.components {
             match component {
                 BuildingComponentDef::PowerConsumer { amount } => {

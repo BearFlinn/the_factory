@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
-use bevy::{prelude::*, tasks};
+use bevy::prelude::*;
 use crate::{
-    grid::Position, materials::{items::Inventory, InventoryType, InventoryTypes, ItemName, RecipeRegistry}, structures::RecipeCrafter, systems::Operational, workers::tasks::{Priority, Task, TaskAction, TaskBundle, TaskTarget}
+    grid::Position, 
+    materials::{items::Inventory, InventoryType, InventoryTypes, ItemName, RecipeRegistry}, 
+    structures::RecipeCrafter, 
+    systems::Operational, 
+    workers::tasks::{Priority, Task, TaskTarget}
 };
 
 pub fn update_recipe_crafters(
@@ -50,7 +54,7 @@ pub struct CrafterLogisticsRequest {
 
 pub fn crafter_logistics_requests(
     mut crafters: Query<(Entity, &mut RecipeCrafter, &Inventory, &InventoryType, &Position), Changed<Inventory>>,
-    mut tasks: Query<(Entity, &TaskTarget, &mut Priority), With<Task>>,
+    tasks: Query<(Entity, &TaskTarget, &mut Priority), With<Task>>,
     mut events: EventWriter<CrafterLogisticsRequest>,
     recipe_registry: Res<RecipeRegistry>,
 ) {

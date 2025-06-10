@@ -14,6 +14,7 @@ use crate::{
 pub struct Task;
 
 #[derive(Component)]
+#[allow(dead_code)] // TODO: Implement priority
 pub enum Priority {
     Low,
     Medium,
@@ -201,7 +202,7 @@ pub fn assign_available_workers_to_tasks(
         }
     });
     
-    for (task_entity, mut assigned_worker, task_position, _) in unassigned_tasks {
+    for (_, mut assigned_worker, task_position, _) in unassigned_tasks {
         if let Some((worker_entity, _)) = find_available_worker((task_position.x, task_position.y), &workers) {
             assigned_worker.0 = Some(worker_entity);
         }

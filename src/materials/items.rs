@@ -5,11 +5,6 @@ use bevy::scene::ron;
 
 pub type ItemName = String;
 
-#[derive(Component)]
-pub struct Item {
-    pub name: String,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemDef {
     pub name: String,
@@ -43,11 +38,6 @@ impl ItemRegistry {
     pub fn get_definition(&self, item_name: &str) -> Option<&ItemDef> {
         self.definitions.get(item_name)
     }
-
-    pub fn create_item(&self, item_name: &str) -> Option<Item> {
-        self.get_definition(item_name).map(|def| Item { name: def.name.clone() })
-    }
-
     // TODO: Add methods for accessing individual item fields from definitions
 }
 

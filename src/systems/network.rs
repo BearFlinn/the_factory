@@ -6,6 +6,7 @@ use crate::{grid::{Layer, Position}, structures::{Building, Hub, MultiCellBuildi
 pub struct NetworkChangedEvent;
 
 #[derive(Component)]
+#[allow(dead_code)] // TODO: Figure out if this is needed
 pub struct NetworkConnection {
     pub from: (i32, i32),
     pub to: (i32, i32),
