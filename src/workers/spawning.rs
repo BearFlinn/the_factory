@@ -18,15 +18,8 @@ pub enum WorkerState {
     Working,
 }
 
-pub struct WorkerTaskInfo {
-    pub task: Entity,
-    pub target: Entity,
-    pub position: Position,
-    pub action: TaskAction,
-}
-
 #[derive(Component)]
-pub struct WorkerTasks (pub VecDeque<WorkerTaskInfo>);
+pub struct AssignedSequence(pub Option<Entity>);
 
 #[derive(Bundle)]
 pub struct WorkerBundle {
@@ -34,7 +27,7 @@ pub struct WorkerBundle {
     pub speed: Speed,
     pub position: Position,
     pub path: WorkerPath,
-    pub tasks: WorkerTasks,
+    pub assigned_sequence: AssignedSequence, // Add parallel tracking
     pub state: WorkerState,
     pub inventory: Inventory,
     pub inventory_type: InventoryType,
@@ -43,7 +36,6 @@ pub struct WorkerBundle {
     pub transform: Transform,
 }
 
-// Update the impl to include the new component:
 impl WorkerBundle {
     pub fn new(spawn_position: Vec2) -> Self {
         WorkerBundle {
@@ -54,7 +46,7 @@ impl WorkerBundle {
                 waypoints: VecDeque::new(),
                 current_target: None,
             },
-            tasks: WorkerTasks(VecDeque::new()),
+            assigned_sequence: AssignedSequence(None), // Initially unassigned
             state: WorkerState::Idle,
             inventory: Inventory::new(20),
             inventory_type: InventoryType(InventoryTypes::Carrier),

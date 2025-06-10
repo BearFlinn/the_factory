@@ -23,21 +23,26 @@ impl Plugin for WorkersPlugin {
         app
             .add_event::<WorkerArrivedEvent>()
             .configure_sets(Update, (
-                WorkersSystemSet::Lifecycle,
-                WorkersSystemSet::TaskManagement,
-                WorkersSystemSet::Movement,
-                WorkersSystemSet::Interaction,
+                WorkersSystemSet::Lifecycle,     // spawning/despawning
+                WorkersSystemSet::TaskManagement, // task assignment and processing  
+                WorkersSystemSet::Movement,      // pathfinding and movement
+                WorkersSystemSet::Interaction,   // arrivals and transfers
             ).chain().in_set(crate::GameplaySet::DomainOperations))
             .add_systems(Update, (
-                // Task management
-                (assign_available_workers_to_tasks, assign_worker_to_tasks, process_worker_tasks, create_logistics_tasks, clear_all_tasks)
+                // NEW: Add displacement system to Lifecycle set to run early
+                validate_and_displace_stranded_workers
+                    .in_set(WorkersSystemSet::Lifecycle),
+                    
+                // Task management - updated for defensive sequence architecture
+                (assign_available_sequences_to_workers, process_worker_sequences_defensive, derive_worker_state_from_sequences, create_logistics_tasks, clear_all_tasks)
                     .in_set(WorkersSystemSet::TaskManagement),
-                // Movement
+                    
+                // Movement - unchanged
                 move_workers
                     .in_set(WorkersSystemSet::Movement),
                     
-                // Arrivals and cleanup
-                (handle_task_arrivals, clear_completed_tasks)
+                // Arrivals and cleanup - updated for defensive sequence architecture
+                (handle_sequence_task_arrivals_defensive, clear_completed_tasks)
                     .in_set(WorkersSystemSet::Interaction),
             ));
     }
