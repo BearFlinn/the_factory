@@ -42,6 +42,7 @@ impl Plugin for BuildingsPlugin {
             .add_event::<PlaceBuildingRequestEvent>()
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
+            .add_event::<CrafterLogisticsRequest>()
             .add_systems(Startup, (
                 setup,
                 place_hub,
@@ -57,7 +58,7 @@ impl Plugin for BuildingsPlugin {
                     .in_set(BuildingSystemSet::Placement),
                 
                 (
-                    update_recipe_crafters
+                    (update_recipe_crafters, crafter_logistics_requests).chain()
                 ).in_set(BuildingSystemSet::Operations),
             ));
     }

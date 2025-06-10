@@ -82,7 +82,7 @@ fn check_crafter_condition(
     if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
         if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
             let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
-                inventory.has_item(item_name, *quantity)
+                inventory.has_at_least(item_name, *quantity)
             });
             
             let has_output_space = !inventory.is_full();

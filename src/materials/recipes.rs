@@ -47,4 +47,12 @@ impl RecipeRegistry {
     pub fn get_definition(&self, recipe_name: &str) -> Option<&RecipeDef> {
         self.definitions.get(recipe_name)
     }
+
+    pub fn get_inputs(&self, recipe_name: &str) -> Option<&HashMap<ItemName, u32>> {
+        self.definitions.get(recipe_name).map(|def| &def.inputs)
+    }
+
+    pub fn get_outputs(&self, recipe_name: &str) -> Option<&HashMap<ItemName, u32>> {
+        self.definitions.get(recipe_name).map(|def| &def.outputs)
+    }
 }
