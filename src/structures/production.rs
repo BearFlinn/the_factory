@@ -50,7 +50,7 @@ pub struct CrafterLogisticsRequest {
     pub position: Position,
     pub needs: Option<HashMap<ItemName, u32>>,
     pub has: Option<HashMap<ItemName, u32>>,
-    pub priority: Priority,  // Add this field
+    pub priority: Priority,
 }
 
 pub fn crafter_logistics_requests(
@@ -83,9 +83,8 @@ pub fn crafter_logistics_requests(
             }
             InventoryTypes::Requester => {
                 if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                    // Request enough for multiple crafting cycles (3x recipe inputs)
                     let required_items: HashMap<_, _> = recipe_def.inputs.iter()
-                        .map(|(item, quantity)| (item.clone(), quantity * 4))
+                        .map(|(item, quantity)| (item.clone(), quantity * 10))
                         .collect();
                     
                     if !inventory.has_items_for_recipe(&required_items) && 
@@ -103,7 +102,7 @@ pub fn crafter_logistics_requests(
             InventoryTypes::Producer => {
                 if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
                     let required_items: HashMap<_, _> = recipe_def.inputs.iter()
-                        .map(|(item, quantity)| (item.clone(), quantity * 3))
+                        .map(|(item, quantity)| (item.clone(), quantity * 10))
                         .collect();
                     
                     if !inventory.has_items_for_recipe(&required_items) && 
