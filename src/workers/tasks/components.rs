@@ -5,7 +5,7 @@ use crate::grid::Position;
 #[derive(Component)]
 pub struct Task;
 
-#[derive(Component, PartialEq, Eq, Hash, Clone)]
+#[derive(Component, PartialEq, Eq, Hash, Clone, Debug)]
 #[allow(dead_code)] // TODO: Implement priority
 pub enum Priority {
     Low,
@@ -145,4 +145,20 @@ impl TaskSequenceBundle {
             assigned_worker: AssignedWorker(None),
         }
     }
+}
+
+#[derive(Event)]
+pub struct WorkerInterruptEvent {
+    pub worker: Entity,
+    pub interrupt_type: InterruptType,
+}
+
+#[derive(Debug)]
+pub enum InterruptType {
+    /// Replace current sequence with an existing sequence entity
+    ReplaceSequence(Entity),
+    /// Replace current assignment with new tasks (creates new sequence)
+    ReplaceTasks(Vec<Entity>, Priority),
+    /// Clear current assignment entirely
+    ClearAssignment,
 }
