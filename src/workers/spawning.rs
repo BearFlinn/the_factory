@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use bevy::prelude::*;
 use crate::{
-    grid::Position, materials::items::{Inventory, InventoryType, InventoryTypes}, structures::ComputeConsumer, workers::{tasks::TaskAction, WorkerPath}
+    grid::Position, materials::items::{Inventory, InventoryType, InventoryTypes}, structures::ComputeConsumer, workers::WorkerPath
 };
 
 #[derive(Component)]
@@ -27,7 +27,7 @@ pub struct WorkerBundle {
     pub speed: Speed,
     pub position: Position,
     pub path: WorkerPath,
-    pub assigned_sequence: AssignedSequence, // Add parallel tracking
+    pub assigned_sequence: AssignedSequence,
     pub state: WorkerState,
     pub inventory: Inventory,
     pub inventory_type: InventoryType,

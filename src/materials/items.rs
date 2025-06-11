@@ -111,6 +111,14 @@ impl Inventory {
         removed
     }
 
+    pub fn recipe_output_amounts(&self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
+        let mut output_amounts = HashMap::new();
+        for (item_name, quantity) in recipe {
+            output_amounts.insert(item_name.clone(), self.get_item_quantity(item_name) * quantity);
+        }
+        output_amounts
+    }
+
     pub fn is_full(&self) -> bool {
         let current_quantity = self.items.values().sum::<u32>();
         current_quantity == self.capacity

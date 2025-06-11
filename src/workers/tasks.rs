@@ -13,7 +13,7 @@ use crate::{
 #[derive(Component)]
 pub struct Task;
 
-#[derive(Component)]
+#[derive(Component, PartialEq, Eq, Hash, Clone)]
 #[allow(dead_code)] // TODO: Implement priority
 pub enum Priority {
     Low,
@@ -567,8 +567,6 @@ pub fn create_logistics_tasks(
     for event in events.read() {
         match (&event.needs, &event.has) {
             (Some(needed_items), None) => {
-                // NEW: Create a single consolidated sequence per logistics request
-                // instead of separate sequences per item type
                 
                 let supply_plan = calculate_supply_plan(
                     (event.position.x, event.position.y),
@@ -579,14 +577,13 @@ pub fn create_logistics_tasks(
                 if !supply_plan.is_empty() {
                     let mut all_tasks = Vec::new();
                     
-                    // Create pickup/dropoff pairs for each supply source
                     for (building_entity, building_pos, items_to_pickup) in supply_plan {
                         let pickup_task = commands.spawn((
                             TaskBundle::new(
                                 building_entity,
                                 building_pos,
                                 TaskAction::Pickup(Some(items_to_pickup.clone())),
-                                Priority::Medium,
+                                event.priority.clone()
                             ),
                         )).id();
                         
@@ -595,7 +592,7 @@ pub fn create_logistics_tasks(
                                 event.crafter,
                                 event.position,
                                 TaskAction::Dropoff(Some(items_to_pickup)),
-                                Priority::Medium,
+                                event.priority.clone()
                             ),
                         )).id();
                         
@@ -603,13 +600,11 @@ pub fn create_logistics_tasks(
                         all_tasks.push(dropoff_task);
                     }
                     
-                    // Create single sequence containing all pickup/dropoff pairs
                     if !all_tasks.is_empty() {
                         let sequence_entity = commands.spawn(
                             TaskSequenceBundle::new(all_tasks.clone(), Priority::Medium)
                         ).id();
                         
-                        // Link all tasks to the sequence
                         for task_id in all_tasks {
                             commands.entity(task_id).insert(SequenceMember(sequence_entity));
                         }
@@ -617,13 +612,12 @@ pub fn create_logistics_tasks(
                 }
             }
             (None, Some(excess_items)) => {
-                // Existing excess handling logic unchanged
                 let pickup_task = commands.spawn((
                     TaskBundle::new(
                         event.crafter,
                         event.position,
                         TaskAction::Pickup(Some(excess_items.clone())),
-                        Priority::Medium,
+                        event.priority.clone(),
                     ),
                 )).id();
                 
@@ -638,14 +632,14 @@ pub fn create_logistics_tasks(
                             receiver_entity,
                             receiver_pos,
                             TaskAction::Dropoff(None),
-                            Priority::Medium,
+                            event.priority.clone()
                         ),
                     )).id();
                     
                     let sequence_entity = commands.spawn(
                         TaskSequenceBundle::new(
                             vec![pickup_task, dropoff_task],
-                            Priority::Medium
+                            event.priority.clone()
                         )
                     ).id();
                     

@@ -50,65 +50,87 @@ pub struct CrafterLogisticsRequest {
     pub position: Position,
     pub needs: Option<HashMap<ItemName, u32>>,
     pub has: Option<HashMap<ItemName, u32>>,
+    pub priority: Priority,  // Add this field
 }
 
 pub fn crafter_logistics_requests(
     mut crafters: Query<(Entity, &mut RecipeCrafter, &Inventory, &InventoryType, &Position), Changed<Inventory>>,
-    tasks: Query<(Entity, &TaskTarget, &mut Priority), With<Task>>,
+    tasks: Query<(Entity, &TaskTarget, &Priority), With<Task>>,
     mut events: EventWriter<CrafterLogisticsRequest>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
+    const WORKER_CAPACITY: u32 = 20;
+    
     for (crafter_entity, crafter, inventory, inv_type, position) in crafters.iter_mut() {
-        if !tasks.iter().any(|(_, target_entity, _)| target_entity.0 == crafter_entity) {
-            match inv_type.0 {
-                InventoryTypes::Sender => {
-                    if inventory.get_total_quantity() > 10 {
+        let existing_priorities: std::collections::HashSet<_> = tasks.iter()
+            .filter(|(_, target_entity, _)| target_entity.0 == crafter_entity)
+            .map(|(_, _, priority)| priority)
+            .collect();
+        
+        match inv_type.0 {
+            InventoryTypes::Sender => {
+                let total_items = inventory.get_total_quantity();
+                
+                if total_items >= WORKER_CAPACITY && !existing_priorities.contains(&Priority::Medium) {
+                    events.send(CrafterLogisticsRequest {
+                        crafter: crafter_entity,
+                        position: position.clone(),
+                        needs: None,
+                        has: Some(inventory.get_all_items()),
+                        priority: Priority::Medium,
+                    });
+                }
+            }
+            InventoryTypes::Requester => {
+                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                    // Request enough for multiple crafting cycles (3x recipe inputs)
+                    let required_items: HashMap<_, _> = recipe_def.inputs.iter()
+                        .map(|(item, quantity)| (item.clone(), quantity * 4))
+                        .collect();
+                    
+                    if !inventory.has_items_for_recipe(&required_items) && 
+                       !existing_priorities.contains(&Priority::Medium) {
+                        events.send(CrafterLogisticsRequest {
+                            crafter: crafter_entity,
+                            position: position.clone(),
+                            needs: Some(required_items),
+                            has: None,
+                            priority: Priority::Medium,
+                        });
+                    }
+                }
+            }
+            InventoryTypes::Producer => {
+                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
+                    let required_items: HashMap<_, _> = recipe_def.inputs.iter()
+                        .map(|(item, quantity)| (item.clone(), quantity * 3))
+                        .collect();
+                    
+                    if !inventory.has_items_for_recipe(&required_items) && 
+                    !existing_priorities.contains(&Priority::Medium) {
+                        events.send(CrafterLogisticsRequest {
+                            crafter: crafter_entity,
+                            position: position.clone(),
+                            needs: Some(required_items),
+                            has: None,
+                            priority: Priority::Medium,
+                        });
+                    }
+                    
+                    let produced_items = inventory.recipe_output_amounts(&recipe_def.outputs);
+
+                    if produced_items.values().sum::<u32>() >= WORKER_CAPACITY && !existing_priorities.contains(&Priority::Medium) {
                         events.send(CrafterLogisticsRequest {
                             crafter: crafter_entity,
                             position: position.clone(),
                             needs: None,
-                            has: Some(inventory.get_all_items()),
+                            has: Some(produced_items),
+                            priority: Priority::Medium,
                         });
                     }
-
                 }
-                InventoryTypes::Requester => {
-                    if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                        let required_items: HashMap<_, _> = recipe_def.inputs.iter().map(|(item, quantity)| (item.clone(), quantity * 3)).collect();
-                        if !inventory.has_items_for_recipe(&required_items) {
-                            events.send(CrafterLogisticsRequest {
-                                crafter: crafter_entity,
-                                position: position.clone(),
-                                needs: Some(required_items.clone()),
-                                has: None,
-                            });
-                        }
-                    }
-                }
-                InventoryTypes::Producer => {
-                    if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                        let required_items: HashMap<_, _> = recipe_def.inputs.iter().map(|(item, quantity)| (item.clone(), quantity * 3)).collect();
-                        if !inventory.has_items_for_recipe(&required_items) {
-                            events.send(CrafterLogisticsRequest {
-                                crafter: crafter_entity,
-                                position: position.clone(),
-                                needs: Some(required_items.clone()),
-                                has: None,
-                            });
-                        }
-                        let produced_items: HashMap<_, _> = recipe_def.outputs.iter().map(|(item, quantity)| (item.clone(), quantity * 20)).collect();
-                        if !inventory.has_items_for_recipe(&produced_items) {
-                            events.send(CrafterLogisticsRequest {
-                                crafter: crafter_entity,
-                                position: position.clone(),
-                                needs: None,
-                                has: Some(produced_items),
-                            });
-                        }
-                    }
-                }
-                _ => {}
             }
+            _ => {}
         }
     }
 }
