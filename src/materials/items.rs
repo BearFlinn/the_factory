@@ -5,11 +5,6 @@ use bevy::scene::ron;
 
 pub type ItemName = String;
 
-#[derive(Component)]
-pub struct Item {
-    pub name: String,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemDef {
     pub name: String,
@@ -43,11 +38,6 @@ impl ItemRegistry {
     pub fn get_definition(&self, item_name: &str) -> Option<&ItemDef> {
         self.definitions.get(item_name)
     }
-
-    pub fn create_item(&self, item_name: &str) -> Option<Item> {
-        self.get_definition(item_name).map(|def| Item { name: def.name.clone() })
-    }
-
     // TODO: Add methods for accessing individual item fields from definitions
 }
 
@@ -98,8 +88,18 @@ impl Inventory {
         }
     }
 
+    pub fn has_recipe_outputs(&self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
+        let mut outputs = HashMap::new();
+        for (item_name, quantity) in recipe {
+            if self.has_at_least(item_name, *quantity) {
+                outputs.insert(item_name.clone(), *quantity);
+            }
+        }
+        outputs
+    }
+
     pub fn has_items_for_recipe(&self, recipe: &HashMap<ItemName, u32>) -> bool {
-        recipe.iter().all(|(item_name, quantity)| self.has_item(item_name, *quantity))
+        recipe.iter().all(|(item_name, quantity)| self.has_at_least(item_name, *quantity))
     }
 
     pub fn remove_items_for_recipe(&mut self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
@@ -111,20 +111,27 @@ impl Inventory {
         removed
     }
 
-<<<<<<< Updated upstream
-=======
     pub fn recipe_output_amounts(&self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
         let mut output_amounts = HashMap::new();
-        for (item_name, _) in recipe {
-            output_amounts.insert(item_name.clone(), self.get_item_quantity(item_name));
+        for (item_name, quantity) in recipe {
+            output_amounts.insert(item_name.clone(), self.get_item_quantity(item_name) * quantity);
         }
         output_amounts
     }
 
->>>>>>> Stashed changes
     pub fn is_full(&self) -> bool {
         let current_quantity = self.items.values().sum::<u32>();
         current_quantity == self.capacity
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn has_space_for(&self, items: &HashMap<ItemName, u32>) -> bool {
+        let current_quantity = self.items.values().sum::<u32>();
+        let total_quantity = items.values().sum::<u32>();
+        current_quantity + total_quantity <= self.capacity
     }
 
     pub fn get_all_items(&self) -> HashMap<ItemName, u32> {
@@ -139,12 +146,16 @@ impl Inventory {
         self.items.values().sum::<u32>()
     }
 
-    pub fn has_item(&self, item_name: &str, required_quantity: u32) -> bool {
-        self.get_item_quantity(item_name) >= required_quantity
+    pub fn has_item(&self, item_name: &str) -> bool {
+        self.get_item_quantity(item_name) > 0
     }
 
     pub fn has_any_item(&self) -> bool {
         self.items.values().sum::<u32>() > 0
+    }
+
+    pub fn has_at_least(&self, item_name: &str, required_quantity: u32) -> bool {
+        self.get_item_quantity(item_name) >= required_quantity
     }
 
     pub fn has_less_than(&self, item_name: &str, required_quantity: u32) -> bool {

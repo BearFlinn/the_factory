@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use bevy::prelude::*;
 use crate::{
-    materials::items::{Inventory, InventoryType, InventoryTypes}, structures::ComputeConsumer, workers::WorkerPath
+    grid::Position, materials::items::{Inventory, InventoryType, InventoryTypes}, structures::ComputeConsumer, workers::WorkerPath
 };
 
 #[derive(Component)]
@@ -12,11 +12,23 @@ pub struct Speed {
     pub value: f32,
 }
 
+#[derive(Component, PartialEq, Debug)]
+pub enum WorkerState {
+    Idle,
+    Working,
+}
+
+#[derive(Component)]
+pub struct AssignedSequence(pub Option<Entity>);
+
 #[derive(Bundle)]
 pub struct WorkerBundle {
     pub worker: Worker,
     pub speed: Speed,
+    pub position: Position,
     pub path: WorkerPath,
+    pub assigned_sequence: AssignedSequence,
+    pub state: WorkerState,
     pub inventory: Inventory,
     pub inventory_type: InventoryType,
     pub compute_consumer: ComputeConsumer,
@@ -24,16 +36,18 @@ pub struct WorkerBundle {
     pub transform: Transform,
 }
 
-// Update the impl to include the new component:
 impl WorkerBundle {
     pub fn new(spawn_position: Vec2) -> Self {
         WorkerBundle {
             worker: Worker,
             speed: Speed { value: 250.0 },
+            position: Position { x: spawn_position.x as i32, y: spawn_position.y as i32 },
             path: WorkerPath {
                 waypoints: VecDeque::new(),
                 current_target: None,
             },
+            assigned_sequence: AssignedSequence(None), // Initially unassigned
+            state: WorkerState::Idle,
             inventory: Inventory::new(20),
             inventory_type: InventoryType(InventoryTypes::Carrier),
             compute_consumer: ComputeConsumer { amount: 10 },

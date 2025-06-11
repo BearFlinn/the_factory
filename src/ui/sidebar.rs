@@ -200,8 +200,6 @@ pub fn handle_sidebar_interactions(
                 let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
                 **text = if sidebar_visible { ">" } else { "<" }.to_string();
             }
-            
-            let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
         }
     }
 }
@@ -222,8 +220,6 @@ pub fn handle_sidebar_hotkeys(
             let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
             **text = if sidebar_visible { ">" } else { "<" }.to_string();
         }
-        
-        let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
     }
 }
 

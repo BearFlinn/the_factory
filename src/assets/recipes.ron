@@ -3,13 +3,13 @@
         name: "Iron Ore",
         inputs: {},
         outputs: {"Iron Ore": 1},
-        crafting_time: 1.0,
+        crafting_time: 0.8,
     ),
     (
         name: "Copper Ore",
         inputs: {},
         outputs: {"Copper Ore": 1},
-        crafting_time: 1.0,
+        crafting_time: 0.8,
     ),
     (
         name: "Coal",
@@ -21,7 +21,7 @@
         name: "Power",
         inputs: {"Coal": 1},
         outputs: {},
-        crafting_time: 1.0,
+        crafting_time: 3.0,
     ),
     (
         name: "Iron Ingot",
