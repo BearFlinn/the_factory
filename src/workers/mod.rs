@@ -29,11 +29,7 @@ impl Plugin for WorkersPlugin {
                 WorkersSystemSet::Movement,      // pathfinding and movement
                 WorkersSystemSet::Interaction,   // arrivals and transfers
             ).chain().in_set(crate::GameplaySet::DomainOperations))
-            .add_systems(Update, (
-                // Displacement system to run early
-                validate_and_displace_stranded_workers
-                    .in_set(WorkersSystemSet::Lifecycle),
-                    
+            .add_systems(Update, (  
                 // Movement - unchanged
                 move_workers
                     .in_set(WorkersSystemSet::Movement),
