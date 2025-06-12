@@ -6,6 +6,8 @@ use crate::{
     systems::{ComputeGrid, NetworkConnectivity, PowerGrid}
 };
 
+// TODO: Change Operational to an enum
+
 #[derive(Component)]
 pub struct Operational(pub bool);
 

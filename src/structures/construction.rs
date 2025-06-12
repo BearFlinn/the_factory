@@ -67,6 +67,8 @@ impl BuildingRegistry {
     }
 }
 
+// TODO: Improve Multi-cell building implementation
+
 pub fn occupy_area(
     grid_cells: &mut Query<(Entity, &Position, &mut CellChildren)>,
     center_x: i32,
