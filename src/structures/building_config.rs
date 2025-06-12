@@ -37,13 +37,25 @@ pub struct AppearanceDef {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlacementDef {
-    pub cost: Option<CostDef>,
+    pub cost: CostDef,
     pub rules: Vec<PlacementRule>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CostDef {
-    pub cost: RecipeDef,
+    pub inputs: HashMap<String, u32>,
+    pub crafting_time: f32,
+}
+
+impl CostDef {
+    pub fn to_recipe_def(&self) -> RecipeDef {
+        RecipeDef {
+            name: String::new(),
+            inputs: self.inputs.clone(),
+            outputs: HashMap::new(),
+            crafting_time: self.crafting_time,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -127,9 +139,9 @@ impl BuildingRegistry {
             Transform::from_xyz(world_pos.x, world_pos.y, 1.0),
         ));
 
-        if let Some(cost) = &def.placement.cost {
-            entity_commands.insert(BuildingCost { cost: cost.cost.clone() });
-        }
+        entity_commands.insert(BuildingCost { 
+            cost: def.placement.cost.to_recipe_def() 
+        });
 
         if let Some((width, height)) = def.appearance.multi_cell {
             entity_commands.insert(MultiCellBuilding {

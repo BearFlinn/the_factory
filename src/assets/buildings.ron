@@ -8,14 +8,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 20, "Iron Ore": 30},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 20, "Copper Ore": 30},
+                crafting_time: 0.0,
+            ),
             rules: [RequiresResource, AdjacentToNetwork],
         ),
         components: [
@@ -36,14 +32,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 10, "Iron Ore": 5},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 10, "Copper Ore": 5},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [
@@ -61,14 +53,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 40, "Iron Ore": 100},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 40, "Copper Ore": 100},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [
@@ -76,7 +64,7 @@
             ViewRange(radius: 10),
         ]
     ),
-    
+
     (
         name: "Generator",
         category: Production,
@@ -86,14 +74,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 40, "Iron Ore": 20},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 40, "Copper Ore": 20},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [
@@ -114,14 +98,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 120, "Iron Ore": 80},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 120, "Copper Ore": 80},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [
@@ -130,6 +110,7 @@
             ViewRange(radius: 2),
         ]
     ),
+
     (
         name: "Smelter",
         category: Production,
@@ -139,14 +120,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 80, "Iron Ore": 40},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 60, "Copper Ore": 40},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [
@@ -157,6 +134,7 @@
             ViewRange(radius: 2),
         ]
     ),
+    
     (
         name: "Storage",
         category: Logistics,
@@ -166,14 +144,10 @@
             multi_cell: None,
         ),
         placement: (
-            cost: Some((
-                cost: (
-                    name: "",
-                    inputs: {"Copper Ore": 20, "Iron Ore": 10},
-                    outputs: {},
-                    crafting_time: 0.0,
-                )
-            )),
+            cost: (
+                inputs: {"Iron Ore": 30},
+                crafting_time: 0.0,
+            ),
             rules: [AdjacentToNetwork],
         ),
         components: [

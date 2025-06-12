@@ -99,12 +99,11 @@ pub fn place_building(
 
             // TODO: Change building cost to recipes
             if let Some(def) = registry.get_definition(&event.request.building_name) {
-                if let Some(construction_cost) = &def.placement.cost {
+                let construction_cost = &def.placement.cost;
                     if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_items_for_recipe(&construction_cost.cost.inputs);
+                        inventory.remove_items_for_recipe(&construction_cost.inputs);
                     }
                 }
-            }
 
             network_events.send(NetworkChangedEvent);
         }

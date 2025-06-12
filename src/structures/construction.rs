@@ -44,7 +44,7 @@ pub struct ComputeConsumer {
 
 
 #[derive(Component)]
-#[allow(dead_code)] // TODO: Remove
+#[allow(dead_code)]
 pub struct BuildingCost {
     pub cost: RecipeDef,
 }
