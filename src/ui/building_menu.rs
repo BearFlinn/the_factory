@@ -177,7 +177,7 @@ fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity
             MenuCloseButton { menu_entity }, // Direct reference - no traversal needed
         )).with_children(|parent| {
             parent.spawn((
-                Text::new("×"),
+                Text::new("x"),
                 TextFont { font_size: 16.0, ..default() },
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
@@ -377,7 +377,7 @@ fn spawn_status_content(parent: &mut ChildBuilder, operational: &Operational) {
     };
     
     parent.spawn((
-        Text::new(if is_operational { "✓ Operational" } else { "✗ Not Operational" }),
+        Text::new(if is_operational { "Operational" } else { "Not Operational" }),
         TextFont { font_size: 12.0, ..default() },
         TextColor(status_color),
     ));
@@ -388,7 +388,7 @@ fn spawn_status_content(parent: &mut ChildBuilder, operational: &Operational) {
                 let condition_text = format!("{}", condition);
                 if !condition_text.is_empty() {
                     parent.spawn((
-                        Text::new(format!("  • {}", condition_text)),
+                        Text::new(format!("  - {}", condition_text)),
                         TextFont { font_size: 10.0, ..default() },
                         TextColor(Color::srgb(0.8, 0.6, 0.4)),
                     ));
