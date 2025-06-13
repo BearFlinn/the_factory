@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
 use crate::structures::{BuildingCategory, BuildingRegistry};
+use crate::ui::TooltipTarget;
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -63,6 +64,7 @@ impl BuildingButton {
                 building_name: self.building_name.clone(),
                 is_selected: self.is_selected,
             },
+            TooltipTarget,
         ))
         .with_children(|parent| {
             // Left side: Icon and name
