@@ -43,6 +43,7 @@ impl Plugin for BuildingsPlugin {
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
             .add_event::<CrafterLogisticsRequest>()
+            .add_event::<ConstructionMaterialRequest>()
             .add_systems(Startup, (
                 setup,
                 place_hub,
@@ -54,12 +55,18 @@ impl Plugin for BuildingsPlugin {
                 validate_placement
                     .in_set(BuildingSystemSet::Validation),
                 
-                (place_building, set_drill_recipe, remove_building).chain()
-                    .in_set(BuildingSystemSet::Placement),
-                
                 (
-                    (update_recipe_crafters, crafter_logistics_requests).chain()
-                ).in_set(BuildingSystemSet::Operations),
+                place_building,
+                monitor_construction_completion,
+                assign_drill_recipes.run_if(drill_awaiting_assignment),
+                remove_building
+                ).chain()
+                    .in_set(BuildingSystemSet::Placement),
+                (
+                update_recipe_crafters, 
+                crafter_logistics_requests
+                ).chain()
+                    .in_set(BuildingSystemSet::Operations),
             ));
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
-use crate::{grid::{Layer, Position}, structures::{Building, Hub, MultiCellBuilding, NetWorkComponent, BUILDING_LAYER}};
+use crate::{grid::{Layer, Position}, structures::{Building, ConstructionSite, Hub, MultiCellBuilding, NetWorkComponent, BUILDING_LAYER}};
 
 #[derive(Event)]
 pub struct NetworkChangedEvent;
@@ -34,7 +34,6 @@ impl NetworkConnectivity {
         adjacent_positions.iter().any(|pos| self.connected_cells.contains(pos))
     }
     
-    // New method for placement validation - only checks adjacency to core network
     pub fn is_adjacent_to_core_network(&self, x: i32, y: i32) -> bool {
         let adjacent_positions = [(x, y + 1), (x, y - 1), (x - 1, y), (x + 1, y)];
         adjacent_positions.iter().any(|pos| self.core_network_cells.contains(pos))
@@ -42,7 +41,7 @@ impl NetworkConnectivity {
 }
 
 pub fn calculate_network_connectivity(
-    building_layers: &Query<(&Position, &Layer, Option<&NetWorkComponent>), With<Building>>,
+    building_layers: &Query<(&Position, &Layer, Option<&NetWorkComponent>), Or<(With<Building>, With<ConstructionSite>)>>,
     hub: &Query<(&MultiCellBuilding, &Hub)>,
 ) -> (HashSet<(i32, i32)>, HashSet<(i32, i32)>) {
     let mut core_network_cells = HashSet::new();
@@ -112,7 +111,7 @@ pub fn calculate_network_connectivity(
 pub fn update_network_connectivity(
     mut network_connectivity: ResMut<NetworkConnectivity>,
     mut network_events: EventReader<NetworkChangedEvent>,
-    building_layers: Query<(&Position, &Layer, Option<&NetWorkComponent>), With<Building>>,
+    building_layers: Query<(&Position, &Layer, Option<&NetWorkComponent>), Or<(With<Building>, With<ConstructionSite>)>>,
     hub: Query<(&MultiCellBuilding, &Hub)>,
 ) {
     // Calculate on first run even without event, or when event received

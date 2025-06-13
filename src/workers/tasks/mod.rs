@@ -1,12 +1,12 @@
 pub mod components;
 pub mod assignment;
-pub mod logistics;
+pub mod creation;
 pub mod execution;
 
 // Re-export all public items
 pub use components::*;
 pub use assignment::*;
-pub use logistics::*;
+pub use creation::*;
 pub use execution::*;
 
 use bevy::prelude::*;
@@ -48,8 +48,8 @@ impl Plugin for TasksPlugin {
                     .chain()
                     .in_set(TaskSystemSet::Processing),
                 
-                // Task generation from external requests
-                (create_logistics_tasks, clear_all_tasks)
+                // Task generation from external requests - UPDATED to include construction logistics
+                (create_logistics_tasks, create_construction_logistics_tasks, clear_all_tasks)
                     .in_set(TaskSystemSet::Generation),
                 
                 // Cleanup systems

@@ -1,10 +1,8 @@
 use bevy::prelude::*;
 use crate::{
-    constants::structures::MINING_DRILL, 
-    grid::{CellChildren, ExpandGridEvent, Grid, Layer, Position}, 
-    materials::items::Inventory, resources::{ResourceNode, ResourceNodeRecipe}, 
-    structures::{Building, BuildingRegistry, Hub, PlaceBuildingValidationEvent, RecipeCrafter}, 
-    systems::NetworkChangedEvent, ui::SelectedBuilding
+    grid::{CellChildren, Grid, Layer, Position}, 
+    structures::{Building, BuildingComponentDef, BuildingCost, BuildingRegistry, ConstructionMaterialRequest, ConstructionSite, ConstructionSiteBundle, NetWorkComponent, PlaceBuildingValidationEvent}, 
+    systems::NetworkChangedEvent, ui::SelectedBuilding, workers::Priority
 };
 
 #[derive(Event, Clone)]
@@ -66,9 +64,8 @@ pub fn place_building(
     grid: Res<Grid>,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
-    mut central_inventory: Query<&mut Inventory, With<Hub>>,
-    mut expand_events: EventWriter<ExpandGridEvent>,
     mut network_events: EventWriter<NetworkChangedEvent>,
+    mut construction_request_events: EventWriter<ConstructionMaterialRequest>,
 ) {
     for event in validation_events.read() {
         if event.result.is_ok() {
@@ -79,56 +76,42 @@ pub fn place_building(
             };
             let world_pos = grid.grid_to_world_coordinates(event.request.grid_x, event.request.grid_y);
 
-            let (building_entity, view_radius) = registry.spawn_building(
-                &mut commands, 
-                &event.request.building_name,
-                event.request.grid_x, 
-                event.request.grid_y, 
-                world_pos
-            ).expect("Building name should exist");
-
-            cell_children.0.push(building_entity);
-
-            if view_radius > 0 {
-                expand_events.send(ExpandGridEvent {
-                    center_x: event.request.grid_x,
-                    center_y: event.request.grid_y,
-                    radius: view_radius,
-                });
-            }
-
-            // TODO: Change building cost to recipes
             if let Some(def) = registry.get_definition(&event.request.building_name) {
-                let construction_cost = &def.placement.cost;
-                    if let Ok(mut inventory) = central_inventory.get_single_mut() {
-                        inventory.remove_items_for_recipe(&construction_cost.inputs);
-                    }
+                let building_cost = BuildingCost { 
+                    cost: def.placement.cost.to_recipe_def() 
+                };
+                
+                let position = Position { 
+                    x: event.request.grid_x, 
+                    y: event.request.grid_y 
+                };
+
+                // Create construction site instead of building
+                let construction_site_entity = commands.spawn(
+                    ConstructionSiteBundle::new(
+                        event.request.building_name.clone(),
+                        building_cost.clone(),
+                        position,
+                        world_pos,
+                        &def.appearance,
+                    )
+                ).id();
+
+                if def.components.iter().any(|comp| matches!(comp, BuildingComponentDef::NetWorkComponent { .. })) {
+                    commands.entity(construction_site_entity).insert(NetWorkComponent);
                 }
 
-            network_events.send(NetworkChangedEvent);
-        }
-    }
-}
+                cell_children.0.push(construction_site_entity);
 
-pub fn set_drill_recipe(
-    mut place_events: EventReader<PlaceBuildingValidationEvent>,
-    mut drills: Query<(&mut RecipeCrafter, &Position), With<Building>>,
-    resource_nodes: Query<(&ResourceNodeRecipe, &Position), With<ResourceNode>>,
-) {
-    for event in place_events.read() {
-        if event.result.is_ok() && event.request.building_name == MINING_DRILL {
-            // Find the drill at this position
-            if let Some((mut recipe_crafter, _)) = drills
-                .iter_mut()
-                .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
-            {
-                // Find the resource node at this position
-                if let Some((resource_recipe, _)) = resource_nodes
-                    .iter()
-                    .find(|(_, pos)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
-                {
-                    recipe_crafter.recipe = resource_recipe.recipe_name.clone();
-                }
+                // Request materials for construction
+                construction_request_events.send(ConstructionMaterialRequest {
+                    site: construction_site_entity,
+                    position,
+                    needed_materials: building_cost.cost.inputs.clone(),
+                    priority: Priority::Medium,
+                });
+
+                network_events.send(NetworkChangedEvent);
             }
         }
     }
@@ -139,8 +122,8 @@ pub fn remove_building(
     mut remove_events: EventReader<RemoveBuildingEvent>,
     mut network_events: EventWriter<NetworkChangedEvent>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
-    building_layers: Query<&Layer, With<Building>>,
-    building_positions: Query<&Position, With<Building>>,
+    building_layers: Query<&Layer, Or<(With<Building>, With<ConstructionSite>)>>,
+    building_positions: Query<&Position, Or<(With<Building>, With<ConstructionSite>)>>,
 ) {
     for event in remove_events.read() {
         let Some((_, _, mut cell_children)) = grid_cells

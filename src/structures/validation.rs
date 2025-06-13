@@ -4,8 +4,7 @@ use std::fmt;
 use crate::{
     grid::{CellChildren, Layer, Position}, 
     resources::ResourceNode, 
-    structures::{construction::{building_config::BuildingRegistry}, Hub, PlaceBuildingRequestEvent, BUILDING_LAYER},
-    materials::items::Inventory,
+    structures::{construction::{building_config::BuildingRegistry}, PlaceBuildingRequestEvent, BUILDING_LAYER},
     systems::NetworkConnectivity
 };
 
@@ -27,7 +26,6 @@ pub enum PlacementError {
     CellOccupied,
     NotAdjacentToNetwork,
     RequiresResourceNode,
-    NotEnoughResources,
 }
 
 impl fmt::Display for PlacementError {
@@ -37,7 +35,6 @@ impl fmt::Display for PlacementError {
             PlacementError::CellOccupied => write!(f, "Cell is already occupied!"),
             PlacementError::NotAdjacentToNetwork => write!(f, "Building must be placed adjacent to hub or connector!"),
             PlacementError::RequiresResourceNode => write!(f, "Building requires resource node!"),
-            PlacementError::NotEnoughResources => write!(f, "Not enough resources to place building!"),
         }
     }
 }
@@ -48,12 +45,9 @@ pub fn validate_placement(
     registry: Res<BuildingRegistry>,
     grid_cells: Query<(Entity, &Position, &CellChildren)>,
     building_layers: Query<&Layer>,
-    central_inventory: Query<&Inventory, With<Hub>>,
     resources: Query<&ResourceNode>,
     network_connectivity: Res<NetworkConnectivity>,
 )  {
-    let inventory = central_inventory.get_single().ok();
-    
     'event_loop: for event in place_request.read() {
         let Some((_, _, cell_children)) = grid_cells
             .iter()
@@ -73,17 +67,7 @@ pub fn validate_placement(
         }
 
         if let Some(definition) = registry.get_definition(&event.building_name) {
-            // Check ore cost against central inventory
-            let cost = &definition.placement.cost;
-                if let Some(inv) = inventory {
-                    if !inv.has_items_for_recipe(&cost.inputs) {
-                        validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
-                        continue 'event_loop;
-                    }
-                } else {
-                    validation_events.send(PlaceBuildingValidationEvent { result: Err(PlacementError::NotEnoughResources), request: event.clone() });
-                    continue 'event_loop;
-                }
+            // Note: Removed resource availability check - construction sites will handle material delivery
             
             // Validate placement rules
             for rule in &definition.placement.rules {
