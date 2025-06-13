@@ -188,7 +188,7 @@ pub fn place_hub(
         ComputeGenerator { amount: 60 },
         central_inventory,
         InventoryType (InventoryTypes::Storage),
-        Operational(true),
+        Operational(None),
         Layer(BUILDING_LAYER),
     ))
     .insert(Sprite::from_color(Color::srgb(0.3, 0.3, 0.7), Vec2::new(120.0, 120.0)))

@@ -96,7 +96,7 @@ pub fn update_operational_indicators(
                 children.iter().find(|&&child| indicators.contains(child))
             });
 
-        match (operational.0, existing_indicator) {
+        match (operational.get_status(), existing_indicator) {
             (false, None) => {
                 let indicator = commands.spawn((
                     NonOperationalIndicator,

@@ -2,7 +2,7 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::materials::RecipeDef;
+use crate::{materials::RecipeDef, systems::OperationalCondition};
 pub use crate::{
     grid::{Position, Layer},
     systems::Operational,
@@ -58,7 +58,7 @@ impl CostDef {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum BuildingComponentDef {
     PowerConsumer { amount: i32 },
     PowerGenerator { amount: i32 },
@@ -125,7 +125,7 @@ impl BuildingRegistry {
             def.category,
             Name::new(format!("{}",&def.name)),
             Position { x: grid_x, y: grid_y },
-            Operational(false),
+            Operational(Some(Vec::new())),
             Layer(BUILDING_LAYER),
             Sprite::from_color(
                 Color::srgba(

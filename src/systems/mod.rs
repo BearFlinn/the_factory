@@ -38,8 +38,10 @@ impl Plugin for SystemsPlugin {
                 (update_power_grid, update_compute, update_network_connectivity)
                     .in_set(SystemsSet::Infrastructure),
                 
-                (update_operational_status
-                ).in_set(SystemsSet::Operational),
+                (
+                populate_operational_conditions,
+                update_operational_status
+                ).chain().in_set(SystemsSet::Operational),
                 
                 (update_inventory_display,
                 update_operational_indicators,

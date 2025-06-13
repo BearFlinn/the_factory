@@ -15,7 +15,7 @@ pub fn update_recipe_crafters(
     time: Res<Time>,
 ) {
     for (mut crafter, operational, mut inventory) in query.iter_mut() {
-        if !operational.0 {
+        if operational.get_status() == false {
             continue;
         }
         

@@ -1,96 +1,165 @@
+use core::fmt;
+
 use bevy::prelude::*;
 use crate::{
     grid::Position, 
-    materials::{Inventory, RecipeRegistry}, 
+    materials::{Inventory, InventoryType, InventoryTypes, RecipeRegistry}, 
     structures::{Building, ComputeConsumer, ComputeGenerator, PowerConsumer, PowerGenerator, RecipeCrafter}, 
     systems::{ComputeGrid, NetworkConnectivity, PowerGrid}
 };
 
-// TODO: Change Operational to an enum
+pub enum OperationalCondition {
+    Network(bool),
+    Power(bool),
+    Compute(bool),
+    HasItems(bool),
+    HasInventorySpace(bool),
+}
+
+impl fmt::Display for OperationalCondition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OperationalCondition::Network(false) => write!(f, "Not connected to network"),
+            OperationalCondition::Power(false) => write!(f, "Insufficient power"),
+            OperationalCondition::Compute(false) => write!(f, "Insufficient compute"),
+            OperationalCondition::HasItems(false) => write!(f, "Missing required items"),
+            OperationalCondition::HasInventorySpace(false) => write!(f, "Inventory full"),
+            _ => Ok(()),
+        }
+    }
+}
 
 #[derive(Component)]
-pub struct Operational(pub bool);
+pub struct Operational(pub Option<Vec<OperationalCondition>>);
+
+impl Operational {
+    pub fn get_status(&self) -> bool {
+        match &self.0 {
+            None => true, // No conditions means operational
+            Some(conditions) => {
+                // All conditions must be true for operational status
+                conditions.iter().all(|condition| {
+                    match condition {
+                        OperationalCondition::Network(status) => *status,
+                        OperationalCondition::Power(status) => *status,
+                        OperationalCondition::Compute(status) => *status,
+                        OperationalCondition::HasItems(status) => *status,
+                        OperationalCondition::HasInventorySpace(status) => *status,
+                    }
+                })
+            }
+        }
+    }
+}
+
+pub fn populate_operational_conditions(
+    mut operational_query: Query<(
+        &mut Operational,
+        Option<&Building>,
+        Option<&PowerConsumer>,
+        Option<&ComputeConsumer>,
+        Option<&RecipeCrafter>,
+        Option<&Inventory>,
+        Option<&InventoryType>,
+    )>,
+) {
+    for (mut operational, building, power_consumer, compute_consumer, recipe_crafter, inventory, inventory_type) in operational_query.iter_mut() {
+        // Only populate if conditions are None or empty
+        if operational.0.is_some() && !operational.0.as_ref().unwrap().is_empty() {
+            continue;
+        }
+
+        let mut conditions = Vec::new();
+
+        // Always add Network condition for buildings
+        if building.is_some() {
+            conditions.push(OperationalCondition::Network(false));
+        }
+
+        // Add Power condition if entity consumes power
+        if power_consumer.is_some() {
+            conditions.push(OperationalCondition::Power(false));
+        }
+
+        // Add Compute condition if entity consumes compute
+        if compute_consumer.is_some() {
+            conditions.push(OperationalCondition::Compute(false));
+        }
+
+        // Add HasItems condition if entity crafts recipes (needs input materials)
+        if recipe_crafter.is_some() {
+            conditions.push(OperationalCondition::HasItems(false));
+        }
+
+        // Add HasInventorySpace condition if entity has inventory and produces/sends items
+        if let (Some(_inventory), Some(inv_type)) = (inventory, inventory_type) {
+            match inv_type.0 {
+                InventoryTypes::Sender | InventoryTypes::Producer => {
+                    conditions.push(OperationalCondition::HasInventorySpace(false));
+                }
+                _ => {} // Storage, Requester, Carrier don't need space checks for operation
+            }
+        }
+
+        // Set the populated conditions
+        operational.0 = Some(conditions);
+    }
+}
 
 pub fn update_operational_status(
-    mut buildings: Query<(
-        &Position,
+    mut operational_query: Query<(
         &mut Operational,
-        Option<&PowerConsumer>,
-        Option<&PowerGenerator>,
-        Option<&ComputeConsumer>,
-        Option<&ComputeGenerator>,
         Option<&RecipeCrafter>,
-        Option<&Inventory>
-    ), With<Building>>,
+        Option<&Inventory>,
+        &Position,
+    )>,
     network_connectivity: Res<NetworkConnectivity>,
     power_grid: Res<PowerGrid>,
     compute_grid: Res<ComputeGrid>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
-    for (pos, mut operational, power_consumer, power_generator, compute_consumer, compute_generator, crafter, inventory) in buildings.iter_mut() {
-        let network_ok = check_network_condition(pos, &network_connectivity);
-        let power_ok = check_power_condition(power_consumer, power_generator, &power_grid);
-        let compute_ok = check_compute_condition(compute_consumer, compute_generator, &compute_grid);
-        let crafter_ok = check_crafter_condition(crafter, inventory, &recipe_registry);
+    for (mut operational, crafter, inventory, pos) in operational_query.iter_mut() {
         
-        operational.0 = network_ok && power_ok && compute_ok && crafter_ok;
-    }
-}
+        // Skip entities without operational conditions
+        let Some(ref mut conditions) = operational.0 else {
+            continue;
+        };
 
-fn check_network_condition(
-    pos: &Position,
-    network_connectivity: &NetworkConnectivity,
-) -> bool {
-    network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y)
-}
-
-fn check_power_condition(
-    power_consumer: Option<&PowerConsumer>,
-    power_generator: Option<&PowerGenerator>,
-    power_grid: &PowerGrid,
-) -> bool {
-    let has_power = power_grid.available >= 0;
-    
-    if power_generator.is_some() {
-        true // Generators don't need power to operate
-    } else if power_consumer.is_some() {
-        has_power
-    } else {
-        true // Buildings without power requirements are always satisfied
-    }
-}
-
-fn check_compute_condition(
-    compute_consumer: Option<&ComputeConsumer>,
-    compute_generator: Option<&ComputeGenerator>,
-    compute_grid: &ComputeGrid,
-) -> bool {
-    let has_compute = compute_grid.available >= 0;
-    
-    if compute_generator.is_some() {
-        true // Generators don't need compute to operate
-    } else if compute_consumer.is_some() {
-        has_compute
-    } else {
-        true // Buildings without compute requirements are always satisfied
-    }
-}
-
-fn check_crafter_condition(
-    crafter: Option<&RecipeCrafter>,
-    inventory: Option<&Inventory>,
-    recipe_registry: &RecipeRegistry,
-) -> bool {
-    if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
-        if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
-            let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
-                inventory.has_at_least(item_name, *quantity)
-            });
-            
-            let has_output_space = !inventory.is_full();
-            
-            return has_inputs && has_output_space;
+        // Iterate through conditions and update each based on type
+        for condition in conditions.iter_mut() {
+            match condition {
+                OperationalCondition::Network(ref mut status) => {
+                    *status = network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y);
+                }
+                
+                OperationalCondition::Power(ref mut status) => {
+                    *status = power_grid.available >= 0;
+                }
+                
+                OperationalCondition::Compute(ref mut status) => {
+                    *status = compute_grid.available >= 0;
+                }
+                
+                OperationalCondition::HasItems(ref mut status) => {
+                    if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
+                        if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
+                            let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
+                                inventory.has_at_least(item_name, *quantity)
+                            });
+                            
+                            *status = has_inputs;
+                        }
+                    }
+                }
+                
+                OperationalCondition::HasInventorySpace(ref mut status) => {
+                    if let Some(inventory) = inventory {
+                        *status = !inventory.is_full(); // Fixed: inverted logic
+                    } else {
+                        *status = false; // Safe fallback if no inventory
+                    }
+                }
+            }
         }
     }
-    true // Buildings without crafters are always satisfied
 }

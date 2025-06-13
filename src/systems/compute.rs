@@ -18,7 +18,7 @@ pub fn update_compute(
 ) {
     let mut total_compute: i32 = 0;
     for (generator, operational) in generators.iter() {
-        if !operational.0 {
+        if operational.get_status() == false {
             continue;
         }
         
