@@ -54,7 +54,7 @@ pub enum InventoryTypes {
 #[derive(Component, Default, Serialize, Deserialize, Debug, Clone)]
 pub struct InventoryType(pub InventoryTypes);
 
-
+// TODO: Move this to its own module
 #[derive(Component)]
 #[require(InventoryType)]
 pub struct Inventory {

@@ -14,6 +14,7 @@ pub use crate::{
 pub struct Building;
 
 #[derive(Component)]
+#[allow(dead_code)] // TODO: Figure out if this is needed
 pub struct ViewRange {
     pub radius: i32,
 }
