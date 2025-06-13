@@ -56,7 +56,7 @@ pub enum InventoryTypes {
 pub struct InventoryType(pub InventoryTypes);
 
 // TODO: Move this to its own module
-#[derive(Component)]
+#[derive(Component, Debug)]
 #[require(InventoryType)]
 pub struct Inventory {
     pub items: HashMap<ItemName, u32>, 

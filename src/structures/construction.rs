@@ -19,7 +19,7 @@ pub struct ViewRange {
     pub radius: i32,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct RecipeCrafter {
     pub timer: Timer,
     pub recipe: RecipeName,

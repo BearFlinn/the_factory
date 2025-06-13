@@ -4,10 +4,11 @@ use bevy::prelude::*;
 use crate::{
     grid::Position, 
     materials::{Inventory, InventoryType, InventoryTypes, RecipeRegistry}, 
-    structures::{Building, ComputeConsumer, ComputeGenerator, PowerConsumer, PowerGenerator, RecipeCrafter}, 
+    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter}, 
     systems::{ComputeGrid, NetworkConnectivity, PowerGrid}
 };
 
+#[derive(Debug)]
 pub enum OperationalCondition {
     Network(bool),
     Power(bool),
@@ -29,7 +30,7 @@ impl fmt::Display for OperationalCondition {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Operational(pub Option<Vec<OperationalCondition>>);
 
 impl Operational {
@@ -154,9 +155,9 @@ pub fn update_operational_status(
                 
                 OperationalCondition::HasInventorySpace(ref mut status) => {
                     if let Some(inventory) = inventory {
-                        *status = !inventory.is_full(); // Fixed: inverted logic
+                        *status = !inventory.is_full();
                     } else {
-                        *status = false; // Safe fallback if no inventory
+                        *status = false;
                     }
                 }
             }

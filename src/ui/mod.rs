@@ -7,6 +7,7 @@ pub mod building_buttons;
 pub mod production_display;
 pub mod spawn_worker_button;
 pub mod tooltips;
+pub mod building_menu;
 
 pub use interaction_handler::*;
 pub use sidebar::*;
@@ -15,6 +16,7 @@ pub use building_buttons::*;
 pub use production_display::*;
 pub use spawn_worker_button::*;
 pub use tooltips::*;
+pub use building_menu::*;
 
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
@@ -27,7 +29,8 @@ impl Plugin for UIPlugin {
                 BuildingButtonsPlugin,
                 ProductionDisplayPlugin,
                 SpawnWorkerButtonPlugin,
-                TooltipsPlugin
+                TooltipsPlugin,
+                BuildingMenuPlugin
             ));
     }
 }
