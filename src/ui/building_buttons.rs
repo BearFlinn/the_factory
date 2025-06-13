@@ -22,8 +22,13 @@ impl BuildingButton {
         }
     }
 
+    pub fn set_selected(&mut self, selected: bool) {
+        self.is_selected = selected;
+    }
+
     pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
         let definition = registry.get_definition(&self.building_name).unwrap();
+        
         // Define styles for the building button
         let button_styles = InteractiveUI::new()
             .default(DynamicStyles::new()
@@ -44,6 +49,7 @@ impl BuildingButton {
                 height: Val::Px(60.0),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
                 padding: UiRect::all(Val::Px(8.0)),
                 margin: UiRect::bottom(Val::Px(5.0)),
                 border: UiRect::all(Val::Px(2.0)),
@@ -59,24 +65,25 @@ impl BuildingButton {
             },
         ))
         .with_children(|parent| {
-            // Building icon
-            parent.spawn((
-                Node {
-                    width: Val::Px(40.0),
-                    height: Val::Px(40.0),
-                    margin: UiRect::right(Val::Px(10.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(definition.appearance.color.0, definition.appearance.color.1, definition.appearance.color.2, 1.0)),
-            ));
-            
-            // Building info container
+            // Left side: Icon and name
             parent.spawn(Node {
-                flex_direction: FlexDirection::Column,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
                 flex_grow: 1.0,
                 ..default()
             })
             .with_children(|parent| {
+                // Building icon
+                parent.spawn((
+                    Node {
+                        width: Val::Px(40.0),
+                        height: Val::Px(40.0),
+                        margin: UiRect::right(Val::Px(10.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(definition.appearance.color.0, definition.appearance.color.1, definition.appearance.color.2, 1.0)),
+                ));
+                
                 // Building name
                 parent.spawn((
                     Text::new(&definition.name),
@@ -86,14 +93,57 @@ impl BuildingButton {
                     },
                 ));
             });
+            
+            // Right side: Cost display
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::End,
+                justify_content: JustifyContent::Center,
+                ..default()
+            })
+            .with_children(|parent| {
+                let cost_text = format_cost_display(&definition.placement.cost.inputs);
+                parent.spawn((
+                    Text::new(cost_text),
+                    TextFont {
+                        font_size: 10.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                ));
+            });
         })
         .id();
 
         building_button
     }
+}
 
-    pub fn set_selected(&mut self, selected: bool) {
-        self.is_selected = selected;
+fn format_cost_display(inputs: &std::collections::HashMap<String, u32>) -> String {
+    if inputs.is_empty() {
+        return "Free".to_string();
+    }
+    
+    // Sort inputs by name for consistent display
+    let mut sorted_inputs: Vec<_> = inputs.iter().collect();
+    sorted_inputs.sort_by_key(|(name, _)| name.as_str());
+    
+    if sorted_inputs.len() <= 3 {
+        // Show all items
+        sorted_inputs
+            .iter()
+            .map(|(name, quantity)| format!("{} {}", quantity, name))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        // Show first 2 + "..."
+        let first_two: Vec<String> = sorted_inputs
+            .iter()
+            .take(2)
+            .map(|(name, quantity)| format!("{} {}", quantity, name))
+            .collect();
+        
+        format!("{}\n...", first_two.join("\n"))
     }
 }
 

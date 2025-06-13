@@ -48,6 +48,7 @@ pub enum InventoryTypes {
     Sender,
     Requester,
     Carrier,
+    // TODO: Implement a better system for buildings with inputs and outputs
     Producer,
 }
 
