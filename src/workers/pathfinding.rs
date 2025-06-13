@@ -2,7 +2,7 @@ use std::collections::{HashSet, VecDeque};
 use bevy::prelude::*;
 use crate::{
     grid::{Grid, Position},
-    systems::NetworkConnectivity, workers::{Speed, Worker}
+    systems::NetworkConnectivity, workers::{AssignedSequence, Speed, Worker, WorkerState}
 };
 
 #[derive(Component)]
@@ -120,5 +120,86 @@ pub fn calculate_path(
         }
     }
     println!("No path found");
+    None
+}
+
+pub fn validate_and_displace_stranded_workers(
+    mut workers: Query<(Entity, &mut Transform, &mut Position, &mut WorkerPath, &mut WorkerState, &mut AssignedSequence), With<Worker>>,
+    network: Res<NetworkConnectivity>,
+    grid: Res<Grid>,
+) {
+    let mut displaced_count = 0;
+    
+    for (worker_entity, mut transform, mut worker_position, mut worker_path, mut worker_state, mut assigned_sequence) in workers.iter_mut() {
+        // Check if worker's current position is still valid in the network
+        let worker_pos = (worker_position.x, worker_position.y);
+        
+        if !network.is_cell_connected(worker_pos.0, worker_pos.1) {
+            // Worker is stranded on invalid terrain - find nearest valid position
+            if let Some(displacement_target) = find_nearest_valid_network_cell(worker_pos, &network, 10) {
+                println!("Emergency displacement: Worker {:?} stranded at {:?}, moving to {:?}", 
+                         worker_entity, worker_pos, displacement_target);
+                
+                // Update worker's grid position
+                worker_position.x = displacement_target.0;
+                worker_position.y = displacement_target.1;
+                
+                // Update worker's world transform
+                let world_pos = grid.grid_to_world_coordinates(displacement_target.0, displacement_target.1);
+                transform.translation = world_pos.extend(transform.translation.z);
+                
+                // Clear potentially invalid pathfinding state
+                worker_path.waypoints.clear();
+                worker_path.current_target = None;
+                
+                // Reset worker state to allow task reassignment
+                *worker_state = WorkerState::Idle;
+                assigned_sequence.0 = None;
+                
+                displaced_count += 1;
+            } else {
+                println!("Critical: Worker {:?} stranded at {:?} with no reachable valid network cells", 
+                         worker_entity, worker_pos);
+                
+                // Fallback: Reset worker state even if we can't move them
+                // This prevents permanent deadlock at the cost of potential positioning issues
+                worker_path.waypoints.clear();
+                worker_path.current_target = None;
+                *worker_state = WorkerState::Idle;
+                assigned_sequence.0 = None;
+            }
+        }
+    }
+    
+    if displaced_count > 0 {
+        println!("Emergency displacement system relocated {} stranded workers", displaced_count);
+    }
+}
+
+/// Find the nearest cell that is part of the valid network within search radius
+fn find_nearest_valid_network_cell(
+    stranded_pos: (i32, i32),
+    network: &NetworkConnectivity,
+    max_search_radius: i32,
+) -> Option<(i32, i32)> {
+    // Use expanding square search pattern for optimal nearest-neighbor finding
+    for radius in 1..=max_search_radius {
+        // Search in expanding squares around the stranded position
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                // Only check the perimeter of the current radius to avoid redundant checks
+                if dx.abs() != radius && dy.abs() != radius {
+                    continue;
+                }
+                
+                let candidate_pos = (stranded_pos.0 + dx, stranded_pos.1 + dy);
+                
+                if network.is_cell_connected(candidate_pos.0, candidate_pos.1) {
+                    return Some(candidate_pos);
+                }
+            }
+        }
+    }
+    
     None
 }
