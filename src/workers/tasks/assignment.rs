@@ -28,27 +28,101 @@ pub fn assign_available_sequences_to_workers(
         }
     });
     
-    for (sequence_entity, mut assigned_worker, sequence, _) in unassigned_sequences {
+    let mut assignments_made = 0;
+    
+    for (sequence_entity, mut assigned_worker, sequence, priority) in unassigned_sequences {
         let current_task_entity = match sequence.current_task() {
             Some(task) => task,
-            None => continue,
+            None => {
+                println!("Warning: Sequence {:?} has no current task but is not complete", sequence_entity);
+                continue;
+            }
         };
         
         let task_position = match tasks.get(current_task_entity) {
             Ok(pos) => pos,
-            Err(_) => continue,
+            Err(_) => {
+                println!("Warning: Task {:?} not found for sequence {:?}", current_task_entity, sequence_entity);
+                continue;
+            }
         };
         
         let task_pos = (task_position.x, task_position.y);
         
-        if let Some((worker_entity, _)) = find_available_worker(task_pos, &workers) {
+        if let Some((worker_entity, worker_pos)) = find_available_worker(task_pos, &workers) {
             assigned_worker.0 = Some(worker_entity);
             
             if let Ok((_, _, _, mut worker_assigned_sequence, _)) = workers.get_mut(worker_entity) {
                 worker_assigned_sequence.0 = Some(sequence_entity);
+                assignments_made += 1;
+                
+                println!(
+                    "Assigned worker {:?} at ({}, {}) to {:?} priority sequence {:?} (task at ({}, {}))",
+                    worker_entity, worker_pos.x, worker_pos.y, priority, sequence_entity, task_pos.0, task_pos.1
+                );
             } else {
+                // Rollback if worker assignment fails
                 assigned_worker.0 = None;
+                println!("Failed to assign sequence {:?} to worker {:?} - worker not found", sequence_entity, worker_entity);
             }
+        }
+    }
+    
+    if assignments_made > 0 {
+        println!("Made {} new worker assignments", assignments_made);
+    }
+}
+
+pub fn debug_assignment_gaps(
+    unassigned_sequences: Query<(Entity, &TaskSequence, &Priority, &AssignedWorker)>,
+    idle_workers: Query<(Entity, &Position, &WorkerState, &AssignedSequence, &Inventory), With<Worker>>,
+    time: Res<Time>,
+) {
+    static mut LAST_DEBUG_TIME: f32 = 0.0;
+    let current_time = time.elapsed_secs();
+    
+    // Only debug every 5 seconds to avoid spam
+    unsafe {
+        if current_time - LAST_DEBUG_TIME < 5.0 {
+            return;
+        }
+        LAST_DEBUG_TIME = current_time;
+    }
+    
+    let unassigned_sequences: Vec<_> = unassigned_sequences.iter()
+        .filter(|(_, sequence, _, assigned_worker)| {
+            assigned_worker.0.is_none() && !sequence.is_complete()
+        })
+        .collect();
+    
+    let available_workers: Vec<_> = idle_workers.iter()
+        .filter(|(_, _, state, assignment, inventory)| {
+            **state == WorkerState::Idle && assignment.0.is_none() && inventory.is_empty()
+        })
+        .collect();
+    
+    if !unassigned_sequences.is_empty() && !available_workers.is_empty() {
+        println!(
+            "ASSIGNMENT GAP DETECTED: {} unassigned sequences, {} idle workers available",
+            unassigned_sequences.len(), 
+            available_workers.len()
+        );
+        
+        // Debug first few sequences and workers
+        for (sequence_entity, sequence, priority, _) in unassigned_sequences.iter().take(3) {
+            println!(
+                "  Unassigned sequence {:?}: {} tasks remaining, priority: {:?}",
+                sequence_entity,
+                sequence.remaining_tasks(),
+                priority
+            );
+        }
+        
+        for (worker_entity, position, _, _, inventory) in available_workers.iter().take(3) {
+            println!(
+                "  Available worker {:?} at ({}, {}), inventory: {} items",
+                worker_entity, position.x, position.y, inventory.get_total_quantity()
+            );
         }
     }
 }

@@ -57,6 +57,7 @@ impl Plugin for BuildingsPlugin {
                 
                 (
                 place_building,
+                monitor_construction_progress,
                 monitor_construction_completion,
                 assign_drill_recipes.run_if(drill_awaiting_assignment),
                 remove_building

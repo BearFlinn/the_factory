@@ -118,9 +118,7 @@ pub fn create_construction_logistics_tasks(
         );
         
         if !supply_plan.is_empty() {
-            let mut all_tasks = Vec::new();
-            
-            // Create pickup/dropoff task pairs for each supply source
+            // Create separate task sequences for each supplier to enable parallel work
             for (supplier_entity, supplier_pos, items_to_pickup) in supply_plan {
                 let pickup_task = commands.spawn((
                     TaskBundle::new(
@@ -140,20 +138,17 @@ pub fn create_construction_logistics_tasks(
                     ),
                 )).id();
                 
-                all_tasks.push(pickup_task);
-                all_tasks.push(dropoff_task);
-            }
-            
-            // Create task sequence for all construction deliveries
-            if !all_tasks.is_empty() {
+                // Create individual sequence for each supplier (enables parallel work)
                 let sequence_entity = commands.spawn(
-                    TaskSequenceBundle::new(all_tasks.clone(), request.priority.clone())
+                    TaskSequenceBundle::new(
+                        vec![pickup_task, dropoff_task], 
+                        request.priority.clone()
+                    )
                 ).id();
                 
-                // Link all tasks to the sequence
-                for task_id in all_tasks {
-                    commands.entity(task_id).insert(SequenceMember(sequence_entity));
-                }
+                // Link tasks to their sequence
+                commands.entity(pickup_task).insert(SequenceMember(sequence_entity));
+                commands.entity(dropoff_task).insert(SequenceMember(sequence_entity));
             }
         }
     }
@@ -164,22 +159,22 @@ fn calculate_supply_plan(
     needed_items: &HashMap<ItemName, u32>,
     buildings: &Query<(Entity, &Position, &Inventory, &InventoryType, Option<&RecipeCrafter>), With<Building>>,
 ) -> Vec<(Entity, Position, HashMap<ItemName, u32>)> {
-    const WORKER_CAPACITY: u32 = 20; // Match worker inventory capacity
+    const WORKER_CAPACITY: u32 = 20;
     
     let mut remaining_needs = needed_items.clone();
     let mut supply_plan = Vec::new();
     
     while !remaining_needs.is_empty() {
-        let mut best_contribution: Option<(Entity, Position, HashMap<ItemName, u32>)> = None;
-        let mut best_distance = i32::MAX;
+        let mut best_supplier: Option<(Entity, Position, HashMap<ItemName, u32>, f32)> = None;
         
-        // Find the closest building that can contribute something we still need
+        // Evaluate all potential suppliers and pick the best one
         for (entity, pos, inventory, inv_type, _) in buildings.iter() {
             if inv_type.0 != InventoryTypes::Storage && inv_type.0 != InventoryTypes::Sender {
                 continue;
             }
             
             let mut contribution = HashMap::new();
+            let mut total_contribution_value = 0u32;
             
             // Calculate what this building can actually contribute
             for (item_name, &still_needed) in remaining_needs.iter() {
@@ -187,6 +182,7 @@ fn calculate_supply_plan(
                 if available > 0 {
                     let can_contribute = available.min(still_needed);
                     contribution.insert(item_name.clone(), can_contribute);
+                    total_contribution_value += can_contribute;
                 }
             }
             
@@ -194,19 +190,23 @@ fn calculate_supply_plan(
                 continue;
             }
             
+            // Score supplier based on contribution value vs distance
             let distance = manhattan_distance_coords(requester_pos, (pos.x, pos.y));
-            if distance < best_distance {
-                best_distance = distance;
-                best_contribution = Some((entity, *pos, contribution));
+            let efficiency_score = total_contribution_value as f32 / (distance as f32 + 1.0);
+            
+            // Prefer suppliers that can provide substantial amounts
+            let substantial_bonus = if total_contribution_value >= WORKER_CAPACITY { 2.0 } else { 1.0 };
+            let final_score = efficiency_score * substantial_bonus;
+            
+            if best_supplier.as_ref().map_or(true, |(_, _, _, score)| final_score > *score) {
+                best_supplier = Some((entity, *pos, contribution, final_score));
             }
         }
         
-        // Process the best contribution with capacity chunking
-        if let Some((entity, pos, contribution)) = best_contribution {
-            // Split contribution into worker-capacity-sized chunks
+        // Process the best supplier with capacity chunking
+        if let Some((entity, pos, contribution, _)) = best_supplier {
             let chunked_contributions = chunk_contribution_by_capacity(contribution, WORKER_CAPACITY);
             
-            // Add each chunk as a separate trip to the supply plan
             for chunk in chunked_contributions {
                 supply_plan.push((entity, pos, chunk.clone()));
                 
@@ -221,7 +221,6 @@ fn calculate_supply_plan(
                 }
             }
         } else {
-            // No building can contribute anything we need
             break;
         }
     }

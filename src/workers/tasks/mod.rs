@@ -40,6 +40,7 @@ impl Plugin for TasksPlugin {
                     .in_set(TaskSystemSet::Interrupts),
                 
                 // Worker assignment
+                debug_assignment_gaps,
                 assign_available_sequences_to_workers
                     .in_set(TaskSystemSet::Assignment),
                 

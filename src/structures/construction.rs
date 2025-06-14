@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use crate::{constants::structures::MINING_DRILL, grid::ExpandGridEvent, materials::{ItemName, RecipeDef, RecipeName}, resources::{ResourceNode, ResourceNodeRecipe}, systems::NetworkChangedEvent, workers::Priority};
+use crate::{constants::structures::MINING_DRILL, grid::ExpandGridEvent, materials::{ItemName, RecipeDef, RecipeName}, resources::{ResourceNode, ResourceNodeRecipe}, systems::NetworkChangedEvent, workers::{Priority, TaskSequence}};
 pub use crate::{
     grid::{CellChildren, Grid, Layer, Position}, 
     structures::{building_config::*},
@@ -253,6 +253,143 @@ pub fn monitor_construction_completion(
                 network_events.send(NetworkChangedEvent);
                 println!("Construction completed: {} at ({}, {})", 
                          construction_site.building_name, position.x, position.y);
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct ConstructionMonitor {
+    pub last_inventory_snapshot: HashMap<ItemName, u32>,
+    pub last_progress_time: f32,
+    pub retry_count: u32,
+    pub next_retry_time: f32,
+}
+
+impl ConstructionMonitor {
+    pub fn new(current_inventory: &HashMap<ItemName, u32>, current_time: f32) -> Self {
+        Self {
+            last_inventory_snapshot: current_inventory.clone(),
+            last_progress_time: current_time,
+            retry_count: 0,
+            next_retry_time: current_time + 10.0, // Initial 10 second check
+        }
+    }
+    
+    pub fn should_retry(&self, current_time: f32) -> bool {
+        current_time >= self.next_retry_time
+    }
+    
+    pub fn schedule_next_retry(&mut self, current_time: f32) {
+        self.retry_count += 1;
+        self.next_retry_time = current_time + 10.0;
+        
+        println!("Construction retry #{} scheduled in 10s", self.retry_count);
+    }
+    
+    pub fn reset_progress(&mut self, new_inventory: &HashMap<ItemName, u32>, current_time: f32) {
+        self.last_inventory_snapshot = new_inventory.clone();
+        self.last_progress_time = current_time;
+        self.retry_count = 0;
+        self.next_retry_time = current_time + 10.0;
+    }
+    
+    pub fn has_made_progress(&self, current_inventory: &HashMap<ItemName, u32>) -> bool {
+        // Check if any required materials have increased
+        for (item_name, &current_amount) in current_inventory {
+            let previous_amount = self.last_inventory_snapshot.get(item_name).copied().unwrap_or(0);
+            if current_amount > previous_amount {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+pub fn monitor_construction_progress(
+    mut commands: Commands,
+    mut construction_sites: Query<(
+        Entity, 
+        &ConstructionSite, 
+        &Inventory, 
+        &BuildingCost, 
+        &Position,
+        Option<&mut ConstructionMonitor>
+    ), With<ConstructionSite>>,
+    active_sequences: Query<&TaskSequence>,
+    mut construction_requests: EventWriter<ConstructionMaterialRequest>,
+    time: Res<Time>,
+) {
+    let current_time = time.elapsed_secs();
+    
+    for (site_entity, construction_site, inventory, building_cost, position, monitor) in construction_sites.iter_mut() {
+        let required_materials = &building_cost.cost.inputs;
+        let current_materials = inventory.get_all_items();
+        
+        // Check if construction is complete
+        if inventory.has_items_for_recipe(required_materials) {
+            continue; // Let the completion system handle this
+        }
+        
+        // Initialize or update monitor
+        let mut monitor = match monitor {
+            Some(mut monitor) => {
+                // Check for progress
+                if monitor.has_made_progress(&current_materials) {
+                    monitor.reset_progress(&current_materials, current_time);
+                    continue; // Progress detected, no action needed
+                }
+                monitor
+            }
+            None => {
+                // First time seeing this construction site
+                commands.entity(site_entity).insert(
+                    ConstructionMonitor::new(&current_materials, current_time)
+                );
+                continue;
+            }
+        };
+        
+        // Check if we should retry supply planning
+        if !monitor.should_retry(current_time) {
+            continue;
+        }
+        
+        // Calculate what materials are still needed
+        let mut still_needed = HashMap::new();
+        for (item_name, &required_amount) in required_materials {
+            let current_amount = current_materials.get(item_name).copied().unwrap_or(0);
+            if current_amount < required_amount {
+                still_needed.insert(item_name.clone(), required_amount - current_amount);
+            }
+        }
+        
+        if !still_needed.is_empty() {
+            // Check if there are any active task sequences targeting this construction site
+            let has_active_tasks = active_sequences.iter().any(|sequence| {
+                // This is a simplified check - you might need to implement a more sophisticated
+                // way to track which sequences are targeting which construction sites
+                !sequence.is_complete()
+            });
+            
+            if !has_active_tasks {
+                println!(
+                    "Construction stalled at ({}, {}): {} - requesting {} materials (retry #{})",
+                    position.x, position.y,
+                    construction_site.building_name,
+                    still_needed.len(),
+                    monitor.retry_count + 1
+                );
+                
+                // Request new supply plan
+                construction_requests.send(ConstructionMaterialRequest {
+                    site: site_entity,
+                    position: *position,
+                    needed_materials: still_needed,
+                    priority: Priority::High, // Higher priority for retries
+                });
+                
+                monitor.schedule_next_retry(current_time);
             }
         }
     }
