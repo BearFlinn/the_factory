@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
 use crate::structures::{BuildingCategory, BuildingRegistry};
-use crate::ui::TooltipTarget;
+use crate::ui::{TooltipTarget, UISystemSet};
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -28,7 +28,10 @@ impl BuildingButton {
     }
 
     pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
-        let definition = registry.get_definition(&self.building_name).unwrap();
+        let Some(definition) = registry.get_definition(&self.building_name) else {
+            warn!("Building definition not found: {}", self.building_name);
+            return parent.spawn(Node::default()).id(); // Return dummy entity
+        };
         
         // Define styles for the building button
         let button_styles = InteractiveUI::new()
@@ -245,8 +248,8 @@ impl Plugin for BuildingButtonsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SelectedBuilding::default())
            .add_systems(Update, (
-               handle_building_button_interactions,
-               handle_building_selection_hotkeys,
+               handle_building_selection_hotkeys.in_set(UISystemSet::InputDetection),
+               handle_building_button_interactions.in_set(UISystemSet::VisualUpdates),
            ));
     }
 }

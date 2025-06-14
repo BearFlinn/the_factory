@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::ui::UISystemSet;
+
 #[derive(Clone)]
 pub enum SelectionBehavior {
     Toggle,                  // Click toggles selection on/off
@@ -102,7 +104,13 @@ fn apply_dynamic_styles(
     commands: &mut Commands,
     entity: Entity,
     styles: &DynamicStyles,
+    entities: &Query<(), With<Node>>, // Add this parameter to validate entity existence
 ) {
+    // Only apply styles if the entity still exists
+    if !entities.contains(entity) {
+        return;
+    }
+    
     if let Some(bg_color) = &styles.background_color {
         commands.entity(entity).insert(bg_color.clone());
     }
@@ -113,6 +121,7 @@ fn apply_dynamic_styles(
 
 pub fn handle_interactive_ui(
     mut commands: Commands,
+    entities: Query<(), With<Node>>, // Add this query
     mut query_set: ParamSet<(
         Query<(Entity, &Interaction, &mut Selectable, &InteractiveUI), Changed<Interaction>>,
         Query<(Entity, &mut Selectable, &InteractiveUI)>,
@@ -136,9 +145,9 @@ pub fn handle_interactive_ui(
             }
         }
         
-        // Apply visual styles for this entity
+        // Apply visual styles for this entity with safety check
         let styles_to_apply = determine_styles(interaction, &selectable, interactive_ui);
-        apply_dynamic_styles(&mut commands, entity, styles_to_apply);
+        apply_dynamic_styles(&mut commands, entity, styles_to_apply, &entities);
     }
     
     // Now handle exclusive deselection using the second query
@@ -147,7 +156,7 @@ pub fn handle_interactive_ui(
             if other_selectable.selection_group.as_ref() == Some(&group) && other_entity != selected_entity {
                 if other_selectable.is_selected {
                     other_selectable.is_selected = false;
-                    apply_dynamic_styles(&mut commands, other_entity, &other_ui.default_styles);
+                    apply_dynamic_styles(&mut commands, other_entity, &other_ui.default_styles, &entities);
                 }
             }
         }
@@ -157,11 +166,12 @@ pub fn handle_interactive_ui(
 // Also handle visual updates when selection changes outside of interactions
 pub fn update_selection_visuals(
     mut commands: Commands,
+    entities: Query<(), With<Node>>, // Add this query
     changed_selectables: Query<(Entity, &Selectable, &InteractiveUI, &Interaction), Changed<Selectable>>,
 ) {
     for (entity, selectable, interactive_ui, interaction) in &changed_selectables {
         let styles_to_apply = determine_styles(interaction, selectable, interactive_ui);
-        apply_dynamic_styles(&mut commands, entity, styles_to_apply);
+        apply_dynamic_styles(&mut commands, entity, styles_to_apply, &entities);
     }
 }
 
@@ -217,9 +227,11 @@ pub struct InteractionHandlerPlugin;
 impl Plugin for InteractionHandlerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (
-            handle_escape_clear_selection,
-            handle_interactive_ui,
-            update_selection_visuals,
+            handle_escape_clear_selection.in_set(UISystemSet::InputDetection),
+            (
+                handle_interactive_ui,
+                update_selection_visuals,
+            ).in_set(UISystemSet::VisualUpdates),
         ));
     }
 }

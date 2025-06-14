@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::ui::interaction_handler::{Selectable, InteractiveUI, DynamicStyles, SelectionBehavior};
 use crate::structures::{BuildingRegistry, BuildingCategory};
+use crate::ui::UISystemSet;
 use std::collections::HashSet;
 
 #[derive(Component)]
@@ -208,8 +209,8 @@ pub struct SidebarTabsPlugin;
 impl Plugin for SidebarTabsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (
-            handle_tab_interactions,
-            handle_tab_hotkeys,
+            handle_tab_hotkeys.in_set(UISystemSet::InputDetection),
+            handle_tab_interactions.in_set(UISystemSet::VisualUpdates),
         ));
     }
 }

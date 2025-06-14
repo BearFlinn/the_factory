@@ -1,10 +1,6 @@
 use bevy::prelude::*;
 use crate::{
-    grid::{Grid, Position},
-    structures::{Building, RecipeCrafter},
-    systems::Operational,
-    materials::{Inventory, RecipeRegistry},
-    ui::interaction_handler::{InteractiveUI, DynamicStyles, Selectable},
+    grid::{Grid, Position}, materials::{Inventory, RecipeRegistry}, structures::{Building, RecipeCrafter}, systems::Operational, ui::{interaction_handler::{DynamicStyles, InteractiveUI, Selectable}, UISystemSet}
 };
 
 #[derive(Event)]
@@ -222,25 +218,6 @@ fn spawn_content_section(parent: &mut ChildBuilder, building_entity: Entity, con
     });
 }
 
-// Simplified close button handling with direct entity references
-pub fn handle_menu_close_buttons(
-    close_buttons: Query<&MenuCloseButton, (With<Selectable>, Changed<Selectable>)>,
-    selectables: Query<&Selectable>,
-    mut close_events: EventWriter<CloseMenuEvent>,
-) {
-    for close_button in &close_buttons {
-        // Check if this specific close button was selected
-        if let Ok(selectable) = selectables.get(close_button.menu_entity) {
-            if selectable.is_selected {
-                close_events.send(CloseMenuEvent {
-                    menu_entity: close_button.menu_entity,
-                });
-            }
-        }
-    }
-}
-
-// Alternative approach using Interaction directly (more reliable)
 pub fn handle_menu_close_buttons_interaction(
     close_buttons: Query<(&MenuCloseButton, &Interaction), Changed<Interaction>>,
     mut close_events: EventWriter<CloseMenuEvent>,
@@ -496,13 +473,21 @@ impl Plugin for BuildingMenuPlugin {
             .add_event::<BuildingClickEvent>()
             .add_event::<CloseMenuEvent>()
             .add_systems(Update, (
-                detect_building_clicks,
-                spawn_building_menu,
-                handle_menu_close_buttons_interaction, // Use interaction-based approach
-                handle_escape_close_menus,
-                process_menu_close_events, // Separate system for safe despawning
-                update_menu_positions,
-                update_menu_content,
-            ).chain()); // Chain ensures proper execution order
+                (
+                    detect_building_clicks,
+                    handle_escape_close_menus,
+                ).in_set(UISystemSet::InputDetection),
+                
+                (
+                    spawn_building_menu,
+                    handle_menu_close_buttons_interaction,
+                    process_menu_close_events,
+                ).in_set(UISystemSet::EntityManagement),
+                
+                (
+                    update_menu_positions,
+                    update_menu_content,
+                ).in_set(UISystemSet::LayoutUpdates),
+            ));
     }
 }

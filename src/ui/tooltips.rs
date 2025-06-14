@@ -1,8 +1,6 @@
 use bevy::prelude::*;
-use crate::ui::interaction_handler::InteractiveUI;
 use crate::structures::{BuildingRegistry, BuildingComponentDef};
-use crate::ui::BuildingButton;
-use std::collections::HashMap;
+use crate::ui::{BuildingButton, UISystemSet};
 
 #[derive(Component)]
 pub struct Tooltip {
@@ -90,6 +88,8 @@ pub fn update_tooltip_timers(
                 if let Some(definition) = registry.get_definition(&building_button.building_name) {
                     let tooltip_content = generate_tooltip_content(definition);
                     spawn_tooltip(&mut commands, tooltip_content, button_transform.translation().truncate());
+                } else {
+                    warn!("Building definition not found for tooltip: {}", building_button.building_name);
                 }
             }
         }
@@ -208,8 +208,10 @@ pub struct TooltipsPlugin;
 impl Plugin for TooltipsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (
-            handle_tooltip_hover_detection,
-            update_tooltip_timers,
-        ).chain());
+            (
+                handle_tooltip_hover_detection,
+                update_tooltip_timers,
+            ).in_set(UISystemSet::EntityManagement),
+        ));
     }
 }

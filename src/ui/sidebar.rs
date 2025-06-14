@@ -262,11 +262,11 @@ impl Plugin for SidebarPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, setup_sidebar)
            .add_systems(Update, (
-               handle_sidebar_interactions,
-               handle_sidebar_hotkeys,
-               update_building_buttons_on_tab_change
-                   .before(crate::ui::interaction_handler::handle_interactive_ui)
-                   .before(crate::ui::interaction_handler::update_selection_visuals),
+               handle_sidebar_hotkeys.in_set(UISystemSet::InputDetection),
+               (
+                   handle_sidebar_interactions,
+                   update_building_buttons_on_tab_change,
+               ).in_set(UISystemSet::EntityManagement),
            ));
     }
 }
