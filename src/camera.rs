@@ -17,7 +17,7 @@ impl Default for GameCamera {
     fn default() -> Self {
         Self {
             velocity: Vec2::ZERO,
-            base_speed: 400.0,        // Base movement speed in pixels/second
+            base_speed: 550.0,        // Base movement speed in pixels/second
             acceleration: 8.0,        // How quickly we reach target speed
             deceleration: 12.0,       // How quickly we stop when no input
             min_zoom: 0.3,           // Maximum zoom in
