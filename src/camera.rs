@@ -16,11 +16,11 @@ impl Default for GameCamera {
     fn default() -> Self {
         Self {
             velocity: Vec2::ZERO,
-            base_speed: 550.0,        // Base movement speed in pixels/second
-            acceleration: 8.0,        // How quickly we reach target speed
-            deceleration: 12.0,       // How quickly we stop when no input
-            min_zoom: 0.3,           // Maximum zoom in
-            max_zoom: 3.0,           // Maximum zoom out
+            base_speed: 650.0,
+            acceleration: 8.0,
+            deceleration: 12.0,
+            min_zoom: 0.3,
+            max_zoom: 3.0,
         }
     }
 }
@@ -46,7 +46,6 @@ pub fn handle_camera_keyboard_input(
         return;
     };
 
-    // Calculate target velocity based on input
     let mut target_velocity = Vec2::ZERO;
     
     if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {

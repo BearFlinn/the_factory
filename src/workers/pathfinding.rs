@@ -131,7 +131,6 @@ pub fn validate_and_displace_stranded_workers(
     let mut displaced_count = 0;
     
     for (worker_entity, mut transform, mut worker_position, mut worker_path, mut worker_state, mut assigned_sequence) in workers.iter_mut() {
-        // Check if worker's current position is still valid in the network
         let worker_pos = (worker_position.x, worker_position.y);
         
         if !network.is_cell_connected(worker_pos.0, worker_pos.1) {

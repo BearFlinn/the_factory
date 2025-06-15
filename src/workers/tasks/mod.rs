@@ -3,7 +3,6 @@ pub mod assignment;
 pub mod creation;
 pub mod execution;
 
-// Re-export all public items
 pub use components::*;
 pub use assignment::*;
 pub use creation::*;
@@ -14,11 +13,11 @@ use crate::workers::WorkersSystemSet;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TaskSystemSet {
-    Interrupts,      // Handle worker interruptions and state resets
-    Assignment,      // Assign sequences to available workers  
-    Processing,      // Process worker sequences and update states
-    Generation,      // Generate new task sequences from requests
-    Cleanup,         // Clean up completed tasks and sequences
+    Interrupts,
+    Assignment,
+    Processing,
+    Generation,
+    Cleanup,
 }
 
 pub struct TasksPlugin;

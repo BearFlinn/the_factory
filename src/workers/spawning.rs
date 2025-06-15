@@ -46,7 +46,7 @@ impl WorkerBundle {
                 waypoints: VecDeque::new(),
                 current_target: None,
             },
-            assigned_sequence: AssignedSequence(None), // Initially unassigned
+            assigned_sequence: AssignedSequence(None),
             state: WorkerState::Idle,
             inventory: Inventory::new(20),
             inventory_type: InventoryType(InventoryTypes::Carrier),
