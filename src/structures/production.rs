@@ -20,7 +20,10 @@ pub fn update_recipe_crafters(
         }
         
         if crafter.timer.tick(time.delta()).just_finished() {
-            if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
+            let Some(recipe_name) = crafter.get_active_recipe() else {
+                continue;
+            };
+            if let Some(recipe) = recipe_registry.get_definition(recipe_name) {
                 // Check if we have all required inputs
                 let can_craft = !inventory.is_full() || recipe.inputs.iter().all(|(item_name, quantity)| {
                     inventory.has_at_least(item_name, *quantity)
@@ -82,54 +85,106 @@ pub fn crafter_logistics_requests(
                 }
             }
             InventoryTypes::Requester => {
-                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                    let required_items: HashMap<_, _> = recipe_def.inputs.iter()
-                        .map(|(item, quantity)| (item.clone(), quantity * 10))
-                        .collect();
-                    
-                    if !inventory.has_items_for_recipe(&required_items) && 
-                       !existing_priorities.contains(&Priority::Medium) {
-                        events.send(CrafterLogisticsRequest {
-                            crafter: crafter_entity,
-                            position: position.clone(),
-                            needs: Some(required_items),
-                            has: None,
-                            priority: Priority::Medium,
-                        });
+                // Only process logistics if a recipe is selected
+                if let Some(recipe_name) = crafter.get_active_recipe() {
+                    if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+                        let required_items: HashMap<_, _> = recipe_def.inputs.iter()
+                            .map(|(item, quantity)| (item.clone(), quantity * 10))
+                            .collect();
+                        
+                        if !inventory.has_items_for_recipe(&required_items) && 
+                           !existing_priorities.contains(&Priority::Medium) {
+                            events.send(CrafterLogisticsRequest {
+                                crafter: crafter_entity,
+                                position: position.clone(),
+                                needs: Some(required_items),
+                                has: None,
+                                priority: Priority::Medium,
+                            });
+                        }
                     }
                 }
             }
             InventoryTypes::Producer => {
-                if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-                    let required_items: HashMap<_, _> = recipe_def.inputs.iter()
-                        .map(|(item, quantity)| (item.clone(), quantity * 10))
-                        .collect();
-                    
-                    if !inventory.has_items_for_recipe(&required_items) && 
-                    !existing_priorities.contains(&Priority::Medium) {
-                        events.send(CrafterLogisticsRequest {
-                            crafter: crafter_entity,
-                            position: position.clone(),
-                            needs: Some(required_items),
-                            has: None,
-                            priority: Priority::Medium,
-                        });
-                    }
-                    
-                    let produced_items = inventory.recipe_output_amounts(&recipe_def.outputs);
+                // Only process logistics if a recipe is selected
+                if let Some(recipe_name) = crafter.get_active_recipe() {
+                    if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+                        let required_items: HashMap<_, _> = recipe_def.inputs.iter()
+                            .map(|(item, quantity)| (item.clone(), quantity * 10))
+                            .collect();
+                        
+                        if !inventory.has_items_for_recipe(&required_items) && 
+                        !existing_priorities.contains(&Priority::Medium) {
+                            events.send(CrafterLogisticsRequest {
+                                crafter: crafter_entity,
+                                position: position.clone(),
+                                needs: Some(required_items),
+                                has: None,
+                                priority: Priority::Medium,
+                            });
+                        }
+                        
+                        let produced_items = inventory.recipe_output_amounts(&recipe_def.outputs);
 
-                    if produced_items.values().sum::<u32>() >= WORKER_CAPACITY && !existing_priorities.contains(&Priority::Medium) {
-                        events.send(CrafterLogisticsRequest {
-                            crafter: crafter_entity,
-                            position: position.clone(),
-                            needs: None,
-                            has: Some(produced_items),
-                            priority: Priority::Medium,
-                        });
+                        if produced_items.values().sum::<u32>() >= WORKER_CAPACITY && !existing_priorities.contains(&Priority::Medium) {
+                            events.send(CrafterLogisticsRequest {
+                                crafter: crafter_entity,
+                                position: position.clone(),
+                                needs: None,
+                                has: Some(produced_items),
+                                priority: Priority::Medium,
+                            });
+                        }
                     }
                 }
             }
             _ => {}
+        }
+    }
+}
+
+pub fn handle_recipe_selection_logistics(
+    mut crafters: Query<(Entity, &RecipeCrafter, &Inventory, &InventoryType, &Position), Changed<RecipeCrafter>>,
+    tasks: Query<(Entity, &TaskTarget, &Priority), With<Task>>,
+    mut events: EventWriter<CrafterLogisticsRequest>,
+    recipe_registry: Res<RecipeRegistry>,
+) {
+    for (crafter_entity, crafter, inventory, inv_type, position) in crafters.iter_mut() {
+        // Only process if a recipe was just selected (not cleared)
+        let Some(recipe_name) = crafter.get_active_recipe() else {
+            continue;
+        };
+        
+        // Only handle requesters and producers that need materials
+        if !matches!(inv_type.0, InventoryTypes::Requester | InventoryTypes::Producer) {
+            continue;
+        }
+        
+        // Check if there are already active tasks for this crafter
+        let has_existing_tasks = tasks.iter().any(|(_, target, _)| target.0 == crafter_entity);
+        if has_existing_tasks {
+            continue;
+        }
+        
+        // Get recipe definition and check if materials are needed
+        if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+            let required_items: HashMap<_, _> = recipe_def.inputs.iter()
+                .map(|(item, quantity)| (item.clone(), quantity * 10))
+                .collect();
+            
+            // Only request logistics if we actually need materials
+            if !inventory.has_items_for_recipe(&required_items) {
+                events.send(CrafterLogisticsRequest {
+                    crafter: crafter_entity,
+                    position: position.clone(),
+                    needs: Some(required_items),
+                    has: None,
+                    priority: Priority::Medium,
+                });
+                
+                println!("Recipe selection logistics: Requesting materials for {} at ({}, {})", 
+                         recipe_name, position.x, position.y);
+            }
         }
     }
 }

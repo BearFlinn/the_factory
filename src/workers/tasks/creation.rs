@@ -505,7 +505,10 @@ fn identify_storage_to_requester_tasks(
         
         // Get the recipe for this requester
         let recipe_crafter = recipe_crafters.get(requester_entity).unwrap();
-        let recipe_def = match recipe_registry.get_definition(&recipe_crafter.recipe) {
+        let Some(recipe_name) = recipe_crafter.get_active_recipe() else {
+            continue;
+        };
+        let recipe_def = match recipe_registry.get_definition(recipe_name) {
             Some(def) => def,
             None => continue, // Skip if recipe not found
         };

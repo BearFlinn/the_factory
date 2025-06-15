@@ -28,5 +28,41 @@
         inputs: {"Iron Ore": 2, "Coal": 1},
         outputs: {"Iron Ingot": 1},
         crafting_time: 2.0,
-    )
+    ),
+    (
+        name: "Copper Ingot",
+        inputs: {"Copper Ore": 2, "Coal": 1},
+        outputs: {"Copper Ingot": 1},
+        crafting_time: 2.0,
+    ),
+    (
+        name: "Gear",
+        inputs: {"Iron Ingot": 1},
+        outputs: {"Gear": 2},
+        crafting_time: 1.0,
+    ),
+    (
+        name: "Copper Wire",
+        inputs: {"Copper Ingot": 1},
+        outputs: {"Copper Wire": 4},
+        crafting_time: 1.0,
+    ),
+    (
+        name: "Iron Plate",
+        inputs: {"Iron Ingot": 2},
+        outputs: {"Iron Plate": 1},
+        crafting_time: 2.0,
+    ),
+    (
+        name: "Gearbox",
+        inputs: {"Gear": 2, "Iron Plate": 1},
+        outputs: {"Gearbox": 1},
+        crafting_time: 4.0,
+    ),
+    (
+        name: "Electronic Circuit",
+        inputs: {"Copper Wire": 2, "Iron Plate": 1},
+        outputs: {"Electronic Circuit": 1},
+        crafting_time: 6.0,
+    ),
 ]

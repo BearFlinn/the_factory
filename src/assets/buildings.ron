@@ -19,7 +19,7 @@
             Inventory(capacity: 100),
             InventoryType(inv_type: Sender),
             ViewRange(radius: 2),
-            RecipeCrafter(recipe_name: "Iron Ore", interval: 1.0),
+            RecipeCrafter(recipe_name: None, available_recipes: None, interval: 1.0),
         ]
     ),
     
@@ -82,7 +82,7 @@
         ),
         components: [
             PowerGenerator(amount: 40),
-            RecipeCrafter(recipe_name: "Power", interval: 2.0),
+            RecipeCrafter(recipe_name: Some("Power"), available_recipes: None, interval: 2.0),
             Inventory(capacity: 100),
             InventoryType(inv_type: Requester),
             ViewRange(radius: 2),
@@ -128,7 +128,7 @@
         ),
         components: [
             PowerConsumer(amount: 60),
-            RecipeCrafter(recipe_name: "Iron Ingot", interval: 2.0),
+            RecipeCrafter(recipe_name: None, available_recipes: Some(["Iron Ingot", "Copper Ingot"]), interval: 2.0),
             Inventory(capacity: 100),
             InventoryType(inv_type: Producer),
             ViewRange(radius: 2),
@@ -156,4 +156,38 @@
             ViewRange(radius: 2),
         ]
     ),
+    (
+        name: "Assembler",
+        category: Production,
+        appearance: (
+            size: (32.0, 32.0),
+            color: (0.5, 0.5, 0.5, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: (
+                inputs: {"Iron Ore": 50, "Copper Ore": 30},
+                crafting_time: 0.0,
+            ),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            PowerConsumer(amount: 50),
+            RecipeCrafter(
+                recipe_name: None,
+                available_recipes: Some([
+                    "Gear",
+                    "Copper Wire",
+                    "Iron Plate",
+                    "Gearbox",
+                    "Electronic Circuit",
+                ]),
+                interval: 1.5
+            ),
+            Inventory(capacity: 100),
+            InventoryType(inv_type: Producer),
+            ViewRange(radius: 2),
+        ]
+    ),
+
 ]

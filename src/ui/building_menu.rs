@@ -1,6 +1,6 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, text::cosmic_text::Change};
 use crate::{
-    grid::{Grid, Position}, materials::{Inventory, RecipeRegistry}, structures::{Building, RecipeCrafter}, systems::Operational, ui::{interaction_handler::{DynamicStyles, InteractiveUI, Selectable}, UISystemSet}
+    grid::{Grid, Position}, materials::{Inventory, RecipeRegistry}, structures::{Building, RecipeCrafter}, systems::Operational, ui::{interaction_handler::{DynamicStyles, InteractiveUI, Selectable}, SelectionBehavior, UISystemSet}
 };
 
 #[derive(Event)]
@@ -40,6 +40,18 @@ pub enum ContentType {
     Status,
     Inventory,
     Crafting,
+}
+
+#[derive(Component)]
+pub struct RecipeSelector {
+    pub target_building: Entity,
+    pub recipe_name: String,
+}
+
+#[derive(Event)]
+pub struct RecipeChangeEvent {
+    pub building_entity: Entity,
+    pub recipe_name: String,
 }
 
 pub fn detect_building_clicks(
@@ -324,7 +336,7 @@ pub fn update_menu_content(
                     },
                     ContentType::Crafting => {
                         if let Ok(crafter) = buildings_crafting.get(menu_content.target_building) {
-                            spawn_crafting_content(parent, crafter, &recipe_registry);
+                            spawn_crafting_content(parent, crafter, &recipe_registry, menu_content.target_building);  // Add building_entity parameter
                             menu_content.last_updated = Some(simple_hash(crafter));
                         }
                     },
@@ -403,52 +415,121 @@ fn spawn_inventory_content(parent: &mut ChildBuilder, inventory: &Inventory) {
     ));
 }
 
-fn spawn_crafting_content(parent: &mut ChildBuilder, crafter: &RecipeCrafter, recipe_registry: &RecipeRegistry) {
-    parent.spawn((
-        Text::new(format!("Recipe: {}", crafter.recipe)),
-        TextFont { font_size: 12.0, ..default() },
-        TextColor(Color::srgb(0.8, 0.8, 0.8)),
-    ));
+fn spawn_crafting_content(parent: &mut ChildBuilder, crafter: &RecipeCrafter, recipe_registry: &RecipeRegistry, building_entity: Entity) {
+    // If this is a multi-recipe building, show recipe selector
+    if crafter.is_multi_recipe() {
+        spawn_recipe_selector(parent, crafter, building_entity);
+    }
 
-    let progress = crafter.timer.elapsed_secs() / crafter.timer.duration().as_secs_f32();
-    let progress_percent = (progress * 100.0) as u32;
-    
-    parent.spawn((
-        Text::new(format!("Progress: {}%", progress_percent)),
-        TextFont { font_size: 12.0, ..default() },
-        TextColor(Color::srgb(0.7, 0.9, 0.7)),
-    ));
+    // Show current recipe info if one is selected
+    if let Some(recipe_name) = crafter.get_active_recipe() {
+        parent.spawn((
+            Text::new(format!("Recipe: {}", recipe_name)),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::srgb(0.8, 0.8, 0.8)),
+        ));
 
-    if let Some(recipe_def) = recipe_registry.get_definition(&crafter.recipe) {
-        if !recipe_def.inputs.is_empty() {
-            parent.spawn((
-                Text::new("Inputs:"),
-                TextFont { font_size: 10.0, ..default() },
-                TextColor(Color::srgb(0.6, 0.6, 0.6)),
-            ));
-            for (item, quantity) in &recipe_def.inputs {
-                parent.spawn((
-                    Text::new(format!("  {} {}", quantity, item)),
-                    TextFont { font_size: 10.0, ..default() },
-                    TextColor(Color::srgb(0.7, 0.7, 0.7)),
-                ));
-            }
-        }
+        let progress = crafter.timer.elapsed_secs() / crafter.timer.duration().as_secs_f32();
+        let progress_percent = (progress * 100.0) as u32;
         
-        if !recipe_def.outputs.is_empty() {
-            parent.spawn((
-                Text::new("Outputs:"),
-                TextFont { font_size: 10.0, ..default() },
-                TextColor(Color::srgb(0.6, 0.6, 0.6)),
-            ));
-            for (item, quantity) in &recipe_def.outputs {
+        parent.spawn((
+            Text::new(format!("Progress: {}%", progress_percent)),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::srgb(0.7, 0.9, 0.7)),
+        ));
+
+        if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+            if !recipe_def.inputs.is_empty() {
                 parent.spawn((
-                    Text::new(format!("  {} {}", quantity, item)),
+                    Text::new("Inputs:"),
                     TextFont { font_size: 10.0, ..default() },
-                    TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                    TextColor(Color::srgb(0.6, 0.6, 0.6)),
                 ));
+                for (item, quantity) in &recipe_def.inputs {
+                    parent.spawn((
+                        Text::new(format!("  {} {}", quantity, item)),
+                        TextFont { font_size: 10.0, ..default() },
+                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                    ));
+                }
+            }
+            
+            if !recipe_def.outputs.is_empty() {
+                parent.spawn((
+                    Text::new("Outputs:"),
+                    TextFont { font_size: 10.0, ..default() },
+                    TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                ));
+                for (item, quantity) in &recipe_def.outputs {
+                    parent.spawn((
+                        Text::new(format!("  {} {}", quantity, item)),
+                        TextFont { font_size: 10.0, ..default() },
+                        TextColor(Color::srgb(0.7, 0.7, 0.7)),
+                    ));
+                }
             }
         }
+    } else if crafter.is_multi_recipe() {
+        parent.spawn((
+            Text::new("No recipe selected"),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::srgb(0.6, 0.6, 0.6)),
+        ));
+    }
+}
+
+fn spawn_recipe_selector(parent: &mut ChildBuilder, crafter: &RecipeCrafter, building_entity: Entity) {
+    parent.spawn((
+        Text::new("Available Recipes:"),
+        TextFont { font_size: 10.0, ..default() },
+        TextColor(Color::srgb(0.6, 0.6, 0.6)),
+        Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() },
+    ));
+
+    // Create recipe selection buttons
+    for recipe_name in &crafter.available_recipes {
+        let is_selected = crafter.get_active_recipe() == Some(recipe_name);
+        
+        let button_styles = InteractiveUI::new()
+            .default(DynamicStyles::new()
+                .with_background(Color::srgb(0.2, 0.2, 0.2))
+                .with_border(Color::srgb(0.4, 0.4, 0.4)))
+            .on_hover(DynamicStyles::new()
+                .with_background(Color::srgb(0.3, 0.3, 0.3))
+                .with_border(Color::srgb(0.6, 0.6, 0.6)))
+            .selected(DynamicStyles::new()
+                .with_background(Color::srgb(0.2, 0.4, 0.2))
+                .with_border(Color::srgb(0.4, 0.8, 0.4)));
+
+       parent.spawn((
+            Button,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(24.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            button_styles,
+            Selectable {
+                is_selected,
+                selection_behavior: SelectionBehavior::Exclusive(format!("recipe_selector_{}", building_entity.index())),
+                selection_group: Some(format!("recipe_selector_{}", building_entity.index())),
+            },
+            RecipeSelector {
+                target_building: building_entity,
+                recipe_name: recipe_name.clone(),
+            },
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(recipe_name.clone()),
+                TextFont { font_size: 11.0, ..default() },
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ));
+        });
     }
 }
 
@@ -465,6 +546,43 @@ pub fn handle_escape_close_menus(
     }
 }
 
+pub fn handle_recipe_selection(
+    recipe_selectors: Query<(Entity, &RecipeSelector, &Selectable), Changed<Selectable>>,
+    mut recipe_change_events: EventWriter<RecipeChangeEvent>,
+    mut previous_states: Local<std::collections::HashMap<Entity, bool>>,
+) {
+    for (entity, selector, selectable) in &recipe_selectors {
+        let was_selected = previous_states.get(&entity).copied().unwrap_or(false);
+        let is_selected = selectable.is_selected;
+        
+        // Only fire event on transition from false to true (edge detection)
+        if !was_selected && is_selected {
+            recipe_change_events.send(RecipeChangeEvent {
+                building_entity: selector.target_building,
+                recipe_name: selector.recipe_name.clone(),
+            });
+        }
+        
+        // Update tracked state for next frame comparison
+        previous_states.insert(entity, is_selected);
+    }
+}
+
+pub fn apply_recipe_changes(
+    mut recipe_events: EventReader<RecipeChangeEvent>,
+    mut buildings: Query<&mut RecipeCrafter, With<Building>>,
+) {
+    for event in recipe_events.read() {
+        if let Ok(mut crafter) = buildings.get_mut(event.building_entity) {
+            if let Err(error) = crafter.set_recipe(event.recipe_name.clone()) {
+                warn!("Failed to set recipe '{}' on building: {}", event.recipe_name, error);
+            } else {
+                info!("Recipe changed to '{}' for building {:?}", event.recipe_name, event.building_entity);
+            }
+        }
+    }
+}
+
 pub struct BuildingMenuPlugin;
 
 impl Plugin for BuildingMenuPlugin {
@@ -472,6 +590,7 @@ impl Plugin for BuildingMenuPlugin {
         app
             .add_event::<BuildingClickEvent>()
             .add_event::<CloseMenuEvent>()
+            .add_event::<RecipeChangeEvent>()  // Add this line
             .add_systems(Update, (
                 (
                     detect_building_clicks,
@@ -482,11 +601,13 @@ impl Plugin for BuildingMenuPlugin {
                     spawn_building_menu,
                     handle_menu_close_buttons_interaction,
                     process_menu_close_events,
+                    handle_recipe_selection,  // Add this line
                 ).in_set(UISystemSet::EntityManagement),
                 
                 (
                     update_menu_positions,
                     update_menu_content,
+                    apply_recipe_changes,  // Add this line
                 ).in_set(UISystemSet::LayoutUpdates),
             ));
     }

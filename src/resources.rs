@@ -56,7 +56,7 @@ pub fn spawn_resource_node(
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
 ) {
     for event in cell_event.read() {
-        let spawn_resource = thread_rng().gen::<f32>() < 0.028;
+        let spawn_resource = thread_rng().gen::<f32>() < 0.038;
         let world_pos = grid.grid_to_world_coordinates(event.x, event.y);
         
         if !spawn_resource {

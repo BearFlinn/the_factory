@@ -189,8 +189,8 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 content.push_str("  - Network connection point\n");
                 has_capabilities = true;
             }
-            BuildingComponentDef::RecipeCrafter { recipe_name, interval } => {
-                content.push_str(&format!("  - Crafts '{}' every {:.1}s\n", recipe_name, interval));
+            BuildingComponentDef::RecipeCrafter { recipe_name, available_recipes: _, interval } => {
+                content.push_str(&format!("  - Crafts '{}' every {:.1}s\n", recipe_name.clone().unwrap_or("Unknown".to_string()), interval));
                 has_capabilities = true;
             }
         }

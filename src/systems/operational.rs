@@ -143,7 +143,10 @@ pub fn update_operational_status(
                 
                 OperationalCondition::HasItems(ref mut status) => {
                     if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
-                        if let Some(recipe) = recipe_registry.get_definition(&crafter.recipe) {
+                        let Some(recipe_name) = crafter.get_active_recipe() else {
+                            continue;
+                        };
+                        if let Some(recipe) = recipe_registry.get_definition(recipe_name) {
                             let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
                                 inventory.has_at_least(item_name, *quantity)
                             });

@@ -16,5 +16,29 @@
     (
         name: "Iron Ingot",
         tier: 1
-    )
+    ),
+    (
+        name: "Copper Ingot",
+        tier: 1
+    ),
+    (
+        name: "Gear",
+        tier: 2
+    ),
+    (
+        name: "Copper Wire",
+        tier: 2
+    ),
+    (
+        name: "Iron Plate",
+        tier: 2
+    ),
+    (
+        name: "Gearbox",
+        tier: 3
+    ),
+    (
+        name: "Electronic Circuit",
+        tier: 3
+    ),
 ]

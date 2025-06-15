@@ -22,7 +22,42 @@ pub struct ViewRange {
 #[derive(Component, Debug)]
 pub struct RecipeCrafter {
     pub timer: Timer,
-    pub recipe: RecipeName,
+    pub current_recipe: Option<RecipeName>,  // Currently selected recipe
+    pub available_recipes: Vec<RecipeName>,  // Available recipes (empty for single-recipe buildings)
+}
+
+impl RecipeCrafter {
+    // Helper method to check if this is a single-recipe crafter
+    pub fn is_single_recipe(&self) -> bool {
+        self.available_recipes.is_empty()
+    }
+    
+    // Helper method to check if this is a multi-recipe crafter  
+    pub fn is_multi_recipe(&self) -> bool {
+        !self.available_recipes.is_empty()
+    }
+    
+    // Helper method to get the active recipe (for compatibility)
+    pub fn get_active_recipe(&self) -> Option<&RecipeName> {
+        self.current_recipe.as_ref()
+    }
+    
+    // Helper method to set the current recipe (validates against available recipes)
+    pub fn set_recipe(&mut self, recipe_name: RecipeName) -> Result<(), String> {
+        if self.is_single_recipe() {
+            // For single-recipe crafters, just set it directly
+            self.current_recipe = Some(recipe_name);
+            Ok(())
+        } else {
+            // For multi-recipe crafters, validate against available recipes
+            if self.available_recipes.contains(&recipe_name) {
+                self.current_recipe = Some(recipe_name);
+                Ok(())
+            } else {
+                Err(format!("Recipe '{}' not available for this crafter", recipe_name))
+            }
+        }
+    }
 }
 
 #[derive(Component)]
@@ -395,6 +430,7 @@ pub fn monitor_construction_progress(
     }
 }
 
+
 pub fn assign_drill_recipes(
     mut commands: Commands,
     mut drills: Query<(Entity, &mut RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
@@ -406,10 +442,15 @@ pub fn assign_drill_recipes(
             .iter()
             .find(|(_, pos)| pos.x == pending.position.x && pos.y == pending.position.y)
         {
-            recipe_crafter.recipe = resource_recipe.recipe_name.clone();
-            commands.entity(drill_entity).remove::<PendingDrillRecipeAssignment>();
-            println!("Assigned recipe '{}' to drill at ({}, {})", 
-                     resource_recipe.recipe_name, pending.position.x, pending.position.y);
+            // Use the new set_recipe method to assign the recipe
+            if let Err(error) = recipe_crafter.set_recipe(resource_recipe.recipe_name.clone()) {
+                println!("Failed to assign recipe to drill at ({}, {}): {}", 
+                         pending.position.x, pending.position.y, error);
+            } else {
+                commands.entity(drill_entity).remove::<PendingDrillRecipeAssignment>();
+                println!("Assigned recipe '{}' to drill at ({}, {})", 
+                         resource_recipe.recipe_name, pending.position.x, pending.position.y);
+            }
         }
     }
 }

@@ -68,7 +68,11 @@ pub enum BuildingComponentDef {
     InventoryType { inv_type: InventoryTypes },
     ViewRange { radius: i32 },
     NetWorkComponent,
-    RecipeCrafter { recipe_name: String, interval: f32 },
+    RecipeCrafter { 
+        recipe_name: Option<String>,           // For single-recipe buildings
+        available_recipes: Option<Vec<String>>, // For multi-recipe buildings  
+        interval: f32 
+    },
 }
 
 #[derive(Resource)]
@@ -181,11 +185,30 @@ impl BuildingRegistry {
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
                 }
-                BuildingComponentDef::RecipeCrafter { recipe_name, interval } => {
+               BuildingComponentDef::RecipeCrafter { recipe_name, available_recipes, interval } => {
+                    let (current_recipe, available_recipes_vec) = match (recipe_name, available_recipes) {
+                        // Single-recipe crafter: fixed recipe, empty available list
+                        (Some(recipe), None) => (Some(recipe.clone()), Vec::new()),
+                        
+                        // Multi-recipe crafter: no current recipe, provided available list
+                        (None, Some(recipes)) => (None, recipes.clone()),
+                        
+                        // Invalid configurations - handle gracefully
+                        (Some(recipe), Some(recipes)) => {
+                            // If both are provided, treat as multi-recipe with the single recipe pre-selected
+                            // This provides a migration path for existing configurations
+                            (Some(recipe.clone()), recipes.clone())
+                        },
+                        
+                        // Neither provided - create empty crafter (should probably be avoided)
+                        (None, None) => (None, Vec::new()),
+                    };
+                    
                     entity_commands.insert(RecipeCrafter { 
-                        recipe: recipe_name.clone(),
+                        current_recipe,
+                        available_recipes: available_recipes_vec,
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
-                     });
+                    });
                 }
             }
         }

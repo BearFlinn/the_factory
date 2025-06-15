@@ -65,7 +65,8 @@ impl Plugin for BuildingsPlugin {
                     .in_set(BuildingSystemSet::Placement),
                 (
                 update_recipe_crafters, 
-                crafter_logistics_requests
+                crafter_logistics_requests,
+                handle_recipe_selection_logistics,
                 ).chain()
                     .in_set(BuildingSystemSet::Operations),
             ));
