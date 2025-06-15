@@ -64,11 +64,13 @@ impl Plugin for BuildingsPlugin {
                 remove_building
                 ).chain()
                     .in_set(BuildingSystemSet::Placement),
-                (
+                ((
                 update_recipe_crafters, 
                 crafter_logistics_requests,
                 handle_recipe_selection_logistics,
-                ).chain()
+                ).chain(),
+                handle_progressive_scanning
+                )
                     .in_set(BuildingSystemSet::Operations),
             ));
     }

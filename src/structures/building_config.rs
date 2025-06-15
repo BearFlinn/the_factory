@@ -73,6 +73,10 @@ pub enum BuildingComponentDef {
         available_recipes: Option<Vec<String>>, // For multi-recipe buildings  
         interval: f32 
     },
+    Scanner { 
+        max_radius: i32, 
+        scan_interval_secs: f32 
+    },
 }
 
 #[derive(Resource)]
@@ -182,7 +186,7 @@ impl BuildingRegistry {
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
                 }
-               BuildingComponentDef::RecipeCrafter { recipe_name, available_recipes, interval } => {
+                BuildingComponentDef::RecipeCrafter { recipe_name, available_recipes, interval } => {
                     let (current_recipe, available_recipes_vec) = match (recipe_name, available_recipes) {
                         // Single-recipe crafter: fixed recipe, empty available list
                         (Some(recipe), None) => (Some(recipe.clone()), Vec::new()),
@@ -206,6 +210,13 @@ impl BuildingRegistry {
                         available_recipes: available_recipes_vec,
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                     });
+                }
+                BuildingComponentDef::Scanner { max_radius, scan_interval_secs } => {
+                    entity_commands.insert(Scanner::new(
+                        *max_radius, 
+                        *scan_interval_secs, 
+                        Position { x: grid_x, y: grid_y }
+                    ));
                 }
             }
         }

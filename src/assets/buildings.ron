@@ -61,7 +61,8 @@
         ),
         components: [
             PowerConsumer(amount: 30),
-            ViewRange(radius: 10),
+            ViewRange(radius: 3),
+            Scanner(max_radius: 15, scan_interval_secs: 5)
         ]
     ),
 

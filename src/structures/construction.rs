@@ -97,6 +97,29 @@ pub struct MultiCellBuilding {
 pub struct NetWorkComponent;
 
 #[derive(Component)]
+pub struct Scanner {
+    pub current_radius: i32,     // Current revealed radius
+    pub max_radius: i32,         // Maximum radius to reveal  
+    pub scan_timer: Timer,       // Timer for scanning intervals
+    pub position: Position,      // Cached position for efficiency
+}
+
+impl Scanner {
+    pub fn new(max_radius: i32, scan_interval_secs: f32, position: Position) -> Self {
+        Self {
+            current_radius: 0,
+            max_radius,
+            scan_timer: Timer::from_seconds(scan_interval_secs, TimerMode::Repeating),
+            position,
+        }
+    }
+    
+    pub fn is_complete(&self) -> bool {
+        self.current_radius >= self.max_radius
+    }
+}
+
+#[derive(Component)]
 pub struct PendingDrillRecipeAssignment {
     pub position: Position,
 }
@@ -466,6 +489,35 @@ pub fn handle_building_view_range_expansion(
             
             println!("Expanding grid for building at ({}, {}) with radius {}", 
                      position.x, position.y, view_range.radius);
+        }
+    }
+}
+
+pub fn handle_progressive_scanning(
+    mut scanners: Query<&mut Scanner, With<Building>>,
+    mut expand_events: EventWriter<ExpandGridEvent>,
+    time: Res<Time>,
+) {
+    for mut scanner in scanners.iter_mut() {
+        if scanner.is_complete() {
+            continue;
+        }
+        
+        scanner.scan_timer.tick(time.delta());
+        
+        if scanner.scan_timer.just_finished() {
+            scanner.current_radius += 1;
+            
+            // Send expand event for just the new ring
+            expand_events.send(ExpandGridEvent {
+                center_x: scanner.position.x,
+                center_y: scanner.position.y, 
+                radius: scanner.current_radius,
+            });
+            
+            println!("Scanner at ({}, {}) revealed radius {} / {}", 
+                     scanner.position.x, scanner.position.y, 
+                     scanner.current_radius, scanner.max_radius);
         }
     }
 }
