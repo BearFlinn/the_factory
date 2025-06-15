@@ -82,7 +82,6 @@ pub fn spawn_resource_node(
             .insert(Transform::from_xyz(world_pos.x, world_pos.y, 0.2)).id();
 
         cell_children.0.push(resource_node);
-        eprintln!("spawned resource node at ({}, {})", event.x, event.y);
     }
 }
 

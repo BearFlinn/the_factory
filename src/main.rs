@@ -21,19 +21,10 @@ use systems::SystemsPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GameplaySet {
-    /// Core grid operations - must run first
     GridUpdate,
-    
-    /// Resource spawning - depends on grid events
     ResourceSpawning,
-    
-    /// Infrastructure systems - power, compute, network, operational status
     SystemsUpdate,
-    
-    /// Domain operations - buildings and workers (can run in parallel)
     DomainOperations,
-    
-    /// UI updates - should run after core gameplay
     UIUpdate,
 }
 

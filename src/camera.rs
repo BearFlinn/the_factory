@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use bevy::input::mouse::{MouseWheel, MouseMotion};
+use bevy::input::mouse::MouseWheel;
 
-use crate::ui::SelectedBuilding;
 
 #[derive(Component)]
 pub struct GameCamera {
@@ -26,24 +25,11 @@ impl Default for GameCamera {
     }
 }
 
-#[derive(Resource, Default)]
-pub struct CameraInput {
-    pub is_dragging: bool,
-    pub last_mouse_position: Option<Vec2>,
-}
-
-#[derive(Resource, Default)]
-pub struct CameraControl {
-    pub panning_enabled: bool,
-}
-
 pub fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera2d::default(),
         GameCamera::default(),
     ));
-    commands.insert_resource(CameraInput::default());
-    commands.insert_resource(CameraControl { panning_enabled: true });
 }
 
 pub fn handle_camera_keyboard_input(
@@ -106,59 +92,6 @@ pub fn handle_camera_keyboard_input(
     camera_transform.translation += game_camera.velocity.extend(0.0) * delta_time;
 }
 
-pub fn handle_camera_mouse_drag(
-    mut camera_input: ResMut<CameraInput>,
-    camera_control: Res<CameraControl>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    mut mouse_motion: EventReader<MouseMotion>,
-    windows: Query<&Window>,
-    mut camera_transform_query: Query<&mut Transform, With<Camera2d>>,
-    projection_query: Query<&OrthographicProjection, With<Camera2d>>,
-) {
-    // Early exit if panning is disabled
-    if !camera_control.panning_enabled {
-        camera_input.is_dragging = false;
-        camera_input.last_mouse_position = None;
-        return;
-    }
-
-    let Ok(window) = windows.get_single() else {
-        return;
-    };
-    
-    let Ok(mut camera_transform) = camera_transform_query.get_single_mut() else {
-        return;
-    };
-
-    let Ok(projection) = projection_query.get_single() else {
-        return;
-    };
-
-    // Handle mouse drag start/end
-    if mouse_button.just_pressed(MouseButton::Left) {
-        camera_input.is_dragging = true;
-        camera_input.last_mouse_position = window.cursor_position();
-    }
-    
-    if mouse_button.just_released(MouseButton::Left) {
-        camera_input.is_dragging = false;
-        camera_input.last_mouse_position = None;
-    }
-
-    // Handle dragging
-    if camera_input.is_dragging {
-        for motion in mouse_motion.read() {
-            // Convert mouse delta to world space
-            let screen_to_world_scale = projection.scale;
-            
-            // Invert the motion (drag left should move camera right to make world appear to move left)
-            let world_delta = Vec2::new(-motion.delta.x, motion.delta.y) * screen_to_world_scale;
-            
-            camera_transform.translation += world_delta.extend(0.0);
-        }
-    }
-}
-
 pub fn handle_camera_zoom(
     mut mouse_wheel: EventReader<MouseWheel>,
     windows: Query<&Window>,
@@ -217,22 +150,6 @@ pub fn handle_camera_zoom(
     }
 }
 
-pub fn update_camera_control(
-    mut camera_control: ResMut<CameraControl>,
-    selected_building: Res<SelectedBuilding>,
-    ui_interactions: Query<&Interaction, With<Button>>,
-) {
-    // Disable panning if any UI element is being interacted with
-    let ui_active = ui_interactions.iter().any(|interaction| {
-        matches!(interaction, Interaction::Pressed | Interaction::Hovered)
-    });
-    
-    // Disable panning if a building is selected for placement
-    let building_selected = selected_building.building_name.is_some();
-    
-    camera_control.panning_enabled = !ui_active && !building_selected;
-}
-
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
@@ -240,9 +157,7 @@ impl Plugin for CameraPlugin {
         app
             .add_systems(Startup, setup_camera)
             .add_systems(Update, (
-                update_camera_control,
                 handle_camera_keyboard_input,
-                handle_camera_mouse_drag,
                 handle_camera_zoom,
             ));
     }
