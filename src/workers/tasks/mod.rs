@@ -27,6 +27,7 @@ impl Plugin for TasksPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_event::<WorkerInterruptEvent>()
+            .init_resource::<ProactiveTaskTimer>()
             .configure_sets(Update, (
                 TaskSystemSet::Interrupts,
                 TaskSystemSet::Assignment, 
@@ -50,7 +51,7 @@ impl Plugin for TasksPlugin {
                     .in_set(TaskSystemSet::Processing),
                 
                 // Task generation from external requests - UPDATED to include construction logistics
-                (create_logistics_tasks, create_construction_logistics_tasks, clear_all_tasks)
+                (create_logistics_tasks, create_construction_logistics_tasks, create_proactive_tasks, clear_all_tasks)
                     .in_set(TaskSystemSet::Generation),
                 
                 // Cleanup systems
