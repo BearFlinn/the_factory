@@ -175,6 +175,28 @@ pub fn handle_grid_expansion(
     }
 }
 
+#[derive(Event)]
+pub struct ExpandGridCellsEvent {
+    pub coordinates: Vec<(i32, i32)>,
+}
+
+pub fn handle_grid_cells_expansion(
+    mut commands: Commands,
+    mut expand_events: EventReader<ExpandGridCellsEvent>,
+    mut grid: ResMut<Grid>,
+    mut cell_event: EventWriter<NewCellEvent>,
+) {
+    for event in expand_events.read() {
+        for (x, y) in &event.coordinates {
+            if !grid.valid_coordinates.contains(&(*x, *y)) {
+                grid.add_coordinate(*x, *y);
+                spawn_cell(&mut commands, &grid, *x, *y);
+                cell_event.send(NewCellEvent { x: *x, y: *y });
+            }
+        }
+    }
+}
+
 pub struct GridPlugin;
 
 impl Plugin for GridPlugin {
@@ -182,10 +204,11 @@ impl Plugin for GridPlugin {
         app
             .add_event::<NewCellEvent>()
             .add_event::<ExpandGridEvent>()
+            .add_event::<ExpandGridCellsEvent>()
             .add_systems(Startup, (
                 setup_grid,
                 spawn_grid,
             ).chain())
-            .add_systems(Update, handle_grid_expansion);
+            .add_systems(Update, (handle_grid_expansion, handle_grid_cells_expansion));
     }
 }

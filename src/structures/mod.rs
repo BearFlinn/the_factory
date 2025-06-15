@@ -68,8 +68,7 @@ impl Plugin for BuildingsPlugin {
                 update_recipe_crafters, 
                 crafter_logistics_requests,
                 handle_recipe_selection_logistics,
-                ).chain(),
-                handle_progressive_scanning
+                ).chain()
                 )
                     .in_set(BuildingSystemSet::Operations),
             ));

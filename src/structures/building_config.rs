@@ -2,7 +2,7 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{materials::RecipeDef, systems::OperationalCondition};
+use crate::{materials::RecipeDef, systems::{OperationalCondition, Scanner}};
 pub use crate::{
     grid::{Position, Layer},
     systems::Operational,

@@ -4,12 +4,14 @@ pub mod compute;
 pub mod network;
 pub mod operational;
 pub mod display;
+pub mod scanning;
 
 pub use power::*;
 pub use compute::*;
 pub use network::*;
 pub use operational::*;
 pub use display::*;
+pub use scanning::*;
 
 use bevy::prelude::*;
 
@@ -35,7 +37,16 @@ impl Plugin for SystemsPlugin {
                 SystemsSet::Display,
             ).chain().in_set(crate::GameplaySet::SystemsUpdate))
             .add_systems(Update, (
-                (update_power_grid, update_compute, update_network_connectivity)
+                ((
+                update_power_grid, 
+                update_compute, 
+                update_network_connectivity
+                ),
+                (
+                initialize_new_scanners,
+                handle_progressive_scanning
+                ).chain()
+                )
                     .in_set(SystemsSet::Infrastructure),
                 
                 (
