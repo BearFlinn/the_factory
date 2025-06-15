@@ -122,7 +122,7 @@ impl BuildingRegistry {
         grid_x: i32,
         grid_y: i32,
         world_pos: Vec2,
-    ) -> Option<(Entity, i32)> {
+    ) -> Option<Entity> {
         let def = self.get_definition(building_name)?;
         let mut entity_commands = commands.spawn((
             Building,
@@ -156,8 +156,6 @@ impl BuildingRegistry {
             });
         }
 
-        let mut view_radius = 0;
-
         for component in &def.components {
             match component {
                 BuildingComponentDef::PowerConsumer { amount } => {
@@ -180,7 +178,6 @@ impl BuildingRegistry {
                 }
                 BuildingComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
-                    view_radius = *radius;
                 }
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
@@ -214,6 +211,6 @@ impl BuildingRegistry {
         }
 
         let entity = entity_commands.id();
-        Some((entity, view_radius))
+        Some(entity)
     }
 }

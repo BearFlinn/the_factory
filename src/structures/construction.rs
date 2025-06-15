@@ -14,7 +14,6 @@ pub use crate::{
 pub struct Building;
 
 #[derive(Component)]
-#[allow(dead_code)] // TODO: Figure out if this is needed
 pub struct ViewRange {
     pub radius: i32,
 }
@@ -256,21 +255,13 @@ pub fn monitor_construction_completion(
             }
 
             // Spawn actual building
-            if let Some((building_entity, view_radius)) = registry.spawn_building(
+            if let Some(building_entity) = registry.spawn_building(
                 &mut commands,
                 &construction_site.building_name,
                 position.x,
                 position.y,
                 transform.translation.truncate(),
             ) {
-                if view_radius > 0 {
-                    expand_events.send(ExpandGridEvent {
-                        center_x: position.x,
-                        center_y: position.y,
-                        radius: view_radius,
-                    });
-                }
-
                 // Set drill recipe
                 if &construction_site.building_name == MINING_DRILL {
                     commands.entity(building_entity).insert(PendingDrillRecipeAssignment {
@@ -459,4 +450,22 @@ pub fn drill_awaiting_assignment(
     drills: Query<(&RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
 ) -> bool {
     !drills.is_empty()
+}
+
+pub fn handle_building_view_range_expansion(
+    buildings_with_view_range: Query<(&ViewRange, &Position), Added<Building>>,
+    mut expand_events: EventWriter<ExpandGridEvent>,
+) {
+    for (view_range, position) in buildings_with_view_range.iter() {
+        if view_range.radius > 0 {
+            expand_events.send(ExpandGridEvent {
+                center_x: position.x,
+                center_y: position.y,
+                radius: view_range.radius,
+            });
+            
+            println!("Expanding grid for building at ({}, {}) with radius {}", 
+                     position.x, position.y, view_range.radius);
+        }
+    }
 }
