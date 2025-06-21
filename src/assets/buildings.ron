@@ -63,7 +63,7 @@
             PowerConsumer(amount: 30),
             ComputeConsumer(amount: 20),
             ViewRange(radius: 3),
-            Scanner(max_radius: 15, scan_interval_secs: 2)
+            Scanner(base_scan_interval: 0.5)  // Changed from max_radius + scan_interval_secs to just base_scan_interval
         ]
     ),
 

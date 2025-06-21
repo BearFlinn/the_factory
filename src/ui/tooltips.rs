@@ -193,8 +193,8 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 content.push_str(&format!("  - Crafts '{}' every {:.1}s\n", recipe_name.clone().unwrap_or("Unknown".to_string()), interval));
                 has_capabilities = true;
             }
-            BuildingComponentDef::Scanner { max_radius, scan_interval_secs } => {
-                content.push_str(&format!("  - Reveals a ring of new cells within {} tiles every {:.1}s\n", max_radius, scan_interval_secs));
+            BuildingComponentDef::Scanner { base_scan_interval } => {
+                content.push_str(&format!("Reveals new tiles every {:.1}s, scales with distance\n", base_scan_interval));
                 has_capabilities = true;
             }
         }

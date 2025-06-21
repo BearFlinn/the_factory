@@ -69,13 +69,12 @@ pub enum BuildingComponentDef {
     ViewRange { radius: i32 },
     NetWorkComponent,
     RecipeCrafter { 
-        recipe_name: Option<String>,           // For single-recipe buildings
-        available_recipes: Option<Vec<String>>, // For multi-recipe buildings  
+        recipe_name: Option<String>,           
+        available_recipes: Option<Vec<String>>, 
         interval: f32 
     },
     Scanner { 
-        max_radius: i32, 
-        scan_interval_secs: f32 
+        base_scan_interval: f32  // Removed max_radius, simplified to just timing
     },
 }
 
@@ -211,10 +210,9 @@ impl BuildingRegistry {
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                     });
                 }
-                BuildingComponentDef::Scanner { max_radius, scan_interval_secs } => {
+                BuildingComponentDef::Scanner { base_scan_interval } => {
                     entity_commands.insert(Scanner::new(
-                        *max_radius, 
-                        *scan_interval_secs, 
+                        *base_scan_interval, 
                         Position { x: grid_x, y: grid_y }
                     ));
                 }
