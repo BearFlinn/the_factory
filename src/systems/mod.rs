@@ -43,7 +43,6 @@ impl Plugin for SystemsPlugin {
                 update_network_connectivity
                 ),
                 (
-                initialize_new_scanners,
                 handle_progressive_scanning
                 ).chain()
                 )
