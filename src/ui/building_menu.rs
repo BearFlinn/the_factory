@@ -590,7 +590,7 @@ impl Plugin for BuildingMenuPlugin {
         app
             .add_event::<BuildingClickEvent>()
             .add_event::<CloseMenuEvent>()
-            .add_event::<RecipeChangeEvent>()  // Add this line
+            .add_event::<RecipeChangeEvent>()
             .add_systems(Update, (
                 (
                     detect_building_clicks,
@@ -601,13 +601,13 @@ impl Plugin for BuildingMenuPlugin {
                     spawn_building_menu,
                     handle_menu_close_buttons_interaction,
                     process_menu_close_events,
-                    handle_recipe_selection,  // Add this line
+                    handle_recipe_selection,
                 ).in_set(UISystemSet::EntityManagement),
                 
                 (
                     update_menu_positions,
                     update_menu_content,
-                    apply_recipe_changes,  // Add this line
+                    apply_recipe_changes,
                 ).in_set(UISystemSet::LayoutUpdates),
             ));
     }

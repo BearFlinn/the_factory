@@ -1,3 +1,21 @@
 /target
 /.VSCodeCounter
 /archive
+
+# Rust build artifacts
+Cargo.lock
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor backup files
+*~
+*.bak

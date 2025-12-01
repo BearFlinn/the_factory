@@ -109,21 +109,44 @@ pub fn crafter_logistics_requests(
                 // Only process logistics if a recipe is selected
                 if let Some(recipe_name) = crafter.get_active_recipe() {
                     if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
-                        let required_items: HashMap<_, _> = recipe_def.inputs.iter()
-                            .map(|(item, quantity)| (item.clone(), quantity * 10))
-                            .collect();
+                        // Calculate what we actually need (smart requesting)
+                        let mut needed_items = HashMap::new();
+                        let mut total_needed = 0u32;
                         
-                        if !inventory.has_items_for_recipe(&required_items) && 
-                        !existing_priorities.contains(&Priority::Medium) {
+                        for (item_name, &recipe_quantity) in &recipe_def.inputs {
+                            let current_quantity = inventory.get_item_quantity(item_name);
+                            let target_quantity = recipe_quantity * 10; // Desired buffer
+                            
+                            if current_quantity < target_quantity {
+                                let needed = target_quantity - current_quantity;
+                                // Respect inventory capacity limits
+                                let available_space = inventory.capacity.saturating_sub(inventory.get_total_quantity());
+                                let feasible_amount = needed.min(available_space.saturating_sub(total_needed));
+                                
+                                if feasible_amount > 0 {
+                                    needed_items.insert(item_name.clone(), feasible_amount);
+                                    total_needed += feasible_amount;
+                                }
+                            }
+                            
+                            // Stop if we've filled the available space
+                            if total_needed >= inventory.capacity.saturating_sub(inventory.get_total_quantity()) {
+                                break;
+                            }
+                        }
+                        
+                        // Only request if we actually need something and don't have existing tasks
+                        if !needed_items.is_empty() && !existing_priorities.contains(&Priority::Medium) {
                             events.send(CrafterLogisticsRequest {
                                 crafter: crafter_entity,
                                 position: position.clone(),
-                                needs: Some(required_items),
+                                needs: Some(needed_items),
                                 has: None,
                                 priority: Priority::Medium,
                             });
                         }
                         
+                        // Handle output removal (unchanged)
                         let produced_items = inventory.recipe_output_amounts(&recipe_def.outputs);
 
                         if produced_items.values().sum::<u32>() >= WORKER_CAPACITY && !existing_priorities.contains(&Priority::Medium) {
