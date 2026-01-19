@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub use crate::{
     grid::{Layer, Position},
-    materials::items::{Inventory, InventoryType, InventoryTypes},
+    materials::items::{InputBuffer, Inventory, InventoryType, InventoryTypes, OutputBuffer},
     structures::*,
     systems::Operational,
 };
@@ -90,6 +90,19 @@ pub enum BuildingComponentDef {
     Scanner {
         base_scan_interval: f32, // Removed max_radius, simplified to just timing
     },
+    // New buffer-based components for the inventory refactor
+    InputBuffer {
+        capacity: u32,
+        request_threshold: f32, // Request more when below this % (0.0-1.0)
+    },
+    OutputBuffer {
+        capacity: u32,
+        offer_threshold: f32, // Offer items when above this % (0.0-1.0)
+    },
+    // Building archetype markers
+    Source,    // Mining Drill - output only (produces items)
+    Processor, // Smelter, Assembler - input + output (transforms items)
+    Sink,      // Generator - input only (consumes for non-item output)
 }
 
 #[derive(Resource)]
@@ -132,6 +145,9 @@ impl BuildingRegistry {
         Some(def.name.clone())
     }
 
+    // The line count is high due to the match statement mapping config variants to components.
+    // Each arm is simple and the structure is readable despite the length.
+    #[allow(clippy::too_many_lines)]
     pub fn spawn_building(
         &self,
         commands: &mut Commands,
@@ -240,6 +256,29 @@ impl BuildingRegistry {
                             y: grid_y,
                         },
                     ));
+                }
+                // New buffer-based components
+                BuildingComponentDef::InputBuffer {
+                    capacity,
+                    request_threshold,
+                } => {
+                    entity_commands.insert(InputBuffer::new(*capacity, *request_threshold));
+                }
+                BuildingComponentDef::OutputBuffer {
+                    capacity,
+                    offer_threshold,
+                } => {
+                    entity_commands.insert(OutputBuffer::new(*capacity, *offer_threshold));
+                }
+                // Building archetype markers
+                BuildingComponentDef::Source => {
+                    entity_commands.insert(Source);
+                }
+                BuildingComponentDef::Processor => {
+                    entity_commands.insert(Processor);
+                }
+                BuildingComponentDef::Sink => {
+                    entity_commands.insert(Sink);
                 }
             }
         }

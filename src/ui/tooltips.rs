@@ -143,6 +143,9 @@ fn spawn_tooltip(commands: &mut Commands, content: String, position: Vec2) {
         });
 }
 
+// The line count is high due to the match statement mapping component types to descriptions.
+// Each arm is simple and the structure is readable despite the length.
+#[allow(clippy::too_many_lines)]
 fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> String {
     use std::fmt::Write;
 
@@ -224,6 +227,40 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                     content,
                     "Reveals new tiles every {base_scan_interval:.1}s, scales with distance"
                 );
+                has_capabilities = true;
+            }
+            BuildingComponentDef::InputBuffer {
+                capacity,
+                request_threshold,
+            } => {
+                let threshold_pct = request_threshold * 100.0;
+                let _ = writeln!(
+                    content,
+                    "  - Input buffer: {capacity} (requests below {threshold_pct:.0}%)"
+                );
+                has_capabilities = true;
+            }
+            BuildingComponentDef::OutputBuffer {
+                capacity,
+                offer_threshold,
+            } => {
+                let threshold_pct = offer_threshold * 100.0;
+                let _ = writeln!(
+                    content,
+                    "  - Output buffer: {capacity} (offers above {threshold_pct:.0}%)"
+                );
+                has_capabilities = true;
+            }
+            BuildingComponentDef::Source => {
+                content.push_str("  - Source: Produces items\n");
+                has_capabilities = true;
+            }
+            BuildingComponentDef::Processor => {
+                content.push_str("  - Processor: Transforms items\n");
+                has_capabilities = true;
+            }
+            BuildingComponentDef::Sink => {
+                content.push_str("  - Sink: Consumes items\n");
                 has_capabilities = true;
             }
         }

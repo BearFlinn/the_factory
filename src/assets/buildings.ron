@@ -20,6 +20,9 @@
             InventoryType(inv_type: Sender),
             ViewRange(radius: 2),
             RecipeCrafter(recipe_name: None, available_recipes: None, interval: 1.0),
+            // New buffer-based components
+            Source,
+            OutputBuffer(capacity: 100, offer_threshold: 0.2),
         ]
     ),
     
@@ -88,6 +91,9 @@
             Inventory(capacity: 100),
             InventoryType(inv_type: Requester),
             ViewRange(radius: 2),
+            // New buffer-based components
+            Sink,
+            InputBuffer(capacity: 100, request_threshold: 0.5),
         ]
     ),
     
@@ -134,6 +140,10 @@
             Inventory(capacity: 100),
             InventoryType(inv_type: Producer),
             ViewRange(radius: 2),
+            // New buffer-based components
+            Processor,
+            InputBuffer(capacity: 50, request_threshold: 0.3),
+            OutputBuffer(capacity: 50, offer_threshold: 0.2),
         ]
     ),
     
@@ -189,6 +199,10 @@
             Inventory(capacity: 100),
             InventoryType(inv_type: Producer),
             ViewRange(radius: 2),
+            // New buffer-based components
+            Processor,
+            InputBuffer(capacity: 50, request_threshold: 0.3),
+            OutputBuffer(capacity: 50, offer_threshold: 0.2),
         ]
     ),
 
