@@ -68,7 +68,9 @@ impl Plugin for BuildingsPlugin {
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
             .add_event::<CrafterLogisticsRequest>()
+            .add_event::<BufferLogisticsRequest>()
             .add_event::<ConstructionMaterialRequest>()
+            .init_resource::<LogisticsPlannerTimer>()
             .add_systems(Startup, (setup, place_hub).chain())
             .add_systems(
                 Update,
@@ -92,9 +94,10 @@ impl Plugin for BuildingsPlugin {
                         update_processor_crafters,
                         update_source_crafters,
                         update_sink_crafters,
-                        // Logistics request systems
+                        // Logistics request systems (legacy reactive + new polling)
                         crafter_logistics_requests,
                         handle_recipe_selection_logistics,
+                        poll_buffer_logistics,
                     )
                         .chain())
                     .in_set(BuildingSystemSet::Operations),

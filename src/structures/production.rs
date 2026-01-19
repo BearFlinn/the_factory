@@ -388,3 +388,215 @@ pub fn handle_recipe_selection_logistics(
         }
     }
 }
+
+// ============================================================================
+// Polling-Based Buffer Logistics System
+// ============================================================================
+// Replaces the reactive Changed<Inventory> approach with declarative polling.
+// This evaluates buffer states holistically and avoids race conditions.
+
+/// Event for requesting logistics operations between buffer-based buildings.
+/// Unlike `CrafterLogisticsRequest`, this is designed for the new buffer system.
+#[derive(Event)]
+pub struct BufferLogisticsRequest {
+    /// Entity that needs items (has `InputBuffer` below threshold) or `None` for offers.
+    pub requester: Option<Entity>,
+    /// Entity that has items to offer (has `OutputBuffer` above threshold) or `None` for requests.
+    pub offerer: Option<Entity>,
+    /// Position for pathfinding (requester position for requests, offerer for offers).
+    pub position: Position,
+    /// Items being requested or offered.
+    pub items: HashMap<ItemName, u32>,
+    /// Task priority.
+    pub priority: Priority,
+}
+
+/// Timer resource for polling buffer logistics at regular intervals.
+#[derive(Resource)]
+pub struct LogisticsPlannerTimer {
+    pub timer: Timer,
+}
+
+impl Default for LogisticsPlannerTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+        }
+    }
+}
+
+/// Polls buffer states and emits logistics requests.
+/// Runs on a timer rather than reactively to avoid race conditions and evaluate
+/// the system state holistically.
+// Multiple queries are needed to handle different building archetypes and check existing tasks.
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::type_complexity,
+    clippy::too_many_arguments
+)]
+pub fn poll_buffer_logistics(
+    time: Res<Time>,
+    mut timer: ResMut<LogisticsPlannerTimer>,
+    // Query for buildings with OutputBuffers that might have items to offer
+    output_buffers: Query<(Entity, &Position, &OutputBuffer), Without<InputBuffer>>,
+    // Query for buildings with InputBuffers that might need items
+    input_buffers: Query<(Entity, &Position, &InputBuffer, Option<&RecipeCrafter>)>,
+    // Query for Processor buildings (have both buffers)
+    processors: Query<
+        (
+            Entity,
+            &Position,
+            &InputBuffer,
+            &OutputBuffer,
+            Option<&RecipeCrafter>,
+        ),
+        With<Processor>,
+    >,
+    // Check existing tasks to avoid duplicates
+    tasks: Query<&TaskTarget, With<Task>>,
+    recipe_registry: Res<RecipeRegistry>,
+    mut events: EventWriter<BufferLogisticsRequest>,
+) {
+    if !timer.timer.tick(time.delta()).just_finished() {
+        return;
+    }
+
+    let existing_targets: std::collections::HashSet<Entity> =
+        tasks.iter().map(|target| target.0).collect();
+
+    // Collect offers from OutputBuffers above threshold
+    let mut offers: Vec<(Entity, Position, HashMap<ItemName, u32>)> = Vec::new();
+
+    // Source buildings (output only)
+    for (entity, position, output_buffer) in &output_buffers {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if output_buffer.has_items_to_offer() {
+            let items = output_buffer.inventory.get_all_items();
+            if !items.is_empty() {
+                offers.push((entity, *position, items));
+            }
+        }
+    }
+
+    // Processor buildings (output buffer part)
+    for (entity, position, _, output_buffer, _) in &processors {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if output_buffer.has_items_to_offer() {
+            let items = output_buffer.inventory.get_all_items();
+            if !items.is_empty() {
+                offers.push((entity, *position, items));
+            }
+        }
+    }
+
+    // Collect requests from InputBuffers below threshold
+    let mut requests: Vec<(Entity, Position, HashMap<ItemName, u32>)> = Vec::new();
+
+    // Sink buildings (input only) and other input-buffer buildings
+    for (entity, position, input_buffer, maybe_crafter) in &input_buffers {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if !input_buffer.needs_items() {
+            continue;
+        }
+
+        // If building has a recipe, request recipe inputs
+        if let Some(crafter) = maybe_crafter {
+            if let Some(recipe_name) = crafter.get_active_recipe() {
+                if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+                    let needed = calculate_buffer_needs(input_buffer, &recipe_def.inputs);
+                    if !needed.is_empty() {
+                        requests.push((entity, *position, needed));
+                    }
+                }
+            }
+        }
+    }
+
+    // Processor buildings (input buffer part)
+    for (entity, position, input_buffer, _, maybe_crafter) in &processors {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if !input_buffer.needs_items() {
+            continue;
+        }
+
+        if let Some(crafter) = maybe_crafter {
+            if let Some(recipe_name) = crafter.get_active_recipe() {
+                if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
+                    let needed = calculate_buffer_needs(input_buffer, &recipe_def.inputs);
+                    if !needed.is_empty() {
+                        requests.push((entity, *position, needed));
+                    }
+                }
+            }
+        }
+    }
+
+    // Emit offer events (items available for pickup)
+    for (entity, position, items) in offers {
+        events.send(BufferLogisticsRequest {
+            requester: None,
+            offerer: Some(entity),
+            position,
+            items,
+            priority: Priority::Medium,
+        });
+    }
+
+    // Emit request events (items needed for delivery)
+    for (entity, position, items) in requests {
+        events.send(BufferLogisticsRequest {
+            requester: Some(entity),
+            offerer: None,
+            position,
+            items,
+            priority: Priority::Medium,
+        });
+    }
+}
+
+/// Calculate what items a buffer needs based on recipe inputs and current inventory.
+fn calculate_buffer_needs(
+    input_buffer: &InputBuffer,
+    recipe_inputs: &HashMap<ItemName, u32>,
+) -> HashMap<ItemName, u32> {
+    let mut needed = HashMap::new();
+    let available_space = input_buffer
+        .inventory
+        .capacity
+        .saturating_sub(input_buffer.inventory.get_total_quantity());
+
+    if available_space == 0 {
+        return needed;
+    }
+
+    let mut total_needed = 0u32;
+
+    for (item_name, &recipe_quantity) in recipe_inputs {
+        let current = input_buffer.inventory.get_item_quantity(item_name);
+        let target = recipe_quantity * 10; // Buffer 10x recipe amount
+
+        if current < target {
+            let deficit = target - current;
+            let feasible = deficit.min(available_space.saturating_sub(total_needed));
+
+            if feasible > 0 {
+                needed.insert(item_name.clone(), feasible);
+                total_needed += feasible;
+            }
+        }
+
+        if total_needed >= available_space {
+            break;
+        }
+    }
+
+    needed
+}
