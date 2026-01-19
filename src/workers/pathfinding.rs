@@ -244,3 +244,201 @@ fn find_nearest_valid_network_cell(
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    // Tests for manhattan_distance_coords
+
+    #[test]
+    fn manhattan_distance_same_point_returns_zero() {
+        let result = manhattan_distance_coords((5, 10), (5, 10));
+
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn manhattan_distance_horizontal_movement_only() {
+        let result = manhattan_distance_coords((0, 0), (7, 0));
+
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn manhattan_distance_vertical_movement_only() {
+        let result = manhattan_distance_coords((0, 0), (0, 12));
+
+        assert_eq!(result, 12);
+    }
+
+    #[test]
+    fn manhattan_distance_diagonal_movement() {
+        let result = manhattan_distance_coords((0, 0), (3, 4));
+
+        assert_eq!(result, 7); // 3 + 4 = 7
+    }
+
+    #[test]
+    fn manhattan_distance_negative_coordinates() {
+        let result = manhattan_distance_coords((-5, -3), (2, 4));
+
+        // |(-5) - 2| + |(-3) - 4| = 7 + 7 = 14
+        assert_eq!(result, 14);
+    }
+
+    #[test]
+    fn manhattan_distance_reversed_direction() {
+        // Distance should be the same regardless of direction
+        let result1 = manhattan_distance_coords((10, 20), (3, 8));
+        let result2 = manhattan_distance_coords((3, 8), (10, 20));
+
+        assert_eq!(result1, result2);
+        assert_eq!(result1, 19); // |10-3| + |20-8| = 7 + 12 = 19
+    }
+
+    #[test]
+    fn manhattan_distance_large_values() {
+        let result = manhattan_distance_coords((1000, 2000), (-500, -1000));
+
+        // |1000 - (-500)| + |2000 - (-1000)| = 1500 + 3000 = 4500
+        assert_eq!(result, 4500);
+    }
+
+    #[test]
+    fn manhattan_distance_at_origin() {
+        let result = manhattan_distance_coords((0, 0), (0, 0));
+
+        assert_eq!(result, 0);
+    }
+
+    // Tests for calculate_path - testing the pure path calculation logic
+
+    #[test]
+    fn calculate_path_same_start_and_end_returns_empty_path() {
+        let mut network = NetworkConnectivity::default();
+        // Need to add the cell to connected_cells for the path calculation
+        network.add_connected_cell(5, 5);
+        network.add_core_network_cell(5, 5);
+
+        let grid = Grid::new(64.0);
+
+        let result = calculate_path((5, 5), (5, 5), &network, &grid);
+
+        assert!(result.is_some());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn calculate_path_returns_none_when_start_not_connected() {
+        let mut network = NetworkConnectivity::default();
+        // Only end is connected, start is not
+        network.add_connected_cell(5, 5);
+        network.add_core_network_cell(5, 5);
+
+        let grid = Grid::new(64.0);
+
+        let result = calculate_path((0, 0), (5, 5), &network, &grid);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn calculate_path_returns_none_when_end_not_connected() {
+        let mut network = NetworkConnectivity::default();
+        // Only start is connected, end is not
+        network.add_connected_cell(0, 0);
+        network.add_core_network_cell(0, 0);
+
+        let grid = Grid::new(64.0);
+
+        let result = calculate_path((0, 0), (5, 5), &network, &grid);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn calculate_path_simple_horizontal_path() {
+        let mut network = NetworkConnectivity::default();
+        // Create a horizontal line of connected cells
+        for x in 0..=3 {
+            network.add_connected_cell(x, 0);
+            network.add_core_network_cell(x, 0);
+        }
+
+        let mut grid = Grid::new(64.0);
+        for x in 0..=3 {
+            grid.add_coordinate(x, 0);
+        }
+
+        let result = calculate_path((0, 0), (3, 0), &network, &grid);
+
+        assert!(result.is_some());
+        let path = result.unwrap();
+        assert_eq!(path.len(), 3); // Should include (1,0), (2,0), (3,0)
+    }
+
+    #[test]
+    fn calculate_path_simple_vertical_path() {
+        let mut network = NetworkConnectivity::default();
+        // Create a vertical line of connected cells
+        for y in 0..=3 {
+            network.add_connected_cell(0, y);
+            network.add_core_network_cell(0, y);
+        }
+
+        let mut grid = Grid::new(64.0);
+        for y in 0..=3 {
+            grid.add_coordinate(0, y);
+        }
+
+        let result = calculate_path((0, 0), (0, 3), &network, &grid);
+
+        assert!(result.is_some());
+        let path = result.unwrap();
+        assert_eq!(path.len(), 3); // Should include (0,1), (0,2), (0,3)
+    }
+
+    #[test]
+    fn calculate_path_with_disconnected_network_returns_none() {
+        let mut network = NetworkConnectivity::default();
+        // Create two disconnected groups
+        network.add_connected_cell(0, 0);
+        network.add_core_network_cell(0, 0);
+
+        network.add_connected_cell(5, 5);
+        network.add_core_network_cell(5, 5);
+        // No path between them
+
+        let grid = Grid::new(64.0);
+
+        let result = calculate_path((0, 0), (5, 5), &network, &grid);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn calculate_path_converts_to_world_coordinates() {
+        let mut network = NetworkConnectivity::default();
+        // Simple 2-cell path
+        network.add_connected_cell(0, 0);
+        network.add_core_network_cell(0, 0);
+        network.add_connected_cell(1, 0);
+        network.add_core_network_cell(1, 0);
+
+        let cell_size = 64.0;
+        let mut grid = Grid::new(cell_size);
+        grid.add_coordinate(0, 0);
+        grid.add_coordinate(1, 0);
+
+        let result = calculate_path((0, 0), (1, 0), &network, &grid);
+
+        assert!(result.is_some());
+        let path = result.unwrap();
+        assert_eq!(path.len(), 1);
+        // The path should contain world coordinates for cell (1, 0)
+        assert_eq!(path[0], Vec2::new(64.0, 0.0));
+    }
+}

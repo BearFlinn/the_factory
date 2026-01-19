@@ -775,3 +775,413 @@ fn calculate_balancing_transfer(
 
     transfer
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    // Helper function to create an inventory with specific items
+    fn create_inventory_with_items(capacity: u32, items: &[(&str, u32)]) -> Inventory {
+        let mut inv = Inventory::new(capacity);
+        for (name, qty) in items {
+            inv.add_item(name, *qty);
+        }
+        inv
+    }
+
+    // ============================================
+    // chunk_contribution_by_capacity tests
+    // ============================================
+
+    #[test]
+    fn chunk_contribution_under_capacity_single_chunk() {
+        let mut contribution = HashMap::new();
+        contribution.insert("iron".to_string(), 5);
+        contribution.insert("copper".to_string(), 10);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        assert_eq!(chunks.len(), 1);
+        let total: u32 = chunks[0].values().sum();
+        assert_eq!(total, 15);
+    }
+
+    #[test]
+    fn chunk_contribution_at_capacity_single_chunk() {
+        let mut contribution = HashMap::new();
+        contribution.insert("iron".to_string(), 10);
+        contribution.insert("copper".to_string(), 10);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        assert_eq!(chunks.len(), 1);
+        let total: u32 = chunks[0].values().sum();
+        assert_eq!(total, 20);
+    }
+
+    #[test]
+    fn chunk_contribution_over_capacity_multiple_chunks() {
+        let mut contribution = HashMap::new();
+        contribution.insert("iron".to_string(), 30);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].get("iron"), Some(&20));
+        assert_eq!(chunks[1].get("iron"), Some(&10));
+    }
+
+    #[test]
+    fn chunk_contribution_multiple_items_over_capacity() {
+        let mut contribution = HashMap::new();
+        contribution.insert("iron".to_string(), 25);
+        contribution.insert("copper".to_string(), 15);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        // Should create multiple chunks
+        assert!(chunks.len() >= 2);
+
+        // Total should equal original contribution
+        let total: u32 = chunks.iter().flat_map(|c| c.values()).sum();
+        assert_eq!(total, 40);
+
+        // Each chunk should respect capacity
+        for chunk in &chunks {
+            let chunk_total: u32 = chunk.values().sum();
+            assert!(chunk_total <= 20);
+        }
+    }
+
+    #[test]
+    fn chunk_contribution_empty_contribution() {
+        let contribution = HashMap::new();
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn chunk_contribution_single_item_exact_capacity() {
+        let mut contribution = HashMap::new();
+        contribution.insert("iron".to_string(), 20);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 20);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].get("iron"), Some(&20));
+    }
+
+    #[test]
+    fn chunk_contribution_many_small_items() {
+        let mut contribution = HashMap::new();
+        contribution.insert("a".to_string(), 5);
+        contribution.insert("b".to_string(), 5);
+        contribution.insert("c".to_string(), 5);
+        contribution.insert("d".to_string(), 5);
+        contribution.insert("e".to_string(), 5);
+
+        let chunks = chunk_contribution_by_capacity(contribution, 10);
+
+        // Total should equal 25
+        let total: u32 = chunks.iter().flat_map(|c| c.values()).sum();
+        assert_eq!(total, 25);
+
+        // Should need at least 3 chunks for 25 items with capacity 10
+        assert!(chunks.len() >= 3);
+
+        // Each chunk should respect capacity
+        for chunk in &chunks {
+            let chunk_total: u32 = chunk.values().sum();
+            assert!(chunk_total <= 10);
+        }
+    }
+
+    // ============================================
+    // calculate_feasible_transfer tests
+    // ============================================
+
+    #[test]
+    fn feasible_transfer_basic_transfer() {
+        let sender = create_inventory_with_items(100, &[("iron", 30), ("copper", 20)]);
+        let receiver = Inventory::new(100);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 20);
+        assert!(!transfer.is_empty());
+    }
+
+    #[test]
+    fn feasible_transfer_capacity_limited_by_worker() {
+        let sender = create_inventory_with_items(100, &[("iron", 50)]);
+        let receiver = Inventory::new(100);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        let total: u32 = transfer.values().sum();
+        assert_eq!(total, 20);
+    }
+
+    #[test]
+    fn feasible_transfer_capacity_limited_by_receiver() {
+        let sender = create_inventory_with_items(100, &[("iron", 50)]);
+        let receiver = create_inventory_with_items(30, &[("copper", 25)]);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        let total: u32 = transfer.values().sum();
+        assert_eq!(total, 5); // receiver only has 5 space left
+    }
+
+    #[test]
+    fn feasible_transfer_empty_sender() {
+        let sender = Inventory::new(100);
+        let receiver = Inventory::new(100);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn feasible_transfer_full_receiver() {
+        let sender = create_inventory_with_items(100, &[("iron", 50)]);
+        let receiver = create_inventory_with_items(50, &[("copper", 50)]);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn feasible_transfer_sender_has_less_than_capacity() {
+        let sender = create_inventory_with_items(100, &[("iron", 5)]);
+        let receiver = Inventory::new(100);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        assert_eq!(transfer.get("iron"), Some(&5));
+        let total: u32 = transfer.values().sum();
+        assert_eq!(total, 5);
+    }
+
+    #[test]
+    fn feasible_transfer_multiple_items() {
+        let sender =
+            create_inventory_with_items(100, &[("iron", 10), ("copper", 10), ("coal", 10)]);
+        let receiver = Inventory::new(100);
+
+        let transfer = calculate_feasible_transfer(&sender, &receiver, 20);
+
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 20);
+        assert!(!transfer.is_empty());
+    }
+
+    // ============================================
+    // calculate_recipe_aware_restock tests
+    // ============================================
+
+    #[test]
+    fn recipe_aware_restock_with_recipe_items() {
+        let storage = create_inventory_with_items(100, &[("iron", 30), ("copper", 30)]);
+        let requester = create_inventory_with_items(50, &[("iron", 5)]);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+        recipe_inputs.insert("copper".to_string(), 1);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        // Should transfer iron and copper (recipe inputs)
+        // Storage has 30 iron, requester has 5 -> storage_quantity (30) > requester_quantity + 5 (10) -> will transfer
+        // Storage has 30 copper, requester has 0 -> storage_quantity (30) > requester_quantity + 5 (5) -> will transfer
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 20);
+    }
+
+    #[test]
+    fn recipe_aware_restock_without_recipe_items() {
+        let storage = create_inventory_with_items(100, &[("gold", 30), ("silver", 30)]);
+        let requester = Inventory::new(50);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+        recipe_inputs.insert("copper".to_string(), 1);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        // Storage has no recipe items, should not transfer
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn recipe_aware_restock_requester_has_plenty() {
+        let storage = create_inventory_with_items(100, &[("iron", 10)]);
+        let requester = create_inventory_with_items(50, &[("iron", 20)]);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        // Storage has 10, requester has 20 -> storage_quantity (10) is NOT > requester_quantity + 5 (25)
+        // Should not transfer
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn recipe_aware_restock_capacity_limited() {
+        let storage = create_inventory_with_items(100, &[("iron", 90)]);
+        let requester = create_inventory_with_items(50, &[("copper", 45)]);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        // Requester only has 5 space left
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 5);
+    }
+
+    #[test]
+    fn recipe_aware_restock_empty_storage() {
+        let storage = Inventory::new(100);
+        let requester = Inventory::new(50);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn recipe_aware_restock_partial_recipe_available() {
+        let storage = create_inventory_with_items(100, &[("iron", 30)]); // Only iron, no copper
+        let requester = create_inventory_with_items(50, &[("copper", 5)]);
+
+        let mut recipe_inputs = HashMap::new();
+        recipe_inputs.insert("iron".to_string(), 2);
+        recipe_inputs.insert("copper".to_string(), 1);
+
+        let transfer = calculate_recipe_aware_restock(&storage, &requester, &recipe_inputs, 20);
+
+        // Should only transfer iron (the only recipe input available in storage)
+        if !transfer.is_empty() {
+            assert!(transfer.contains_key("iron"));
+            assert!(!transfer.contains_key("copper"));
+        }
+    }
+
+    // ============================================
+    // calculate_balancing_transfer tests
+    // ============================================
+
+    #[test]
+    fn balancing_transfer_half_items_transferred() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 40)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Should transfer up to half (20) but limited by worker capacity
+        assert_eq!(transfer.get("iron"), Some(&20));
+    }
+
+    #[test]
+    fn balancing_transfer_capacity_limited_by_worker() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 80)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Half would be 40, but worker can only carry 20
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 20);
+    }
+
+    #[test]
+    fn balancing_transfer_capacity_limited_by_receiver() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 80)]);
+        let empty_inv = create_inventory_with_items(50, &[("copper", 45)]);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Receiver only has 5 space
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 5);
+    }
+
+    #[test]
+    fn balancing_transfer_empty_source() {
+        let full_inv = Inventory::new(100);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn balancing_transfer_full_receiver() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 50)]);
+        let empty_inv = create_inventory_with_items(50, &[("copper", 50)]);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        assert!(transfer.is_empty());
+    }
+
+    #[test]
+    fn balancing_transfer_small_quantity() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 2)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Half of 2 is 1
+        assert_eq!(transfer.get("iron"), Some(&1));
+    }
+
+    #[test]
+    fn balancing_transfer_single_item() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 1)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Half of 1 rounded down is 0, so nothing should transfer
+        assert!(transfer.is_empty() || transfer.get("iron") == Some(&0));
+    }
+
+    #[test]
+    fn balancing_transfer_multiple_items() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 20), ("copper", 20)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 20);
+
+        // Should transfer up to 20 total (worker capacity)
+        let total: u32 = transfer.values().sum();
+        assert!(total <= 20);
+        assert!(!transfer.is_empty());
+    }
+
+    #[test]
+    fn balancing_transfer_respects_half_rule() {
+        let full_inv = create_inventory_with_items(100, &[("iron", 10)]);
+        let empty_inv = Inventory::new(100);
+
+        let transfer = calculate_balancing_transfer(&full_inv, &empty_inv, 50);
+
+        // Half of 10 is 5, worker can carry 50
+        assert_eq!(transfer.get("iron"), Some(&5));
+    }
+}

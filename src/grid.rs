@@ -209,3 +209,218 @@ impl Plugin for GridPlugin {
             .add_systems(Update, (handle_grid_expansion, handle_grid_cells_expansion));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::float_cmp)]
+
+    use super::*;
+
+    const DEFAULT_CELL_SIZE: f32 = 64.0;
+
+    #[test]
+    fn new_creates_grid_with_empty_coordinates() {
+        let grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        assert_eq!(grid.cell_size, DEFAULT_CELL_SIZE);
+        assert!(grid.valid_coordinates.is_empty());
+    }
+
+    #[test]
+    fn add_coordinate_returns_true_when_new() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        let result = grid.add_coordinate(5, 10);
+
+        assert!(result);
+        assert!(grid.valid_coordinates.contains(&(5, 10)));
+    }
+
+    #[test]
+    fn add_coordinate_returns_false_when_duplicate() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(5, 10);
+
+        let result = grid.add_coordinate(5, 10);
+
+        assert!(!result);
+        assert_eq!(grid.valid_coordinates.len(), 1);
+    }
+
+    #[test]
+    fn world_to_grid_coordinates_center_position() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(0, 0);
+
+        let result = grid.world_to_grid_coordinates(Vec2::new(0.0, 0.0));
+
+        assert!(result.is_some());
+        let coords = result.unwrap();
+        assert_eq!(coords.grid_x, 0);
+        assert_eq!(coords.grid_y, 0);
+    }
+
+    #[test]
+    fn world_to_grid_coordinates_positive_coordinates() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(2, 3);
+
+        // Position at center of cell (2, 3) = (128.0, 192.0)
+        let result = grid.world_to_grid_coordinates(Vec2::new(128.0, 192.0));
+
+        assert!(result.is_some());
+        let coords = result.unwrap();
+        assert_eq!(coords.grid_x, 2);
+        assert_eq!(coords.grid_y, 3);
+    }
+
+    #[test]
+    fn world_to_grid_coordinates_negative_coordinates() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(-3, -2);
+
+        // Position at center of cell (-3, -2) = (-192.0, -128.0)
+        let result = grid.world_to_grid_coordinates(Vec2::new(-192.0, -128.0));
+
+        assert!(result.is_some());
+        let coords = result.unwrap();
+        assert_eq!(coords.grid_x, -3);
+        assert_eq!(coords.grid_y, -2);
+    }
+
+    #[test]
+    fn world_to_grid_coordinates_returns_none_for_invalid_cell() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(0, 0);
+
+        // Position at cell (1, 1) which is not in valid_coordinates
+        let result = grid.world_to_grid_coordinates(Vec2::new(64.0, 64.0));
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn world_to_grid_coordinates_rounds_to_nearest_cell() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        grid.add_coordinate(1, 1);
+
+        // Position slightly off center but should round to (1, 1)
+        let result = grid.world_to_grid_coordinates(Vec2::new(70.0, 60.0));
+
+        assert!(result.is_some());
+        let coords = result.unwrap();
+        assert_eq!(coords.grid_x, 1);
+        assert_eq!(coords.grid_y, 1);
+    }
+
+    #[test]
+    fn grid_to_world_coordinates_origin() {
+        let grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        let result = grid.grid_to_world_coordinates(0, 0);
+
+        assert_eq!(result, Vec2::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn grid_to_world_coordinates_positive_quadrant() {
+        let grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        let result = grid.grid_to_world_coordinates(3, 5);
+
+        assert_eq!(result, Vec2::new(192.0, 320.0));
+    }
+
+    #[test]
+    fn grid_to_world_coordinates_negative_quadrant() {
+        let grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        let result = grid.grid_to_world_coordinates(-2, -4);
+
+        assert_eq!(result, Vec2::new(-128.0, -256.0));
+    }
+
+    #[test]
+    fn grid_to_world_coordinates_mixed_coordinates() {
+        let grid = Grid::new(DEFAULT_CELL_SIZE);
+
+        let result = grid.grid_to_world_coordinates(-3, 7);
+
+        assert_eq!(result, Vec2::new(-192.0, 448.0));
+    }
+
+    #[test]
+    fn get_coordinates_in_radius_zero_radius() {
+        let coords = Grid::get_coordinates_in_radius(5, 5, 0);
+
+        assert_eq!(coords.len(), 1);
+        assert!(coords.contains(&(5, 5)));
+    }
+
+    #[test]
+    fn get_coordinates_in_radius_one() {
+        let coords = Grid::get_coordinates_in_radius(0, 0, 1);
+
+        // Radius 1 with circular distance check: center + 4 cardinal neighbors
+        // (0,0), (1,0), (-1,0), (0,1), (0,-1)
+        assert_eq!(coords.len(), 5);
+        assert!(coords.contains(&(0, 0)));
+        assert!(coords.contains(&(1, 0)));
+        assert!(coords.contains(&(-1, 0)));
+        assert!(coords.contains(&(0, 1)));
+        assert!(coords.contains(&(0, -1)));
+    }
+
+    #[test]
+    fn get_coordinates_in_radius_three() {
+        let coords = Grid::get_coordinates_in_radius(0, 0, 3);
+
+        // Check center is included
+        assert!(coords.contains(&(0, 0)));
+
+        // Check cardinal directions at max distance are included
+        assert!(coords.contains(&(3, 0)));
+        assert!(coords.contains(&(-3, 0)));
+        assert!(coords.contains(&(0, 3)));
+        assert!(coords.contains(&(0, -3)));
+
+        // Corner cells at (3, 3) should NOT be included (distance ~4.24 > 3)
+        assert!(!coords.contains(&(3, 3)));
+        assert!(!coords.contains(&(-3, -3)));
+
+        // Cells at (2, 2) SHOULD be included (distance ~2.83 <= 3)
+        assert!(coords.contains(&(2, 2)));
+    }
+
+    #[test]
+    fn bidirectional_conversion_consistency() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        let original_x = 7;
+        let original_y = -4;
+        grid.add_coordinate(original_x, original_y);
+
+        let world_pos = grid.grid_to_world_coordinates(original_x, original_y);
+        let grid_coords = grid.world_to_grid_coordinates(world_pos);
+
+        assert!(grid_coords.is_some());
+        let coords = grid_coords.unwrap();
+        assert_eq!(coords.grid_x, original_x);
+        assert_eq!(coords.grid_y, original_y);
+    }
+
+    #[test]
+    fn bidirectional_conversion_consistency_large_values() {
+        let mut grid = Grid::new(DEFAULT_CELL_SIZE);
+        let original_x = 1000;
+        let original_y = -500;
+        grid.add_coordinate(original_x, original_y);
+
+        let world_pos = grid.grid_to_world_coordinates(original_x, original_y);
+        let grid_coords = grid.world_to_grid_coordinates(world_pos);
+
+        assert!(grid_coords.is_some());
+        let coords = grid_coords.unwrap();
+        assert_eq!(coords.grid_x, original_x);
+        assert_eq!(coords.grid_y, original_y);
+    }
+}

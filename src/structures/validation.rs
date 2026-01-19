@@ -119,3 +119,73 @@ pub fn validate_placement(
         });
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn placement_error_display_cell_not_found() {
+        let error = PlacementError::CellNotFound;
+        let display = format!("{error}");
+        assert_eq!(display, "Cannot place building outside grid bounds!");
+    }
+
+    #[test]
+    fn placement_error_display_cell_occupied() {
+        let error = PlacementError::CellOccupied;
+        let display = format!("{error}");
+        assert_eq!(display, "Cell is already occupied!");
+    }
+
+    #[test]
+    fn placement_error_display_not_adjacent_to_network() {
+        let error = PlacementError::NotAdjacentToNetwork;
+        let display = format!("{error}");
+        assert_eq!(
+            display,
+            "Building must be placed adjacent to hub or connector!"
+        );
+    }
+
+    #[test]
+    fn placement_error_display_requires_resource_node() {
+        let error = PlacementError::RequiresResourceNode;
+        let display = format!("{error}");
+        assert_eq!(display, "Building requires resource node!");
+    }
+
+    #[test]
+    fn placement_error_debug_formatting() {
+        // Verify Debug trait is implemented correctly
+        let errors = [
+            PlacementError::CellNotFound,
+            PlacementError::CellOccupied,
+            PlacementError::NotAdjacentToNetwork,
+            PlacementError::RequiresResourceNode,
+        ];
+
+        for error in &errors {
+            let debug_output = format!("{error:?}");
+            assert!(!debug_output.is_empty());
+        }
+    }
+
+    #[test]
+    fn placement_rule_serialization_roundtrip() {
+        use bevy::scene::ron;
+
+        let rules = vec![
+            PlacementRule::AdjacentToNetwork,
+            PlacementRule::RequiresResource,
+        ];
+
+        let serialized = ron::to_string(&rules).unwrap();
+        let deserialized: Vec<PlacementRule> = ron::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.len(), 2);
+        assert!(matches!(deserialized[0], PlacementRule::AdjacentToNetwork));
+        assert!(matches!(deserialized[1], PlacementRule::RequiresResource));
+    }
+}

@@ -387,3 +387,544 @@ impl Plugin for ItemsPlugin {
         app.add_systems(Startup, setup);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    // ==================== Inventory::new() tests ====================
+
+    #[test]
+    fn test_new_creates_empty_inventory() {
+        let inventory = Inventory::new(100);
+        assert!(inventory.items.is_empty());
+        assert_eq!(inventory.capacity, 100);
+    }
+
+    #[test]
+    fn test_new_with_zero_capacity() {
+        let inventory = Inventory::new(0);
+        assert!(inventory.items.is_empty());
+        assert_eq!(inventory.capacity, 0);
+    }
+
+    // ==================== add_item() tests ====================
+
+    #[test]
+    fn test_add_item_single_item() {
+        let mut inventory = Inventory::new(100);
+        let added = inventory.add_item("Iron Ore", 5);
+        assert_eq!(added, 5);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 5);
+    }
+
+    #[test]
+    fn test_add_item_multiple_different_items() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        inventory.add_item("Copper Ore", 10);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 5);
+        assert_eq!(inventory.get_item_quantity("Copper Ore"), 10);
+    }
+
+    #[test]
+    fn test_add_item_same_item_twice_accumulates() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        inventory.add_item("Iron Ore", 3);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 8);
+    }
+
+    #[test]
+    fn test_add_item_returns_quantity_added() {
+        let mut inventory = Inventory::new(100);
+        let added = inventory.add_item("Coal", 25);
+        assert_eq!(added, 25);
+    }
+
+    #[test]
+    fn test_add_item_does_not_cap_at_capacity() {
+        // Note: The current implementation does NOT cap at capacity
+        // This tests the actual behavior
+        let mut inventory = Inventory::new(10);
+        inventory.add_item("Iron Ore", 15);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 15);
+    }
+
+    // ==================== remove_item() tests ====================
+
+    #[test]
+    fn test_remove_item_basic() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        let removed = inventory.remove_item("Iron Ore", 5);
+        assert_eq!(removed, 5);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 5);
+    }
+
+    #[test]
+    fn test_remove_item_caps_at_available() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        let removed = inventory.remove_item("Iron Ore", 10);
+        assert_eq!(removed, 5);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 0);
+    }
+
+    #[test]
+    fn test_remove_item_nonexistent_returns_zero() {
+        let mut inventory = Inventory::new(100);
+        let removed = inventory.remove_item("Iron Ore", 5);
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_remove_item_removes_entry_when_zero() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        inventory.remove_item("Iron Ore", 5);
+        assert!(!inventory.items.contains_key("Iron Ore"));
+    }
+
+    #[test]
+    fn test_remove_item_partial_removal() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Copper Ore", 20);
+        inventory.remove_item("Copper Ore", 7);
+        assert_eq!(inventory.get_item_quantity("Copper Ore"), 13);
+    }
+
+    // ==================== is_full() tests ====================
+
+    #[test]
+    fn test_is_full_returns_true_when_at_capacity() {
+        let mut inventory = Inventory::new(10);
+        inventory.add_item("Iron Ore", 10);
+        assert!(inventory.is_full());
+    }
+
+    #[test]
+    fn test_is_full_returns_false_when_under_capacity() {
+        let mut inventory = Inventory::new(10);
+        inventory.add_item("Iron Ore", 5);
+        assert!(!inventory.is_full());
+    }
+
+    #[test]
+    fn test_is_full_empty_inventory() {
+        let inventory = Inventory::new(10);
+        assert!(!inventory.is_full());
+    }
+
+    #[test]
+    fn test_is_full_zero_capacity_empty() {
+        let inventory = Inventory::new(0);
+        assert!(inventory.is_full());
+    }
+
+    // ==================== is_empty() tests ====================
+
+    #[test]
+    fn test_is_empty_returns_true_for_new_inventory() {
+        let inventory = Inventory::new(100);
+        assert!(inventory.is_empty());
+    }
+
+    #[test]
+    fn test_is_empty_returns_false_with_items() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 1);
+        assert!(!inventory.is_empty());
+    }
+
+    #[test]
+    fn test_is_empty_returns_true_after_removing_all() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        inventory.remove_item("Iron Ore", 5);
+        assert!(inventory.is_empty());
+    }
+
+    // ==================== has_space_for() tests ====================
+
+    #[test]
+    fn test_has_space_for_empty_inventory() {
+        let inventory = Inventory::new(100);
+        let items = HashMap::from([("Iron Ore".to_string(), 50u32)]);
+        assert!(inventory.has_space_for(&items));
+    }
+
+    #[test]
+    fn test_has_space_for_partial_inventory() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Copper Ore", 40);
+        let items = HashMap::from([("Iron Ore".to_string(), 60u32)]);
+        assert!(inventory.has_space_for(&items));
+    }
+
+    #[test]
+    fn test_has_space_for_exactly_fits() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Copper Ore", 50);
+        let items = HashMap::from([("Iron Ore".to_string(), 50u32)]);
+        assert!(inventory.has_space_for(&items));
+    }
+
+    #[test]
+    fn test_has_space_for_exceeds_capacity() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Copper Ore", 50);
+        let items = HashMap::from([("Iron Ore".to_string(), 51u32)]);
+        assert!(!inventory.has_space_for(&items));
+    }
+
+    #[test]
+    fn test_has_space_for_empty_items() {
+        let inventory = Inventory::new(100);
+        let items = HashMap::new();
+        assert!(inventory.has_space_for(&items));
+    }
+
+    // ==================== get_item_quantity() tests ====================
+
+    #[test]
+    fn test_get_item_quantity_existing_item() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 15);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 15);
+    }
+
+    #[test]
+    fn test_get_item_quantity_nonexistent_item() {
+        let inventory = Inventory::new(100);
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 0);
+    }
+
+    // ==================== get_total_quantity() tests ====================
+
+    #[test]
+    fn test_get_total_quantity_empty() {
+        let inventory = Inventory::new(100);
+        assert_eq!(inventory.get_total_quantity(), 0);
+    }
+
+    #[test]
+    fn test_get_total_quantity_single_item() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        assert_eq!(inventory.get_total_quantity(), 10);
+    }
+
+    #[test]
+    fn test_get_total_quantity_multiple_items() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        inventory.add_item("Copper Ore", 20);
+        inventory.add_item("Coal", 5);
+        assert_eq!(inventory.get_total_quantity(), 35);
+    }
+
+    // ==================== has_item() tests ====================
+
+    #[test]
+    fn test_has_item_existing() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        assert!(inventory.has_item("Iron Ore"));
+    }
+
+    #[test]
+    fn test_has_item_nonexistent() {
+        let inventory = Inventory::new(100);
+        assert!(!inventory.has_item("Iron Ore"));
+    }
+
+    // ==================== has_at_least() tests ====================
+
+    #[test]
+    fn test_has_at_least_sufficient() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        assert!(inventory.has_at_least("Iron Ore", 5));
+    }
+
+    #[test]
+    fn test_has_at_least_exact() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        assert!(inventory.has_at_least("Iron Ore", 10));
+    }
+
+    #[test]
+    fn test_has_at_least_insufficient() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        assert!(!inventory.has_at_least("Iron Ore", 10));
+    }
+
+    #[test]
+    fn test_has_at_least_nonexistent() {
+        let inventory = Inventory::new(100);
+        assert!(!inventory.has_at_least("Iron Ore", 1));
+    }
+
+    #[test]
+    fn test_has_at_least_zero_required() {
+        let inventory = Inventory::new(100);
+        assert!(inventory.has_at_least("Iron Ore", 0));
+    }
+
+    // ==================== has_less_than() tests ====================
+
+    #[test]
+    fn test_has_less_than_true() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 5);
+        assert!(inventory.has_less_than("Iron Ore", 10));
+    }
+
+    #[test]
+    fn test_has_less_than_exact_false() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        assert!(!inventory.has_less_than("Iron Ore", 10));
+    }
+
+    #[test]
+    fn test_has_less_than_more_false() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 15);
+        assert!(!inventory.has_less_than("Iron Ore", 10));
+    }
+
+    #[test]
+    fn test_has_less_than_nonexistent() {
+        let inventory = Inventory::new(100);
+        assert!(inventory.has_less_than("Iron Ore", 1));
+    }
+
+    // ==================== has_items_for_recipe() tests ====================
+
+    #[test]
+    fn test_has_items_for_recipe_sufficient() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        inventory.add_item("Coal", 5);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32), ("Coal".to_string(), 2u32)]);
+        assert!(inventory.has_items_for_recipe(&recipe));
+    }
+
+    #[test]
+    fn test_has_items_for_recipe_insufficient() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        inventory.add_item("Coal", 1);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32), ("Coal".to_string(), 2u32)]);
+        assert!(!inventory.has_items_for_recipe(&recipe));
+    }
+
+    #[test]
+    fn test_has_items_for_recipe_missing_item() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32), ("Coal".to_string(), 2u32)]);
+        assert!(!inventory.has_items_for_recipe(&recipe));
+    }
+
+    #[test]
+    fn test_has_items_for_recipe_empty_recipe() {
+        let inventory = Inventory::new(100);
+        let recipe = HashMap::new();
+        assert!(inventory.has_items_for_recipe(&recipe));
+    }
+
+    // ==================== remove_items_for_recipe() tests ====================
+
+    #[test]
+    fn test_remove_items_for_recipe_success() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 10);
+        inventory.add_item("Coal", 5);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32), ("Coal".to_string(), 2u32)]);
+        let removed = inventory.remove_items_for_recipe(&recipe);
+        assert_eq!(removed.get("Iron Ore"), Some(&5));
+        assert_eq!(removed.get("Coal"), Some(&2));
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 5);
+        assert_eq!(inventory.get_item_quantity("Coal"), 3);
+    }
+
+    #[test]
+    fn test_remove_items_for_recipe_partial() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ore", 3);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32)]);
+        let removed = inventory.remove_items_for_recipe(&recipe);
+        assert_eq!(removed.get("Iron Ore"), Some(&3));
+        assert_eq!(inventory.get_item_quantity("Iron Ore"), 0);
+    }
+
+    #[test]
+    fn test_remove_items_for_recipe_missing_item() {
+        let mut inventory = Inventory::new(100);
+        let recipe = HashMap::from([("Iron Ore".to_string(), 5u32)]);
+        let removed = inventory.remove_items_for_recipe(&recipe);
+        assert_eq!(removed.get("Iron Ore"), Some(&0));
+    }
+
+    // ==================== has_recipe_outputs() tests ====================
+
+    #[test]
+    fn test_has_recipe_outputs_all_present() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Gear", 10);
+        inventory.add_item("Iron Plate", 5);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32), ("Iron Plate".to_string(), 1u32)]);
+        let outputs = inventory.has_recipe_outputs(&recipe);
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs.get("Gear"), Some(&2));
+        assert_eq!(outputs.get("Iron Plate"), Some(&1));
+    }
+
+    #[test]
+    fn test_has_recipe_outputs_partial() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Gear", 10);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32), ("Iron Plate".to_string(), 1u32)]);
+        let outputs = inventory.has_recipe_outputs(&recipe);
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs.get("Gear"), Some(&2));
+        assert!(!outputs.contains_key("Iron Plate"));
+    }
+
+    #[test]
+    fn test_has_recipe_outputs_none_present() {
+        let inventory = Inventory::new(100);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32), ("Iron Plate".to_string(), 1u32)]);
+        let outputs = inventory.has_recipe_outputs(&recipe);
+        assert!(outputs.is_empty());
+    }
+
+    // ==================== recipe_output_amounts() tests ====================
+
+    #[test]
+    fn test_recipe_output_amounts_basic() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Iron Ingot", 5);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32)]);
+        let outputs = inventory.recipe_output_amounts(&recipe);
+        // get_item_quantity("Gear") = 0, 0 * 2 = 0
+        assert_eq!(outputs.get("Gear"), Some(&0));
+    }
+
+    #[test]
+    fn test_recipe_output_amounts_with_items() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Gear", 3);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32)]);
+        let outputs = inventory.recipe_output_amounts(&recipe);
+        // get_item_quantity("Gear") = 3, 3 * 2 = 6
+        assert_eq!(outputs.get("Gear"), Some(&6));
+    }
+
+    #[test]
+    fn test_recipe_output_amounts_multiple_items() {
+        let mut inventory = Inventory::new(100);
+        inventory.add_item("Gear", 3);
+        inventory.add_item("Iron Plate", 2);
+        let recipe = HashMap::from([("Gear".to_string(), 2u32), ("Iron Plate".to_string(), 5u32)]);
+        let outputs = inventory.recipe_output_amounts(&recipe);
+        assert_eq!(outputs.get("Gear"), Some(&6));
+        assert_eq!(outputs.get("Iron Plate"), Some(&10));
+    }
+
+    // ==================== ItemRegistry::from_ron() tests ====================
+
+    #[test]
+    fn test_item_registry_from_ron_valid() {
+        let ron_content = r#"[
+            (
+                name: "Test Item",
+                tier: 1,
+            ),
+            (
+                name: "Another Item",
+                tier: 2,
+            ),
+        ]"#;
+        let registry = ItemRegistry::from_ron(ron_content).unwrap();
+        assert_eq!(registry.definitions.len(), 2);
+        assert!(registry.definitions.contains_key("Test Item"));
+        assert!(registry.definitions.contains_key("Another Item"));
+    }
+
+    #[test]
+    fn test_item_registry_from_ron_empty() {
+        let ron_content = "[]";
+        let registry = ItemRegistry::from_ron(ron_content).unwrap();
+        assert!(registry.definitions.is_empty());
+    }
+
+    #[test]
+    fn test_item_registry_from_ron_invalid() {
+        let ron_content = "invalid ron content";
+        let result = ItemRegistry::from_ron(ron_content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_item_registry_from_ron_missing_field() {
+        let ron_content = r#"[
+            (
+                name: "Test Item",
+            ),
+        ]"#;
+        let result = ItemRegistry::from_ron(ron_content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_item_registry_get_definition_existing() {
+        let ron_content = r#"[
+            (
+                name: "Test Item",
+                tier: 3,
+            ),
+        ]"#;
+        let registry = ItemRegistry::from_ron(ron_content).unwrap();
+        let def = registry.get_definition("Test Item");
+        assert!(def.is_some());
+        let def = def.unwrap();
+        assert_eq!(def.name, "Test Item");
+        assert_eq!(def.tier, 3);
+    }
+
+    #[test]
+    fn test_item_registry_get_definition_nonexistent() {
+        let ron_content = "[]";
+        let registry = ItemRegistry::from_ron(ron_content).unwrap();
+        let def = registry.get_definition("Nonexistent");
+        assert!(def.is_none());
+    }
+
+    // ==================== TransferError Display tests ====================
+
+    #[test]
+    fn test_transfer_error_display_item_not_found() {
+        let error = TransferError::ItemNotFound;
+        assert_eq!(format!("{error}"), "Item not found!");
+    }
+
+    #[test]
+    fn test_transfer_error_display_not_enough_items() {
+        let error = TransferError::NotEnoughItems;
+        assert_eq!(format!("{error}"), "Not enough items to transfer!");
+    }
+
+    #[test]
+    fn test_transfer_error_display_inventory_full() {
+        let error = TransferError::InventoryFull;
+        assert_eq!(format!("{error}"), "Inventory full!");
+    }
+}

@@ -174,3 +174,197 @@ pub fn handle_progressive_scanning(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn create_scanner_at_origin(base_interval: f32) -> Scanner {
+        Scanner::new(base_interval, Position { x: 0, y: 0 })
+    }
+
+    #[test]
+    fn calculate_scan_time_base_for_adjacent() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Distance 1 should return base scan time
+        let time = scanner.calculate_scan_time(1);
+        assert!(
+            (time - 1.0).abs() < f32::EPSILON,
+            "Expected 1.0, got {time}"
+        );
+    }
+
+    #[test]
+    fn calculate_scan_time_scales_with_distance() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Distance 5 should return 5x base time
+        let time = scanner.calculate_scan_time(5);
+        assert!(
+            (time - 5.0).abs() < f32::EPSILON,
+            "Expected 5.0, got {time}"
+        );
+
+        // Distance 3 should return 3x base time
+        let time = scanner.calculate_scan_time(3);
+        assert!(
+            (time - 3.0).abs() < f32::EPSILON,
+            "Expected 3.0, got {time}"
+        );
+    }
+
+    #[test]
+    fn calculate_scan_time_caps_at_maximum() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Maximum time is 10x base (10.0 for base 1.0)
+        // Distance 15 would be 15.0, but should cap at 10.0
+        let time = scanner.calculate_scan_time(15);
+        assert!(
+            (time - 10.0).abs() < f32::EPSILON,
+            "Expected 10.0 (capped), got {time}"
+        );
+
+        // Distance 100 should also cap at 10.0
+        let time = scanner.calculate_scan_time(100);
+        assert!(
+            (time - 10.0).abs() < f32::EPSILON,
+            "Expected 10.0 (capped), got {time}"
+        );
+    }
+
+    #[test]
+    fn calculate_scan_time_with_different_base_intervals() {
+        let scanner = create_scanner_at_origin(2.5);
+
+        // Distance 1 should return base time (2.5)
+        let time = scanner.calculate_scan_time(1);
+        assert!(
+            (time - 2.5).abs() < f32::EPSILON,
+            "Expected 2.5, got {time}"
+        );
+
+        // Distance 4 should return 4 * 2.5 = 10.0
+        let time = scanner.calculate_scan_time(4);
+        assert!(
+            (time - 10.0).abs() < f32::EPSILON,
+            "Expected 10.0, got {time}"
+        );
+
+        // Max for base 2.5 is 25.0 (10x)
+        let time = scanner.calculate_scan_time(20);
+        assert!(
+            (time - 25.0).abs() < f32::EPSILON,
+            "Expected 25.0 (capped), got {time}"
+        );
+    }
+
+    #[test]
+    fn calculate_angle_north_is_zero() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Point directly north (positive y) should be angle 0
+        let angle = scanner.calculate_angle(0, 5);
+        assert!(angle.abs() < 0.001, "North should be angle 0, got {angle}");
+    }
+
+    #[test]
+    fn calculate_angle_east_is_quarter_turn() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Point directly east (positive x) should be PI/2 (90 degrees)
+        let angle = scanner.calculate_angle(5, 0);
+        let expected = std::f32::consts::FRAC_PI_2;
+        assert!(
+            (angle - expected).abs() < 0.001,
+            "East should be PI/2 ({expected}), got {angle}"
+        );
+    }
+
+    #[test]
+    fn calculate_angle_south_is_half_turn() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Point directly south (negative y) should be PI (180 degrees)
+        let angle = scanner.calculate_angle(0, -5);
+        let expected = std::f32::consts::PI;
+        assert!(
+            (angle - expected).abs() < 0.001,
+            "South should be PI ({expected}), got {angle}"
+        );
+    }
+
+    #[test]
+    fn calculate_angle_west_is_three_quarter_turn() {
+        let scanner = create_scanner_at_origin(1.0);
+
+        // Point directly west (negative x) should be 3*PI/2 (270 degrees)
+        let angle = scanner.calculate_angle(-5, 0);
+        let expected = 3.0 * std::f32::consts::FRAC_PI_2;
+        assert!(
+            (angle - expected).abs() < 0.001,
+            "West should be 3*PI/2 ({expected}), got {angle}"
+        );
+    }
+
+    #[test]
+    fn calculate_angle_diff_clockwise_progression() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.last_scan_angle = 0.0; // Start at north
+
+        // Angle slightly clockwise (east direction) should be small positive diff
+        let diff = scanner.calculate_angle_diff(std::f32::consts::FRAC_PI_4);
+        assert!(
+            (diff - std::f32::consts::FRAC_PI_4).abs() < 0.001,
+            "Clockwise quarter turn should have diff PI/4, got {diff}"
+        );
+    }
+
+    #[test]
+    fn calculate_angle_diff_wraps_correctly() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.last_scan_angle = 3.0 * std::f32::consts::FRAC_PI_2; // At west (270 degrees)
+
+        // Target at north (0 degrees) should be a small clockwise step
+        let diff = scanner.calculate_angle_diff(0.0);
+        let expected = std::f32::consts::FRAC_PI_2; // 90 degrees to complete the circle
+        assert!(
+            (diff - expected).abs() < 0.001,
+            "Expected wrap-around diff of PI/2 ({expected}), got {diff}"
+        );
+    }
+
+    #[test]
+    fn scanner_new_initializes_correctly() {
+        let pos = Position { x: 10, y: 20 };
+        let scanner = Scanner::new(3.0, pos);
+
+        assert!((scanner.base_scan_interval - 3.0).abs() < f32::EPSILON);
+        assert_eq!(scanner.position.x, 10);
+        assert_eq!(scanner.position.y, 20);
+        assert!(
+            scanner.last_scan_angle.abs() < f32::EPSILON,
+            "Should start at angle 0 (north)"
+        );
+        assert_eq!(
+            scanner.current_target_distance, 1,
+            "Should start at distance 1"
+        );
+    }
+
+    #[test]
+    fn reset_timer_for_distance_updates_state() {
+        let mut scanner = create_scanner_at_origin(2.0);
+
+        scanner.reset_timer_for_distance(5);
+
+        assert_eq!(scanner.current_target_distance, 5);
+        // Timer should be set to calculated scan time (5 * 2.0 = 10.0)
+        assert!(
+            (scanner.scan_timer.duration().as_secs_f32() - 10.0).abs() < 0.01,
+            "Timer duration should be 10.0"
+        );
+    }
+}

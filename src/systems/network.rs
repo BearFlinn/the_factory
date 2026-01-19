@@ -47,6 +47,18 @@ impl NetworkConnectivity {
             .iter()
             .any(|pos| self.core_network_cells.contains(pos))
     }
+
+    /// Adds a cell to the connected network. Only available in test builds.
+    #[cfg(test)]
+    pub fn add_connected_cell(&mut self, x: i32, y: i32) {
+        self.connected_cells.insert((x, y));
+    }
+
+    /// Adds a cell to the core network. Only available in test builds.
+    #[cfg(test)]
+    pub fn add_core_network_cell(&mut self, x: i32, y: i32) {
+        self.core_network_cells.insert((x, y));
+    }
 }
 
 #[must_use]
@@ -213,4 +225,157 @@ fn spawn_connection_visual(commands: &mut Commands, from: (i32, i32), to: (i32, 
         Sprite::from_color(Color::srgb(0.8, 0.8, 0.2), Vec2::new(length, 4.0)),
         Transform::from_xyz(center.x, center.y, 0.5).with_rotation(Quat::from_rotation_z(angle)),
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_connectivity_default_is_empty() {
+        let connectivity = NetworkConnectivity::default();
+        assert!(!connectivity.is_cell_connected(0, 0));
+        assert!(!connectivity.is_core_network_cell(0, 0));
+    }
+
+    #[test]
+    fn is_cell_connected_returns_true_for_connected_cell() {
+        let mut connectivity = NetworkConnectivity::default();
+        connectivity.add_connected_cell(5, 10);
+
+        assert!(connectivity.is_cell_connected(5, 10));
+    }
+
+    #[test]
+    fn is_cell_connected_returns_false_for_unconnected_cell() {
+        let mut connectivity = NetworkConnectivity::default();
+        connectivity.add_connected_cell(5, 10);
+
+        assert!(!connectivity.is_cell_connected(0, 0));
+        assert!(!connectivity.is_cell_connected(5, 11));
+        assert!(!connectivity.is_cell_connected(6, 10));
+    }
+
+    #[test]
+    fn is_core_network_cell_returns_true_for_core_cell() {
+        let mut connectivity = NetworkConnectivity::default();
+        connectivity.add_core_network_cell(3, 7);
+
+        assert!(connectivity.is_core_network_cell(3, 7));
+    }
+
+    #[test]
+    fn is_core_network_cell_returns_false_for_non_core_cell() {
+        let mut connectivity = NetworkConnectivity::default();
+        connectivity.add_core_network_cell(3, 7);
+
+        assert!(!connectivity.is_core_network_cell(0, 0));
+        assert!(!connectivity.is_core_network_cell(3, 8));
+        assert!(!connectivity.is_core_network_cell(4, 7));
+    }
+
+    #[test]
+    fn is_adjacent_to_connected_network_with_cell_to_north() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Cell at (5, 6) - north of (5, 5) since y+1
+        connectivity.add_connected_cell(5, 6);
+
+        assert!(connectivity.is_adjacent_to_connected_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_connected_network_with_cell_to_south() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Cell at (5, 4) - south of (5, 5) since y-1
+        connectivity.add_connected_cell(5, 4);
+
+        assert!(connectivity.is_adjacent_to_connected_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_connected_network_with_cell_to_east() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Cell at (6, 5) - east of (5, 5) since x+1
+        connectivity.add_connected_cell(6, 5);
+
+        assert!(connectivity.is_adjacent_to_connected_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_connected_network_with_cell_to_west() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Cell at (4, 5) - west of (5, 5) since x-1
+        connectivity.add_connected_cell(4, 5);
+
+        assert!(connectivity.is_adjacent_to_connected_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_connected_network_returns_false_for_no_adjacent() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Cell at diagonal position (6, 6) - not adjacent to (5, 5)
+        connectivity.add_connected_cell(6, 6);
+
+        assert!(!connectivity.is_adjacent_to_connected_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_core_network_with_cell_to_north() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Core cell at (5, 6) - north of (5, 5)
+        connectivity.add_core_network_cell(5, 6);
+
+        assert!(connectivity.is_adjacent_to_core_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_core_network_with_cell_to_south() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Core cell at (5, 4) - south of (5, 5)
+        connectivity.add_core_network_cell(5, 4);
+
+        assert!(connectivity.is_adjacent_to_core_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_core_network_with_cell_to_east() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Core cell at (6, 5) - east of (5, 5)
+        connectivity.add_core_network_cell(6, 5);
+
+        assert!(connectivity.is_adjacent_to_core_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_core_network_with_cell_to_west() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Core cell at (4, 5) - west of (5, 5)
+        connectivity.add_core_network_cell(4, 5);
+
+        assert!(connectivity.is_adjacent_to_core_network(5, 5));
+    }
+
+    #[test]
+    fn is_adjacent_to_core_network_returns_false_for_no_adjacent() {
+        let mut connectivity = NetworkConnectivity::default();
+        // Core cell at diagonal position (6, 6) - not adjacent to (5, 5)
+        connectivity.add_core_network_cell(6, 6);
+
+        assert!(!connectivity.is_adjacent_to_core_network(5, 5));
+    }
+
+    #[test]
+    fn connected_cells_and_core_cells_are_independent() {
+        let mut connectivity = NetworkConnectivity::default();
+        connectivity.add_connected_cell(1, 1);
+        connectivity.add_core_network_cell(2, 2);
+
+        // Cell (1, 1) is connected but not core
+        assert!(connectivity.is_cell_connected(1, 1));
+        assert!(!connectivity.is_core_network_cell(1, 1));
+
+        // Cell (2, 2) is core but may or may not be connected (depends on setup)
+        assert!(connectivity.is_core_network_cell(2, 2));
+        assert!(!connectivity.is_cell_connected(2, 2));
+    }
 }

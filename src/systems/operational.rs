@@ -182,3 +182,157 @@ pub fn update_operational_status(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // OperationalCondition Display trait tests
+    #[test]
+    fn operational_condition_network_false_displays_correctly() {
+        let condition = OperationalCondition::Network(false);
+        assert_eq!(format!("{condition}"), "Not connected to network");
+    }
+
+    #[test]
+    fn operational_condition_power_false_displays_correctly() {
+        let condition = OperationalCondition::Power(false);
+        assert_eq!(format!("{condition}"), "Insufficient power");
+    }
+
+    #[test]
+    fn operational_condition_compute_false_displays_correctly() {
+        let condition = OperationalCondition::Compute(false);
+        assert_eq!(format!("{condition}"), "Insufficient compute");
+    }
+
+    #[test]
+    fn operational_condition_has_items_false_displays_correctly() {
+        let condition = OperationalCondition::HasItems(false);
+        assert_eq!(format!("{condition}"), "Missing required items");
+    }
+
+    #[test]
+    fn operational_condition_has_inventory_space_false_displays_correctly() {
+        let condition = OperationalCondition::HasInventorySpace(false);
+        assert_eq!(format!("{condition}"), "Inventory full");
+    }
+
+    #[test]
+    fn operational_condition_true_displays_empty() {
+        // All true conditions should display nothing
+        let conditions = [
+            OperationalCondition::Network(true),
+            OperationalCondition::Power(true),
+            OperationalCondition::Compute(true),
+            OperationalCondition::HasItems(true),
+            OperationalCondition::HasInventorySpace(true),
+        ];
+
+        for condition in conditions {
+            assert_eq!(format!("{condition}"), "");
+        }
+    }
+
+    // Operational get_status() tests
+    #[test]
+    fn get_status_with_no_conditions_is_operational() {
+        let operational = Operational(None);
+        assert!(operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_empty_conditions_is_operational() {
+        let operational = Operational(Some(Vec::new()));
+        assert!(operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_all_conditions_true_is_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(true),
+            OperationalCondition::Power(true),
+            OperationalCondition::Compute(true),
+            OperationalCondition::HasItems(true),
+            OperationalCondition::HasInventorySpace(true),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_one_condition_false_is_not_operational() {
+        // Network false
+        let conditions = vec![
+            OperationalCondition::Network(false),
+            OperationalCondition::Power(true),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_power_false_is_not_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(true),
+            OperationalCondition::Power(false),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_compute_false_is_not_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(true),
+            OperationalCondition::Compute(false),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_has_items_false_is_not_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(true),
+            OperationalCondition::HasItems(false),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_has_inventory_space_false_is_not_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(true),
+            OperationalCondition::HasInventorySpace(false),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_with_multiple_conditions_false_is_not_operational() {
+        let conditions = vec![
+            OperationalCondition::Network(false),
+            OperationalCondition::Power(false),
+            OperationalCondition::Compute(true),
+        ];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+
+    #[test]
+    fn get_status_single_true_condition_is_operational() {
+        let conditions = vec![OperationalCondition::Network(true)];
+        let operational = Operational(Some(conditions));
+        assert!(operational.get_status());
+    }
+
+    #[test]
+    fn get_status_single_false_condition_is_not_operational() {
+        let conditions = vec![OperationalCondition::Network(false)];
+        let operational = Operational(Some(conditions));
+        assert!(!operational.get_status());
+    }
+}
