@@ -293,14 +293,21 @@ pub fn print_transferred_items(mut events: EventReader<ItemTransferEvent>) {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameter
+/// Validates item transfer requests, checking buffers first and falling back to Inventory.
+/// For pickups (building -> worker), uses `OutputBuffer` if available.
+/// For dropoffs (worker -> building), uses `InputBuffer` if available.
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn validate_item_transfer(
     mut requests: EventReader<ItemTransferRequestEvent>,
     mut validation_events: EventWriter<ItemTransferValidationEvent>,
     inventories: Query<&Inventory>,
+    output_buffers: Query<&OutputBuffer>,
+    input_buffers: Query<&InputBuffer>,
 ) {
     for request in requests.read() {
-        let Ok(sender_inventory) = inventories.get(request.sender) else {
+        // Get sender inventory: OutputBuffer first, then legacy Inventory
+        let sender_inv = get_sender_inventory(request.sender, &output_buffers, &inventories);
+        let Some(sender_inventory) = sender_inv else {
             validation_events.send(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
@@ -308,7 +315,9 @@ pub fn validate_item_transfer(
             continue;
         };
 
-        let Ok(receiver_inventory) = inventories.get(request.receiver) else {
+        // Get receiver inventory: InputBuffer first, then legacy Inventory
+        let receiver_inv = get_receiver_inventory(request.receiver, &input_buffers, &inventories);
+        let Some(receiver_inventory) = receiver_inv else {
             validation_events.send(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
@@ -367,9 +376,43 @@ pub fn validate_item_transfer(
     }
 }
 
+/// Gets the sender's inventory, preferring `OutputBuffer` over legacy Inventory.
+fn get_sender_inventory<'a>(
+    entity: Entity,
+    output_buffers: &'a Query<&OutputBuffer>,
+    inventories: &'a Query<&Inventory>,
+) -> Option<&'a Inventory> {
+    // Check OutputBuffer first (for Source/Processor buildings)
+    if let Ok(output_buffer) = output_buffers.get(entity) {
+        return Some(&output_buffer.inventory);
+    }
+    // Fall back to legacy Inventory
+    inventories.get(entity).ok()
+}
+
+/// Gets the receiver's inventory, preferring `InputBuffer` over legacy Inventory.
+fn get_receiver_inventory<'a>(
+    entity: Entity,
+    input_buffers: &'a Query<&InputBuffer>,
+    inventories: &'a Query<&Inventory>,
+) -> Option<&'a Inventory> {
+    // Check InputBuffer first (for Processor/Sink buildings)
+    if let Ok(input_buffer) = input_buffers.get(entity) {
+        return Some(&input_buffer.inventory);
+    }
+    // Fall back to legacy Inventory
+    inventories.get(entity).ok()
+}
+
+/// Executes validated item transfers, using buffers when available.
+/// For pickups (building -> worker), removes from `OutputBuffer` if available.
+/// For dropoffs (worker -> building), adds to `InputBuffer` if available.
+#[allow(clippy::type_complexity)]
 pub fn execute_item_transfer(
     mut validation_events: EventReader<ItemTransferValidationEvent>,
     mut inventories: Query<&mut Inventory>,
+    mut output_buffers: Query<&mut OutputBuffer>,
+    mut input_buffers: Query<&mut InputBuffer>,
     mut transfer_events: EventWriter<ItemTransferEvent>,
 ) {
     for validation in validation_events.read() {
@@ -387,7 +430,15 @@ pub fn execute_item_transfer(
 
             let mut actual_transfer = HashMap::new();
 
-            if let Ok(mut sender_inv) = inventories.get_mut(sender) {
+            // Remove items from sender: OutputBuffer first, then legacy Inventory
+            if let Ok(mut output_buffer) = output_buffers.get_mut(sender) {
+                for (item_name, &quantity) in validated_items {
+                    let removed = output_buffer.inventory.remove_item(item_name, quantity);
+                    if removed > 0 {
+                        actual_transfer.insert(item_name.clone(), removed);
+                    }
+                }
+            } else if let Ok(mut sender_inv) = inventories.get_mut(sender) {
                 for (item_name, &quantity) in validated_items {
                     let removed = sender_inv.remove_item(item_name, quantity);
                     if removed > 0 {
@@ -397,7 +448,12 @@ pub fn execute_item_transfer(
             }
 
             if !actual_transfer.is_empty() {
-                if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
+                // Add items to receiver: InputBuffer first, then legacy Inventory
+                if let Ok(mut input_buffer) = input_buffers.get_mut(receiver) {
+                    for (item_name, &quantity) in &actual_transfer {
+                        input_buffer.inventory.add_item(item_name, quantity);
+                    }
+                } else if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
                     for (item_name, &quantity) in &actual_transfer {
                         receiver_inv.add_item(item_name, quantity);
                     }
