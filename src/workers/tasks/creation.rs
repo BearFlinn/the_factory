@@ -3,8 +3,14 @@ use super::components::{
 };
 use crate::{
     grid::Position,
-    materials::{Inventory, InventoryType, InventoryTypes, ItemName, RecipeRegistry},
-    structures::{Building, ConstructionMaterialRequest, CrafterLogisticsRequest, RecipeCrafter},
+    materials::{
+        items::{InputBuffer, OutputBuffer},
+        Inventory, InventoryType, InventoryTypes, ItemName, RecipeRegistry,
+    },
+    structures::{
+        BufferLogisticsRequest, Building, ConstructionMaterialRequest, CrafterLogisticsRequest,
+        RecipeCrafter,
+    },
     workers::{manhattan_distance_coords, Worker, WorkerState},
 };
 use bevy::prelude::*;
@@ -774,6 +780,312 @@ fn calculate_balancing_transfer(
     }
 
     transfer
+}
+
+// ============================================================================
+// Buffer-Based Logistics Task Creation
+// ============================================================================
+
+/// Creates logistics tasks from `BufferLogisticsRequest` events.
+/// Handles both offers (items to pick up from `OutputBuffer`s) and requests
+/// (items needed by `InputBuffer`s).
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
+pub fn create_buffer_logistics_tasks(
+    mut commands: Commands,
+    mut events: EventReader<BufferLogisticsRequest>,
+    // Query for legacy buildings with Inventory (Storage)
+    legacy_buildings: Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    // Query for buildings with OutputBuffers (potential suppliers)
+    output_buildings: Query<(Entity, &Position, &OutputBuffer), With<Building>>,
+    // Query for buildings with InputBuffers (potential receivers for offers)
+    input_buildings: Query<(Entity, &Position, &InputBuffer), With<Building>>,
+    existing_tasks: Query<&TaskTarget, With<Task>>,
+) {
+    let existing_targets: std::collections::HashSet<Entity> =
+        existing_tasks.iter().map(|target| target.0).collect();
+
+    for event in events.read() {
+        match (&event.offerer, &event.requester) {
+            // Offer: Items available for pickup from an OutputBuffer
+            (Some(offerer), None) => {
+                if existing_targets.contains(offerer) {
+                    continue;
+                }
+
+                // Find a receiver: Storage (legacy) or InputBuffer that can accept items
+                let receiver = find_buffer_receiver(
+                    event.position,
+                    &event.items,
+                    &legacy_buildings,
+                    &input_buildings,
+                    &existing_targets,
+                );
+
+                if let Some((receiver_entity, receiver_pos)) = receiver {
+                    create_pickup_dropoff_sequence(
+                        &mut commands,
+                        *offerer,
+                        event.position,
+                        receiver_entity,
+                        receiver_pos,
+                        Some(event.items.clone()),
+                        event.priority.clone(),
+                    );
+                }
+            }
+
+            // Request: Items needed by an InputBuffer
+            (None, Some(requester)) => {
+                if existing_targets.contains(requester) {
+                    continue;
+                }
+
+                // Find a supplier: Storage (legacy) or OutputBuffer that has items
+                let supply_plan = find_buffer_suppliers(
+                    event.position,
+                    &event.items,
+                    &legacy_buildings,
+                    &output_buildings,
+                    &existing_targets,
+                );
+
+                for (supplier_entity, supplier_pos, items_to_pickup) in supply_plan {
+                    create_pickup_dropoff_sequence(
+                        &mut commands,
+                        supplier_entity,
+                        supplier_pos,
+                        *requester,
+                        event.position,
+                        Some(items_to_pickup),
+                        event.priority.clone(),
+                    );
+                }
+            }
+
+            _ => {}
+        }
+    }
+}
+
+/// Creates a pickup-dropoff task sequence for moving items between buildings.
+fn create_pickup_dropoff_sequence(
+    commands: &mut Commands,
+    pickup_entity: Entity,
+    pickup_pos: Position,
+    dropoff_entity: Entity,
+    dropoff_pos: Position,
+    items: Option<HashMap<ItemName, u32>>,
+    priority: Priority,
+) {
+    let pickup_task = commands
+        .spawn(TaskBundle::new(
+            pickup_entity,
+            pickup_pos,
+            TaskAction::Pickup(items.clone()),
+            priority.clone(),
+        ))
+        .id();
+
+    let dropoff_task = commands
+        .spawn(TaskBundle::new(
+            dropoff_entity,
+            dropoff_pos,
+            TaskAction::Dropoff(items),
+            priority.clone(),
+        ))
+        .id();
+
+    let sequence_entity = commands
+        .spawn(TaskSequenceBundle::new(
+            vec![pickup_task, dropoff_task],
+            priority,
+        ))
+        .id();
+
+    commands
+        .entity(pickup_task)
+        .insert(SequenceMember(sequence_entity));
+    commands
+        .entity(dropoff_task)
+        .insert(SequenceMember(sequence_entity));
+}
+
+/// Finds a receiver for items being offered (Storage or `InputBuffer` that has space).
+#[allow(clippy::type_complexity)]
+fn find_buffer_receiver(
+    source_pos: Position,
+    items: &HashMap<ItemName, u32>,
+    legacy_buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    input_buildings: &Query<(Entity, &Position, &InputBuffer), With<Building>>,
+    existing_targets: &std::collections::HashSet<Entity>,
+) -> Option<(Entity, Position)> {
+    let mut best_receiver: Option<(Entity, Position, i32)> = None;
+    let source_coords = (source_pos.x, source_pos.y);
+
+    // Check legacy Storage buildings
+    for (entity, pos, inv, inv_type) in legacy_buildings.iter() {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if inv_type.0 != InventoryTypes::Storage {
+            continue;
+        }
+        if !inv.has_space_for(items) {
+            continue;
+        }
+
+        let distance = manhattan_distance_coords(source_coords, (pos.x, pos.y));
+        if best_receiver.is_none_or(|(_, _, d)| distance < d) {
+            best_receiver = Some((entity, *pos, distance));
+        }
+    }
+
+    // Check InputBuffer buildings (Processors, Sinks) that might accept items
+    for (entity, pos, input_buffer) in input_buildings.iter() {
+        if existing_targets.contains(&entity) {
+            continue;
+        }
+        if !input_buffer.inventory.has_space_for(items) {
+            continue;
+        }
+        // Only deliver to InputBuffers that need items
+        if !input_buffer.needs_items() {
+            continue;
+        }
+
+        let distance = manhattan_distance_coords(source_coords, (pos.x, pos.y));
+        if best_receiver.is_none_or(|(_, _, d)| distance < d) {
+            best_receiver = Some((entity, *pos, distance));
+        }
+    }
+
+    best_receiver.map(|(e, p, _)| (e, p))
+}
+
+/// Finds suppliers for items being requested (Storage or `OutputBuffer` that has items).
+#[allow(clippy::type_complexity)]
+fn find_buffer_suppliers(
+    requester_pos: Position,
+    needed_items: &HashMap<ItemName, u32>,
+    legacy_buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    output_buildings: &Query<(Entity, &Position, &OutputBuffer), With<Building>>,
+    existing_targets: &std::collections::HashSet<Entity>,
+) -> Vec<(Entity, Position, HashMap<ItemName, u32>)> {
+    const WORKER_CAPACITY: u32 = 20;
+    let requester_coords = (requester_pos.x, requester_pos.y);
+
+    let mut remaining_needs = needed_items.clone();
+    let mut supply_plan = Vec::new();
+    let mut reserved_items: HashMap<Entity, HashMap<ItemName, u32>> = HashMap::new();
+
+    while !remaining_needs.is_empty() {
+        let mut best_supplier: Option<(Entity, Position, HashMap<ItemName, u32>, f32)> = None;
+
+        // Check legacy Storage buildings
+        for (entity, pos, inv, inv_type) in legacy_buildings.iter() {
+            if existing_targets.contains(&entity) {
+                continue;
+            }
+            if inv_type.0 != InventoryTypes::Storage && inv_type.0 != InventoryTypes::Sender {
+                continue;
+            }
+
+            let contribution =
+                calculate_supplier_contribution(entity, inv, &remaining_needs, &reserved_items);
+            if contribution.is_empty() {
+                continue;
+            }
+
+            let total_value: u32 = contribution.values().sum();
+            let distance = manhattan_distance_coords(requester_coords, (pos.x, pos.y));
+            #[allow(clippy::cast_precision_loss)]
+            let score = total_value as f32 / (distance as f32 + 1.0);
+
+            let is_better = best_supplier.as_ref().is_none_or(|(_, _, _, s)| score > *s);
+            if is_better {
+                best_supplier = Some((entity, *pos, contribution, score));
+            }
+        }
+
+        // Check OutputBuffer buildings
+        for (entity, pos, output_buffer) in output_buildings.iter() {
+            if existing_targets.contains(&entity) {
+                continue;
+            }
+
+            let contribution = calculate_supplier_contribution(
+                entity,
+                &output_buffer.inventory,
+                &remaining_needs,
+                &reserved_items,
+            );
+            if contribution.is_empty() {
+                continue;
+            }
+
+            let total_value: u32 = contribution.values().sum();
+            let distance = manhattan_distance_coords(requester_coords, (pos.x, pos.y));
+            #[allow(clippy::cast_precision_loss)]
+            let score = total_value as f32 / (distance as f32 + 1.0);
+
+            let is_better = best_supplier.as_ref().is_none_or(|(_, _, _, s)| score > *s);
+            if is_better {
+                best_supplier = Some((entity, *pos, contribution, score));
+            }
+        }
+
+        // Process best supplier
+        if let Some((entity, pos, contribution, _)) = best_supplier {
+            let chunks = chunk_contribution_by_capacity(contribution, WORKER_CAPACITY);
+
+            for chunk in chunks {
+                supply_plan.push((entity, pos, chunk.clone()));
+
+                // Reserve items
+                let reserved = reserved_items.entry(entity).or_default();
+                for (item_name, amount) in &chunk {
+                    *reserved.entry(item_name.clone()).or_insert(0) += amount;
+                }
+
+                // Update remaining needs
+                for (item_name, amount) in &chunk {
+                    if let Some(still_needed) = remaining_needs.get_mut(item_name) {
+                        *still_needed = still_needed.saturating_sub(*amount);
+                        if *still_needed == 0 {
+                            remaining_needs.remove(item_name);
+                        }
+                    }
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    supply_plan
+}
+
+/// Calculates what a supplier can contribute toward fulfilling needs.
+fn calculate_supplier_contribution(
+    entity: Entity,
+    inventory: &Inventory,
+    needs: &HashMap<ItemName, u32>,
+    reserved: &HashMap<Entity, HashMap<ItemName, u32>>,
+) -> HashMap<ItemName, u32> {
+    let mut contribution = HashMap::new();
+    let reserved_for_entity = reserved.get(&entity).cloned().unwrap_or_default();
+
+    for (item_name, &needed) in needs {
+        let available = inventory.get_item_quantity(item_name);
+        let already_reserved = reserved_for_entity.get(item_name).copied().unwrap_or(0);
+        let actual_available = available.saturating_sub(already_reserved);
+
+        if actual_available > 0 {
+            contribution.insert(item_name.clone(), actual_available.min(needed));
+        }
+    }
+
+    contribution
 }
 
 #[cfg(test)]

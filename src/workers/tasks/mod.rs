@@ -54,10 +54,11 @@ impl Plugin for TasksPlugin {
                     (process_worker_sequences, derive_worker_state_from_sequences)
                         .chain()
                         .in_set(TaskSystemSet::Processing),
-                    // Task generation from external requests - UPDATED to include construction logistics
+                    // Task generation from external requests
                     (
                         create_logistics_tasks,
                         create_construction_logistics_tasks,
+                        create_buffer_logistics_tasks,
                         create_proactive_tasks,
                         clear_all_tasks,
                     )
