@@ -56,7 +56,6 @@ impl Plugin for TasksPlugin {
                         .in_set(TaskSystemSet::Processing),
                     // Task generation from external requests
                     (
-                        create_logistics_tasks,
                         create_construction_logistics_tasks,
                         create_buffer_logistics_tasks,
                         create_proactive_tasks,

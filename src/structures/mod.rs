@@ -67,7 +67,6 @@ impl Plugin for BuildingsPlugin {
         app.add_event::<PlaceBuildingRequestEvent>()
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
-            .add_event::<CrafterLogisticsRequest>()
             .add_event::<BufferLogisticsRequest>()
             .add_event::<ConstructionMaterialRequest>()
             .init_resource::<LogisticsPlannerTimer>()
@@ -94,9 +93,7 @@ impl Plugin for BuildingsPlugin {
                         update_processor_crafters,
                         update_source_crafters,
                         update_sink_crafters,
-                        // Logistics request systems (legacy reactive + new polling)
-                        crafter_logistics_requests,
-                        handle_recipe_selection_logistics,
+                        // Polling-based logistics (replaces reactive systems)
                         poll_buffer_logistics,
                     )
                         .chain())
