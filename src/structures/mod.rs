@@ -11,6 +11,27 @@ pub use validation::*;
 
 use bevy::prelude::*;
 
+// ============================================================================
+// Building Archetype Markers
+// ============================================================================
+// These marker components identify a building's role in the production chain.
+// They replace the complex InventoryTypes enum with simple, composable markers.
+
+/// Marker for buildings that only produce items (e.g., Mining Drill).
+/// Source buildings have only an output buffer - they don't consume items.
+#[derive(Component, Debug, Default)]
+pub struct Source;
+
+/// Marker for buildings that transform items (e.g., Smelter, Assembler).
+/// Processor buildings have both input and output buffers.
+#[derive(Component, Debug, Default)]
+pub struct Processor;
+
+/// Marker for buildings that consume items for non-item output (e.g., Generator).
+/// Sink buildings have only an input buffer - they consume items but don't produce items.
+#[derive(Component, Debug, Default)]
+pub struct Sink;
+
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum BuildingSystemSet {
     Input,

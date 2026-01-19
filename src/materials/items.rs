@@ -176,6 +176,78 @@ impl Inventory {
     }
 }
 
+/// Input buffer for production buildings - holds items waiting to be processed.
+/// Separating input from output prevents mixing of raw materials with finished products,
+/// making logistics simpler and inventory jams easier to diagnose.
+#[derive(Component, Debug)]
+pub struct InputBuffer {
+    /// The inventory that holds incoming items for processing.
+    pub inventory: Inventory,
+    /// Request more items when fill level drops below this percentage (0.0-1.0).
+    pub request_threshold: f32,
+}
+
+impl InputBuffer {
+    /// Creates a new input buffer with the specified capacity and request threshold.
+    pub fn new(capacity: u32, request_threshold: f32) -> Self {
+        Self {
+            inventory: Inventory::new(capacity),
+            request_threshold: request_threshold.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Returns the current fill level as a percentage (0.0-1.0).
+    /// Returns 1.0 for zero-capacity buffers to prevent division by zero.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn fill_level(&self) -> f32 {
+        if self.inventory.capacity == 0 {
+            return 1.0;
+        }
+        self.inventory.get_total_quantity() as f32 / self.inventory.capacity as f32
+    }
+
+    /// Returns true if the buffer needs more items (fill level below request threshold).
+    pub fn needs_items(&self) -> bool {
+        self.fill_level() < self.request_threshold
+    }
+}
+
+/// Output buffer for production buildings - holds items that have been produced.
+/// Separating output from input ensures finished products don't compete with raw
+/// materials for inventory space.
+#[derive(Component, Debug)]
+pub struct OutputBuffer {
+    /// The inventory that holds produced items awaiting pickup.
+    pub inventory: Inventory,
+    /// Offer items for pickup when fill level exceeds this percentage (0.0-1.0).
+    pub offer_threshold: f32,
+}
+
+impl OutputBuffer {
+    /// Creates a new output buffer with the specified capacity and offer threshold.
+    pub fn new(capacity: u32, offer_threshold: f32) -> Self {
+        Self {
+            inventory: Inventory::new(capacity),
+            offer_threshold: offer_threshold.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Returns the current fill level as a percentage (0.0-1.0).
+    /// Returns 1.0 for zero-capacity buffers to prevent division by zero.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn fill_level(&self) -> f32 {
+        if self.inventory.capacity == 0 {
+            return 1.0;
+        }
+        self.inventory.get_total_quantity() as f32 / self.inventory.capacity as f32
+    }
+
+    /// Returns true if the buffer has items ready to offer (fill level above offer threshold).
+    pub fn has_items_to_offer(&self) -> bool {
+        self.fill_level() > self.offer_threshold
+    }
+}
+
 #[derive(Debug)]
 pub enum TransferError {
     ItemNotFound,
@@ -926,5 +998,167 @@ mod tests {
     fn test_transfer_error_display_inventory_full() {
         let error = TransferError::InventoryFull;
         assert_eq!(format!("{error}"), "Inventory full!");
+    }
+
+    // ==================== InputBuffer tests ====================
+
+    #[test]
+    fn test_input_buffer_new_creates_empty_buffer() {
+        let buffer = InputBuffer::new(100, 0.3);
+        assert!(buffer.inventory.is_empty());
+        assert_eq!(buffer.inventory.capacity, 100);
+        assert!((buffer.request_threshold - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_new_clamps_threshold_above_one() {
+        let buffer = InputBuffer::new(100, 1.5);
+        assert!((buffer.request_threshold - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_new_clamps_threshold_below_zero() {
+        let buffer = InputBuffer::new(100, -0.5);
+        assert!((buffer.request_threshold - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_fill_level_empty() {
+        let buffer = InputBuffer::new(100, 0.3);
+        assert!((buffer.fill_level() - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_fill_level_partial() {
+        let mut buffer = InputBuffer::new(100, 0.3);
+        buffer.inventory.add_item("Iron Ore", 50);
+        assert!((buffer.fill_level() - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_fill_level_full() {
+        let mut buffer = InputBuffer::new(100, 0.3);
+        buffer.inventory.add_item("Iron Ore", 100);
+        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_fill_level_zero_capacity() {
+        let buffer = InputBuffer::new(0, 0.3);
+        // Zero-capacity buffer should report as full to avoid division by zero
+        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_input_buffer_needs_items_below_threshold() {
+        let mut buffer = InputBuffer::new(100, 0.5);
+        buffer.inventory.add_item("Iron Ore", 20); // 20% full, threshold 50%
+        assert!(buffer.needs_items());
+    }
+
+    #[test]
+    fn test_input_buffer_needs_items_at_threshold() {
+        let mut buffer = InputBuffer::new(100, 0.5);
+        buffer.inventory.add_item("Iron Ore", 50); // 50% full, threshold 50%
+        assert!(!buffer.needs_items());
+    }
+
+    #[test]
+    fn test_input_buffer_needs_items_above_threshold() {
+        let mut buffer = InputBuffer::new(100, 0.5);
+        buffer.inventory.add_item("Iron Ore", 80); // 80% full, threshold 50%
+        assert!(!buffer.needs_items());
+    }
+
+    #[test]
+    fn test_input_buffer_needs_items_zero_threshold() {
+        let buffer = InputBuffer::new(100, 0.0);
+        // With 0.0 threshold, never needs items (0.0 is not < 0.0)
+        assert!(!buffer.needs_items());
+    }
+
+    // ==================== OutputBuffer tests ====================
+
+    #[test]
+    fn test_output_buffer_new_creates_empty_buffer() {
+        let buffer = OutputBuffer::new(100, 0.2);
+        assert!(buffer.inventory.is_empty());
+        assert_eq!(buffer.inventory.capacity, 100);
+        assert!((buffer.offer_threshold - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_new_clamps_threshold_above_one() {
+        let buffer = OutputBuffer::new(100, 1.5);
+        assert!((buffer.offer_threshold - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_new_clamps_threshold_below_zero() {
+        let buffer = OutputBuffer::new(100, -0.5);
+        assert!((buffer.offer_threshold - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_fill_level_empty() {
+        let buffer = OutputBuffer::new(100, 0.2);
+        assert!((buffer.fill_level() - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_fill_level_partial() {
+        let mut buffer = OutputBuffer::new(100, 0.2);
+        buffer.inventory.add_item("Iron Ingot", 30);
+        assert!((buffer.fill_level() - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_fill_level_full() {
+        let mut buffer = OutputBuffer::new(100, 0.2);
+        buffer.inventory.add_item("Iron Ingot", 100);
+        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_fill_level_zero_capacity() {
+        let buffer = OutputBuffer::new(0, 0.2);
+        // Zero-capacity buffer should report as full to avoid division by zero
+        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_output_buffer_has_items_to_offer_above_threshold() {
+        let mut buffer = OutputBuffer::new(100, 0.2);
+        buffer.inventory.add_item("Iron Ingot", 30); // 30% full, threshold 20%
+        assert!(buffer.has_items_to_offer());
+    }
+
+    #[test]
+    fn test_output_buffer_has_items_to_offer_at_threshold() {
+        let mut buffer = OutputBuffer::new(100, 0.2);
+        buffer.inventory.add_item("Iron Ingot", 20); // 20% full, threshold 20%
+        assert!(!buffer.has_items_to_offer());
+    }
+
+    #[test]
+    fn test_output_buffer_has_items_to_offer_below_threshold() {
+        let mut buffer = OutputBuffer::new(100, 0.2);
+        buffer.inventory.add_item("Iron Ingot", 10); // 10% full, threshold 20%
+        assert!(!buffer.has_items_to_offer());
+    }
+
+    #[test]
+    fn test_output_buffer_has_items_to_offer_one_threshold() {
+        let mut buffer = OutputBuffer::new(100, 1.0);
+        buffer.inventory.add_item("Iron Ingot", 100); // 100% full, threshold 100%
+                                                      // At threshold (not above), should not offer
+        assert!(!buffer.has_items_to_offer());
+    }
+
+    #[test]
+    fn test_output_buffer_has_items_to_offer_empty_with_zero_threshold() {
+        let buffer = OutputBuffer::new(100, 0.0);
+        // Empty buffer (0.0) is not > 0.0, so nothing to offer
+        assert!(!buffer.has_items_to_offer());
     }
 }
