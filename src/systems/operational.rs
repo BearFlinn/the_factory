@@ -1,12 +1,12 @@
 use core::fmt;
 
-use bevy::prelude::*;
 use crate::{
-    grid::Position, 
-    materials::{Inventory, InventoryType, InventoryTypes, RecipeRegistry}, 
-    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter}, 
-    systems::{ComputeGrid, NetworkConnectivity, PowerGrid}
+    grid::Position,
+    materials::{Inventory, InventoryType, InventoryTypes, RecipeRegistry},
+    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter},
+    systems::{ComputeGrid, NetworkConnectivity, PowerGrid},
 };
+use bevy::prelude::*;
 
 #[derive(Debug)]
 pub enum OperationalCondition {
@@ -40,19 +40,21 @@ impl Operational {
             Some(conditions) => {
                 // All conditions must be true for operational status
                 conditions.iter().all(|condition| {
-                    match condition {
-                        OperationalCondition::Network(status) => *status,
-                        OperationalCondition::Power(status) => *status,
-                        OperationalCondition::Compute(status) => *status,
-                        OperationalCondition::HasItems(status) => *status,
-                        OperationalCondition::HasInventorySpace(status) => *status,
-                    }
+                    let status = match condition {
+                        OperationalCondition::Network(s)
+                        | OperationalCondition::Power(s)
+                        | OperationalCondition::Compute(s)
+                        | OperationalCondition::HasItems(s)
+                        | OperationalCondition::HasInventorySpace(s) => s,
+                    };
+                    *status
                 })
             }
         }
     }
 }
 
+#[allow(clippy::type_complexity)] // Bevy query with many optional components
 pub fn populate_operational_conditions(
     mut operational_query: Query<(
         &mut Operational,
@@ -64,9 +66,22 @@ pub fn populate_operational_conditions(
         Option<&InventoryType>,
     )>,
 ) {
-    for (mut operational, building, power_consumer, compute_consumer, recipe_crafter, inventory, inventory_type) in operational_query.iter_mut() {
+    for (
+        mut operational,
+        building,
+        power_consumer,
+        compute_consumer,
+        recipe_crafter,
+        inventory,
+        inventory_type,
+    ) in &mut operational_query
+    {
         // Only populate if conditions are None or empty
-        if operational.0.is_some() && !operational.0.as_ref().unwrap().is_empty() {
+        if operational
+            .0
+            .as_ref()
+            .is_some_and(|conditions| !conditions.is_empty())
+        {
             continue;
         }
 
@@ -107,6 +122,7 @@ pub fn populate_operational_conditions(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn update_operational_status(
     mut operational_query: Query<(
         &mut Operational,
@@ -119,8 +135,7 @@ pub fn update_operational_status(
     compute_grid: Res<ComputeGrid>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
-    for (mut operational, crafter, inventory, pos) in operational_query.iter_mut() {
-        
+    for (mut operational, crafter, inventory, pos) in &mut operational_query {
         // Skip entities without operational conditions
         let Some(ref mut conditions) = operational.0 else {
             continue;
@@ -132,15 +147,15 @@ pub fn update_operational_status(
                 OperationalCondition::Network(ref mut status) => {
                     *status = network_connectivity.is_adjacent_to_connected_network(pos.x, pos.y);
                 }
-                
+
                 OperationalCondition::Power(ref mut status) => {
                     *status = power_grid.available >= 0;
                 }
-                
+
                 OperationalCondition::Compute(ref mut status) => {
                     *status = compute_grid.available >= 0;
                 }
-                
+
                 OperationalCondition::HasItems(ref mut status) => {
                     if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
                         let Some(recipe_name) = crafter.get_active_recipe() else {
@@ -150,12 +165,12 @@ pub fn update_operational_status(
                             let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
                                 inventory.has_at_least(item_name, *quantity)
                             });
-                            
+
                             *status = has_inputs;
                         }
                     }
                 }
-                
+
                 OperationalCondition::HasInventorySpace(ref mut status) => {
                     if let Some(inventory) = inventory {
                         *status = !inventory.is_full();

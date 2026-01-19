@@ -1,7 +1,7 @@
 use bevy::prelude::*;
+use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use bevy::scene::ron;
 
 pub type ItemName = String;
 
@@ -20,19 +20,23 @@ pub struct ItemRegistry {
 impl ItemRegistry {
     pub fn from_ron(ron_content: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let definitions_vec: Vec<ItemDef> = ron::from_str(ron_content)?;
-        
+
         let mut definitions = HashMap::new();
-        
+
         for def in definitions_vec {
             definitions.insert(def.name.clone(), def);
         }
-        
+
         Ok(Self { definitions })
     }
 
-    pub fn load_from_assets() -> Self {
+    /// Load item definitions from embedded assets.
+    ///
+    /// # Errors
+    /// Returns an error if the embedded RON content fails to parse.
+    pub fn load_from_assets() -> Result<Self, Box<dyn std::error::Error>> {
         let ron_content = include_str!("../assets/items.ron");
-        Self::from_ron(ron_content).expect("Failed to load item definitions")
+        Self::from_ron(ron_content)
     }
 
     pub fn get_definition(&self, item_name: &str) -> Option<&ItemDef> {
@@ -59,7 +63,7 @@ pub struct InventoryType(pub InventoryTypes);
 #[derive(Component, Debug)]
 #[require(InventoryType)]
 pub struct Inventory {
-    pub items: HashMap<ItemName, u32>, 
+    pub items: HashMap<ItemName, u32>,
     pub capacity: u32,
 }
 
@@ -100,10 +104,15 @@ impl Inventory {
     }
 
     pub fn has_items_for_recipe(&self, recipe: &HashMap<ItemName, u32>) -> bool {
-        recipe.iter().all(|(item_name, quantity)| self.has_at_least(item_name, *quantity))
+        recipe
+            .iter()
+            .all(|(item_name, quantity)| self.has_at_least(item_name, *quantity))
     }
 
-    pub fn remove_items_for_recipe(&mut self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
+    pub fn remove_items_for_recipe(
+        &mut self,
+        recipe: &HashMap<ItemName, u32>,
+    ) -> HashMap<ItemName, u32> {
         let mut removed = HashMap::new();
         for (item_name, quantity) in recipe {
             let removed_quantity = self.remove_item(item_name, *quantity);
@@ -115,7 +124,10 @@ impl Inventory {
     pub fn recipe_output_amounts(&self, recipe: &HashMap<ItemName, u32>) -> HashMap<ItemName, u32> {
         let mut output_amounts = HashMap::new();
         for (item_name, quantity) in recipe {
-            output_amounts.insert(item_name.clone(), self.get_item_quantity(item_name) * quantity);
+            output_amounts.insert(
+                item_name.clone(),
+                self.get_item_quantity(item_name) * quantity,
+            );
         }
         output_amounts
     }
@@ -174,10 +186,9 @@ pub enum TransferError {
 impl std::fmt::Display for TransferError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransferError::ItemNotFound => write!(f, "Item not found!"),
-            TransferError::NotEnoughItems => write!(f, "Not enough items to transfer!"),
-            TransferError::InventoryFull => write!(f, "Inventory full!"),
-            _ => write!(f, "Unknown transfer error!"),
+            Self::ItemNotFound => write!(f, "Item not found!"),
+            Self::NotEnoughItems => write!(f, "Not enough items to transfer!"),
+            Self::InventoryFull => write!(f, "Inventory full!"),
         }
     }
 }
@@ -210,32 +221,27 @@ pub fn print_transferred_items(mut events: EventReader<ItemTransferEvent>) {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // Bevy system parameter
 pub fn validate_item_transfer(
     mut requests: EventReader<ItemTransferRequestEvent>,
     mut validation_events: EventWriter<ItemTransferValidationEvent>,
     inventories: Query<&Inventory>,
 ) {
     for request in requests.read() {
-        let sender_inventory = match inventories.get(request.sender) {
-            Ok(inv) => inv,
-            Err(_) => {
-                validation_events.send(ItemTransferValidationEvent {
-                    result: Err(TransferError::ItemNotFound),
-                    request: request.clone(),
-                });
-                continue;
-            }
+        let Ok(sender_inventory) = inventories.get(request.sender) else {
+            validation_events.send(ItemTransferValidationEvent {
+                result: Err(TransferError::ItemNotFound),
+                request: request.clone(),
+            });
+            continue;
         };
 
-        let receiver_inventory = match inventories.get(request.receiver) {
-            Ok(inv) => inv,
-            Err(_) => {
-                validation_events.send(ItemTransferValidationEvent {
-                    result: Err(TransferError::ItemNotFound),
-                    request: request.clone(),
-                });
-                continue;
-            }
+        let Ok(receiver_inventory) = inventories.get(request.receiver) else {
+            validation_events.send(ItemTransferValidationEvent {
+                result: Err(TransferError::ItemNotFound),
+                request: request.clone(),
+            });
+            continue;
         };
 
         let mut validated_transfer = HashMap::new();
@@ -243,20 +249,22 @@ pub fn validate_item_transfer(
 
         for (item_name, &requested_quantity) in &request.items {
             let available = sender_inventory.get_item_quantity(item_name);
-            
+
             if available == 0 {
                 continue;
             }
 
             let transfer_quantity = available.min(requested_quantity);
-            let remaining_capacity = receiver_inventory.capacity.saturating_sub(current_receiver_total);
-            
+            let remaining_capacity = receiver_inventory
+                .capacity
+                .saturating_sub(current_receiver_total);
+
             if remaining_capacity == 0 {
                 break;
             }
 
             let final_quantity = transfer_quantity.min(remaining_capacity);
-            
+
             if final_quantity > 0 {
                 validated_transfer.insert(item_name.clone(), final_quantity);
                 current_receiver_total += final_quantity;
@@ -264,12 +272,16 @@ pub fn validate_item_transfer(
         }
 
         if validated_transfer.is_empty() {
-            let error = if request.items.iter().all(|(name, _)| sender_inventory.get_item_quantity(name) == 0) {
+            let error = if request
+                .items
+                .iter()
+                .all(|(name, _)| sender_inventory.get_item_quantity(name) == 0)
+            {
                 TransferError::NotEnoughItems
             } else {
                 TransferError::InventoryFull
             };
-            
+
             validation_events.send(ItemTransferValidationEvent {
                 result: Err(error),
                 request: request.clone(),
@@ -296,7 +308,7 @@ pub fn execute_item_transfer(
 
             let sender = validation.request.sender;
             let receiver = validation.request.receiver;
-            
+
             if sender == receiver {
                 continue;
             }
@@ -362,14 +374,16 @@ pub fn request_transfer_specific_items(
     }
 }
 
-pub fn setup(mut commands: Commands) {
-    commands.insert_resource(ItemRegistry::load_from_assets());
+fn setup(mut commands: Commands) {
+    if let Ok(registry) = ItemRegistry::load_from_assets() {
+        commands.insert_resource(registry);
+    }
 }
+
 pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Startup, setup);
+        app.add_systems(Startup, setup);
     }
 }

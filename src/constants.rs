@@ -15,7 +15,6 @@ pub mod structures {
     pub const DATACENTER: &str = "Datacenter";
 }
 
-
 pub mod gridlayers {
     pub const RESOURCE_LAYER: i32 = 0;
     pub const BUILDING_LAYER: i32 = 1;

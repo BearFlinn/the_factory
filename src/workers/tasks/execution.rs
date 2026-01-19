@@ -1,14 +1,29 @@
-use bevy::prelude::*;
+use super::components::{AssignedWorker, Task, TaskAction, TaskSequence, TaskStatus, TaskTarget};
 use crate::{
     grid::{Grid, Position},
-    materials::{request_transfer_all_items, request_transfer_specific_items, Inventory, ItemTransferRequestEvent},
+    materials::{
+        request_transfer_all_items, request_transfer_specific_items, Inventory,
+        ItemTransferRequestEvent,
+    },
     systems::NetworkConnectivity,
-    workers::{calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath, WorkerState}
+    workers::{
+        calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath, WorkerState,
+    },
 };
-use super::components::*;
+use bevy::prelude::*;
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn process_worker_sequences(
-    mut workers: Query<(Entity, &Transform, &mut AssignedSequence, &mut WorkerPath, &mut WorkerState), With<Worker>>,
+    mut workers: Query<
+        (
+            Entity,
+            &Transform,
+            &mut AssignedSequence,
+            &mut WorkerPath,
+            &mut WorkerState,
+        ),
+        With<Worker>,
+    >,
     mut sequences: Query<&mut TaskSequence>,
     mut tasks: Query<(&Position, &mut TaskStatus, &TaskTarget), With<Task>>,
     task_targets: Query<Entity>,
@@ -16,11 +31,13 @@ pub fn process_worker_sequences(
     network: Res<NetworkConnectivity>,
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
-    for (worker_entity, transform, mut assigned_sequence, mut worker_path, mut worker_state) in workers.iter_mut() {
+    for (worker_entity, transform, mut assigned_sequence, mut worker_path, mut worker_state) in
+        &mut workers
+    {
         let Some(sequence_entity) = assigned_sequence.0 else {
             continue;
         };
-        
+
         if !validate_and_process_sequence(
             sequence_entity,
             &mut assigned_sequence,
@@ -31,23 +48,29 @@ pub fn process_worker_sequences(
         ) {
             continue;
         }
-        
-        let sequence = sequences.get(sequence_entity).unwrap();
-        let current_task_entity = sequence.current_task().unwrap();
-        let (task_position, mut task_status, _) = tasks.get_mut(current_task_entity).unwrap();
-        
+
+        let Ok(sequence) = sequences.get(sequence_entity) else {
+            continue;
+        };
+        let Some(current_task_entity) = sequence.current_task() else {
+            continue;
+        };
+        let Ok((task_position, mut task_status, _)) = tasks.get_mut(current_task_entity) else {
+            continue;
+        };
+
         if *task_status == TaskStatus::Pending || *task_status == TaskStatus::Queued {
             *task_status = TaskStatus::InProgress;
         }
-        
+
         if worker_path.current_target.is_some() || !worker_path.waypoints.is_empty() {
             continue;
         }
-        
+
         initiate_pathfinding_or_complete_task(
             worker_entity,
             transform,
-            task_position,
+            *task_position,
             &mut worker_path,
             &mut assigned_sequence,
             &mut worker_state,
@@ -72,19 +95,19 @@ fn validate_and_process_sequence(
         *worker_state = WorkerState::Idle;
         return false;
     };
-    
+
     if sequence.is_complete() {
         assigned_sequence.0 = None;
         *worker_state = WorkerState::Idle;
         return false;
     }
-    
+
     let Some(current_task_entity) = sequence.current_task() else {
         assigned_sequence.0 = None;
         *worker_state = WorkerState::Idle;
         return false;
     };
-    
+
     let Ok((_, mut task_status, task_target)) = tasks.get_mut(current_task_entity) else {
         if sequence.advance_to_next().is_none() {
             assigned_sequence.0 = None;
@@ -92,7 +115,7 @@ fn validate_and_process_sequence(
         }
         return false;
     };
-    
+
     if task_targets.get(task_target.0).is_err() {
         *task_status = TaskStatus::Completed;
         if sequence.advance_to_next().is_none() {
@@ -101,14 +124,15 @@ fn validate_and_process_sequence(
         }
         return false;
     }
-    
+
     true
 }
 
+#[allow(clippy::too_many_arguments)]
 fn initiate_pathfinding_or_complete_task(
     worker_entity: Entity,
     transform: &Transform,
-    task_position: &Position,
+    task_position: Position,
     worker_path: &mut WorkerPath,
     assigned_sequence: &mut AssignedSequence,
     worker_state: &mut WorkerState,
@@ -117,25 +141,25 @@ fn initiate_pathfinding_or_complete_task(
     network: &NetworkConnectivity,
     arrival_events: &mut EventWriter<WorkerArrivedEvent>,
 ) {
-    let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate()) else {
+    let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate())
+    else {
         return;
     };
-    
+
     let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
     let target_pos = (task_position.x, task_position.y);
 
-    if let Some(path) = calculate_path(worker_pos, target_pos, &network, &grid) {
+    if let Some(path) = calculate_path(worker_pos, target_pos, network, grid) {
         worker_path.waypoints = path;
         worker_path.current_target = worker_path.waypoints.pop_front();
-        
+
         if worker_path.current_target.is_none() && worker_path.waypoints.is_empty() {
             arrival_events.send(WorkerArrivedEvent {
                 worker: worker_entity,
                 position: target_pos,
             });
         }
-    } else {
-        let sequence_entity = assigned_sequence.0.unwrap();
+    } else if let Some(sequence_entity) = assigned_sequence.0 {
         if let Ok(mut sequence) = sequences.get_mut(sequence_entity) {
             if sequence.advance_to_next().is_none() {
                 assigned_sequence.0 = None;
@@ -145,6 +169,7 @@ fn initiate_pathfinding_or_complete_task(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn handle_sequence_task_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
     mut workers: Query<(&mut AssignedSequence, &Inventory, &mut WorkerState), With<Worker>>,
@@ -155,14 +180,16 @@ pub fn handle_sequence_task_arrivals(
     mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
 ) {
     for event in arrival_events.read() {
-        let Ok((mut worker_assigned_sequence, worker_inventory, mut worker_state)) = workers.get_mut(event.worker) else {
+        let Ok((mut worker_assigned_sequence, worker_inventory, mut worker_state)) =
+            workers.get_mut(event.worker)
+        else {
             continue;
         };
-        
+
         let Some(sequence_entity) = worker_assigned_sequence.0 else {
             continue;
         };
-        
+
         if !validate_arrival_context(
             event,
             sequence_entity,
@@ -174,11 +201,19 @@ pub fn handle_sequence_task_arrivals(
         ) {
             continue;
         }
-        
-        let (mut sequence, mut sequence_assigned_worker) = sequences.get_mut(sequence_entity).unwrap();
-        let current_task_entity = sequence.current_task().unwrap();
-        let (_, task_action, task_target, mut task_status) = tasks.get_mut(current_task_entity).unwrap();
-        
+
+        let Ok((mut sequence, mut sequence_assigned_worker)) = sequences.get_mut(sequence_entity)
+        else {
+            continue;
+        };
+        let Some(current_task_entity) = sequence.current_task() else {
+            continue;
+        };
+        let Ok((_, task_action, task_target, mut task_status)) = tasks.get_mut(current_task_entity)
+        else {
+            continue;
+        };
+
         execute_task_action(
             event.worker,
             task_action,
@@ -187,9 +222,9 @@ pub fn handle_sequence_task_arrivals(
             &inventories,
             &mut transfer_requests,
         );
-        
+
         *task_status = TaskStatus::Completed;
-        
+
         if sequence.advance_to_next().is_none() {
             *worker_state = WorkerState::Idle;
             worker_assigned_sequence.0 = None;
@@ -207,20 +242,22 @@ fn validate_arrival_context(
     tasks: &mut Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
     task_targets: &Query<Entity>,
 ) -> bool {
-    let Ok((mut sequence, mut sequence_assigned_worker)) = sequences.get_mut(sequence_entity) else {
+    let Ok((mut sequence, mut sequence_assigned_worker)) = sequences.get_mut(sequence_entity)
+    else {
         worker_assigned_sequence.0 = None;
         *worker_state = WorkerState::Idle;
         return false;
     };
-    
+
     let Some(current_task_entity) = sequence.current_task() else {
         worker_assigned_sequence.0 = None;
         *worker_state = WorkerState::Idle;
         sequence_assigned_worker.0 = None;
         return false;
     };
-    
-    let Ok((task_position, _, task_target, mut task_status)) = tasks.get_mut(current_task_entity) else {
+
+    let Ok((task_position, _, task_target, mut task_status)) = tasks.get_mut(current_task_entity)
+    else {
         if sequence.advance_to_next().is_none() {
             worker_assigned_sequence.0 = None;
             *worker_state = WorkerState::Idle;
@@ -228,7 +265,7 @@ fn validate_arrival_context(
         }
         return false;
     };
-    
+
     if task_targets.get(task_target.0).is_err() {
         *task_status = TaskStatus::Completed;
         if sequence.advance_to_next().is_none() {
@@ -238,12 +275,12 @@ fn validate_arrival_context(
         }
         return false;
     }
-    
+
     let task_pos = (task_position.x, task_position.y);
     if event.position != task_pos {
         return false;
     }
-    
+
     true
 }
 

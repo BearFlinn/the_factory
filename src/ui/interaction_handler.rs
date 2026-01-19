@@ -4,8 +4,8 @@ use crate::ui::UISystemSet;
 
 #[derive(Clone)]
 pub enum SelectionBehavior {
-    Toggle,                  // Click toggles selection on/off
-    Exclusive(String),       // Click selects this, deselects others in the group
+    Toggle,            // Click toggles selection on/off
+    Exclusive(String), // Click selects this, deselects others in the group
 }
 
 #[derive(Component)]
@@ -17,18 +17,18 @@ pub struct Selectable {
 
 impl Selectable {
     pub fn new() -> Self {
-        Self { 
+        Self {
             is_selected: false,
             selection_behavior: SelectionBehavior::Toggle,
             selection_group: None,
         }
     }
-    
+
     pub fn with_group(mut self, group: String) -> Self {
         self.selection_group = Some(group);
         self
     }
-    
+
     pub fn with_behavior(mut self, behavior: SelectionBehavior) -> Self {
         self.selection_behavior = behavior;
         self
@@ -49,12 +49,12 @@ impl DynamicStyles {
             border_color: None,
         }
     }
-    
+
     pub fn with_background(mut self, color: Color) -> Self {
         self.background_color = Some(BackgroundColor(color));
         self
     }
-    
+
     pub fn with_border(mut self, color: Color) -> Self {
         self.border_color = Some(BorderColor(color));
         self
@@ -78,22 +78,22 @@ impl InteractiveUI {
             on_selected: None,
         }
     }
-    
+
     pub fn default(mut self, styles: DynamicStyles) -> Self {
         self.default_styles = styles;
         self
     }
-    
+
     pub fn on_hover(mut self, styles: DynamicStyles) -> Self {
         self.on_hover = Some(styles);
         self
     }
-    
+
     pub fn on_click(mut self, styles: DynamicStyles) -> Self {
         self.on_click = Some(styles);
         self
     }
-    
+
     pub fn selected(mut self, styles: DynamicStyles) -> Self {
         self.on_selected = Some(styles);
         self
@@ -110,18 +110,19 @@ fn apply_dynamic_styles(
     if !entities.contains(entity) {
         return;
     }
-    
+
     if let Some(bg_color) = &styles.background_color {
-        commands.entity(entity).insert(bg_color.clone());
+        commands.entity(entity).insert(*bg_color);
     }
     if let Some(border_color) = &styles.border_color {
-        commands.entity(entity).insert(border_color.clone());
+        commands.entity(entity).insert(*border_color);
     }
 }
 
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters require by-value
 pub fn handle_interactive_ui(
     mut commands: Commands,
-    entities: Query<(), With<Node>>, // Add this query
+    entities: Query<(), With<Node>>,
     mut query_set: ParamSet<(
         Query<(Entity, &Interaction, &mut Selectable, &InteractiveUI), Changed<Interaction>>,
         Query<(Entity, &mut Selectable, &InteractiveUI)>,
@@ -129,9 +130,9 @@ pub fn handle_interactive_ui(
 ) {
     // First, collect entities that were interacted with and their selection changes
     let mut entities_to_process = Vec::new();
-    
+
     // Process interactions and collect what needs to be done
-    for (entity, interaction, mut selectable, interactive_ui) in query_set.p0().iter_mut() {
+    for (entity, interaction, mut selectable, interactive_ui) in &mut query_set.p0() {
         if *interaction == Interaction::Pressed {
             match &selectable.selection_behavior {
                 SelectionBehavior::Toggle => {
@@ -144,46 +145,56 @@ pub fn handle_interactive_ui(
                 }
             }
         }
-        
+
         // Apply visual styles for this entity with safety check
-        let styles_to_apply = determine_styles(interaction, &selectable, interactive_ui);
+        let styles_to_apply = determine_styles(*interaction, &selectable, interactive_ui);
         apply_dynamic_styles(&mut commands, entity, styles_to_apply, &entities);
     }
-    
+
     // Now handle exclusive deselection using the second query
     for (selected_entity, group, _) in entities_to_process {
-        for (other_entity, mut other_selectable, other_ui) in query_set.p1().iter_mut() {
-            if other_selectable.selection_group.as_ref() == Some(&group) && other_entity != selected_entity {
-                if other_selectable.is_selected {
-                    other_selectable.is_selected = false;
-                    apply_dynamic_styles(&mut commands, other_entity, &other_ui.default_styles, &entities);
-                }
+        for (other_entity, mut other_selectable, other_ui) in &mut query_set.p1() {
+            if other_selectable.selection_group.as_ref() == Some(&group)
+                && other_entity != selected_entity
+                && other_selectable.is_selected
+            {
+                other_selectable.is_selected = false;
+                apply_dynamic_styles(
+                    &mut commands,
+                    other_entity,
+                    &other_ui.default_styles,
+                    &entities,
+                );
             }
         }
     }
 }
 
 // Also handle visual updates when selection changes outside of interactions
+#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_selection_visuals(
     mut commands: Commands,
-    entities: Query<(), With<Node>>, // Add this query
-    changed_selectables: Query<(Entity, &Selectable, &InteractiveUI, &Interaction), Changed<Selectable>>,
+    entities: Query<(), With<Node>>,
+    changed_selectables: Query<
+        (Entity, &Selectable, &InteractiveUI, &Interaction),
+        Changed<Selectable>,
+    >,
 ) {
     for (entity, selectable, interactive_ui, interaction) in &changed_selectables {
-        let styles_to_apply = determine_styles(interaction, selectable, interactive_ui);
+        let styles_to_apply = determine_styles(*interaction, selectable, interactive_ui);
         apply_dynamic_styles(&mut commands, entity, styles_to_apply, &entities);
     }
 }
 
 fn determine_styles<'a>(
-    interaction: &Interaction,
+    interaction: Interaction,
     selectable: &Selectable,
     interactive_ui: &'a InteractiveUI,
 ) -> &'a DynamicStyles {
     match interaction {
         Interaction::Pressed => {
-            if selectable.is_selected && interactive_ui.on_selected.is_some() {
-                interactive_ui.on_selected.as_ref().unwrap()
+            if let (true, Some(selected)) = (selectable.is_selected, &interactive_ui.on_selected) {
+                selected
             } else if let Some(click_styles) = &interactive_ui.on_click {
                 click_styles
             } else {
@@ -191,8 +202,8 @@ fn determine_styles<'a>(
             }
         }
         Interaction::Hovered => {
-            if selectable.is_selected && interactive_ui.on_selected.is_some() {
-                interactive_ui.on_selected.as_ref().unwrap()
+            if let (true, Some(selected)) = (selectable.is_selected, &interactive_ui.on_selected) {
+                selected
             } else if let Some(hover_styles) = &interactive_ui.on_hover {
                 hover_styles
             } else {
@@ -200,8 +211,8 @@ fn determine_styles<'a>(
             }
         }
         Interaction::None => {
-            if selectable.is_selected && interactive_ui.on_selected.is_some() {
-                interactive_ui.on_selected.as_ref().unwrap()
+            if let (true, Some(selected)) = (selectable.is_selected, &interactive_ui.on_selected) {
+                selected
             } else {
                 &interactive_ui.default_styles
             }
@@ -209,6 +220,7 @@ fn determine_styles<'a>(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_escape_clear_selection(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selectables: Query<&mut Selectable>,
@@ -226,12 +238,13 @@ pub struct InteractionHandlerPlugin;
 
 impl Plugin for InteractionHandlerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
-            handle_escape_clear_selection.in_set(UISystemSet::InputDetection),
+        app.add_systems(
+            Update,
             (
-                handle_interactive_ui,
-                update_selection_visuals,
-            ).in_set(UISystemSet::VisualUpdates),
-        ));
+                handle_escape_clear_selection.in_set(UISystemSet::InputDetection),
+                (handle_interactive_ui, update_selection_visuals)
+                    .in_set(UISystemSet::VisualUpdates),
+            ),
+        );
     }
 }

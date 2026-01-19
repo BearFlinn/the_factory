@@ -1,8 +1,11 @@
-use std::collections::VecDeque;
-use bevy::prelude::*;
 use crate::{
-    grid::Position, materials::items::{Inventory, InventoryType, InventoryTypes}, structures::ComputeConsumer, workers::WorkerPath
+    grid::Position,
+    materials::items::{Inventory, InventoryType, InventoryTypes},
+    structures::ComputeConsumer,
+    workers::WorkerPath,
 };
+use bevy::prelude::*;
+use std::collections::VecDeque;
 
 #[derive(Component)]
 pub struct Worker;
@@ -41,7 +44,11 @@ impl WorkerBundle {
         WorkerBundle {
             worker: Worker,
             speed: Speed { value: 250.0 },
-            position: Position { x: spawn_position.x as i32, y: spawn_position.y as i32 },
+            #[allow(clippy::cast_possible_truncation)]
+            position: Position {
+                x: spawn_position.x as i32,
+                y: spawn_position.y as i32,
+            },
             path: WorkerPath {
                 waypoints: VecDeque::new(),
                 current_target: None,

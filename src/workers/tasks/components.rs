@@ -1,6 +1,6 @@
-use std::collections::VecDeque;
-use bevy::prelude::*;
 use crate::grid::Position;
+use bevy::prelude::*;
+use std::collections::VecDeque;
 
 #[derive(Component)]
 pub struct Task;
@@ -49,11 +49,16 @@ pub struct TaskBundle {
 }
 
 impl TaskBundle {
-    pub fn new(task_target: Entity, position: Position, action: TaskAction, priority: Priority) -> Self {
+    pub fn new(
+        task_target: Entity,
+        position: Position,
+        action: TaskAction,
+        priority: Priority,
+    ) -> Self {
         Self {
             task: Task,
-            priority: priority,
-            position: position,
+            priority,
+            position,
             task_status: TaskStatus::Pending,
             task_target: TaskTarget(task_target),
             task_action: action,
@@ -75,20 +80,20 @@ impl TaskSequence {
             current_index: 0,
         }
     }
-    
+
     pub fn current_task(&self) -> Option<Entity> {
         self.tasks.get(self.current_index).copied()
     }
-    
+
     pub fn advance_to_next(&mut self) -> Option<Entity> {
         self.current_index += 1;
         self.current_task()
     }
-    
+
     pub fn is_complete(&self) -> bool {
         self.current_index >= self.tasks.len()
     }
-    
+
     pub fn remaining_tasks(&self) -> usize {
         self.tasks.len().saturating_sub(self.current_index)
     }
@@ -98,21 +103,21 @@ impl TaskSequence {
         if self.current_index >= self.tasks.len() {
             return true;
         }
-        
+
         // Check if current task entity still exists
         if let Some(current_task) = self.current_task() {
             if task_query.get(current_task).is_err() {
                 return true; // Current task was despawned, consider sequence complete
             }
         }
-        
+
         false
     }
-    
+
     // Add method to validate and clean invalid tasks
     pub fn validate_and_advance(&mut self, task_query: &Query<Entity, With<Task>>) -> bool {
         let mut advanced = false;
-        
+
         // Skip invalid tasks until we find a valid one or reach the end
         while self.current_index < self.tasks.len() {
             if let Some(current_task) = self.current_task() {
@@ -120,12 +125,12 @@ impl TaskSequence {
                     break; // Found valid task
                 }
             }
-            
+
             // Current task is invalid, advance
             self.current_index += 1;
             advanced = true;
         }
-        
+
         advanced
     }
 }

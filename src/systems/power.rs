@@ -1,16 +1,17 @@
-use bevy::prelude::*;
 use crate::{
-    structures::{PowerGenerator, PowerConsumer},
-    systems::{Operational}
+    structures::{PowerConsumer, PowerGenerator},
+    systems::Operational,
 };
+use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub struct PowerGrid {
     pub capacity: i32,
     pub usage: i32,
-    pub available: i32
+    pub available: i32,
 }
 
+#[allow(clippy::needless_pass_by_value)] // Bevy system parameters must be passed by value
 pub fn update_power_grid(
     mut power_grid: ResMut<PowerGrid>,
     generators: Query<(&PowerGenerator, &Operational)>,
@@ -18,12 +19,11 @@ pub fn update_power_grid(
 ) {
     let mut total_production: i32 = 0;
     for (generator, operational) in generators.iter() {
-        if operational.get_status() == false {
+        if !operational.get_status() {
             continue;
         }
-        
+
         total_production += generator.amount;
-        
     }
 
     let total_consumption: i32 = consumers.iter().map(|c| c.amount).sum();

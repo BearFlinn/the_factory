@@ -1,9 +1,15 @@
-use bevy::prelude::*;
 use crate::{
-    grid::{CellChildren, Grid, Layer, Position}, 
-    structures::{Building, BuildingComponentDef, BuildingCost, BuildingRegistry, ConstructionMaterialRequest, ConstructionSite, ConstructionSiteBundle, NetWorkComponent, PlaceBuildingValidationEvent}, 
-    systems::NetworkChangedEvent, ui::SelectedBuilding, workers::Priority
+    grid::{CellChildren, Grid, Layer, Position},
+    structures::{
+        Building, BuildingComponentDef, BuildingCost, BuildingRegistry,
+        ConstructionMaterialRequest, ConstructionSite, ConstructionSiteBundle, NetWorkComponent,
+        PlaceBuildingValidationEvent,
+    },
+    systems::NetworkChangedEvent,
+    ui::SelectedBuilding,
+    workers::Priority,
 };
+use bevy::prelude::*;
 
 #[derive(Event, Clone)]
 pub struct PlaceBuildingRequestEvent {
@@ -18,6 +24,7 @@ pub struct RemoveBuildingEvent {
     pub grid_y: i32,
 }
 
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 pub fn handle_building_input(
     mouse_button: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -28,10 +35,10 @@ pub fn handle_building_input(
     mut place_events: EventWriter<PlaceBuildingRequestEvent>,
     mut remove_events: EventWriter<RemoveBuildingEvent>,
 ) {
-    let ui_active = ui_interactions.iter().any(|interaction| {
-        matches!(interaction, Interaction::Pressed | Interaction::Hovered)
-    });
-    
+    let ui_active = ui_interactions
+        .iter()
+        .any(|interaction| matches!(interaction, Interaction::Pressed | Interaction::Hovered));
+
     if ui_active {
         return;
     }
@@ -58,6 +65,7 @@ pub fn handle_building_input(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn place_building(
     mut commands: Commands,
     mut validation_events: EventReader<PlaceBuildingValidationEvent>,
@@ -71,34 +79,42 @@ pub fn place_building(
         if event.result.is_ok() {
             let Some((_, _, mut cell_children)) = grid_cells
                 .iter_mut()
-                .find(|(_, pos, _)| pos.x == event.request.grid_x && pos.y == event.request.grid_y) else {
+                .find(|(_, pos, _)| pos.x == event.request.grid_x && pos.y == event.request.grid_y)
+            else {
                 continue;
             };
-            let world_pos = grid.grid_to_world_coordinates(event.request.grid_x, event.request.grid_y);
+            let world_pos =
+                grid.grid_to_world_coordinates(event.request.grid_x, event.request.grid_y);
 
             if let Some(def) = registry.get_definition(&event.request.building_name) {
-                let building_cost = BuildingCost { 
-                    cost: def.placement.cost.to_recipe_def() 
+                let building_cost = BuildingCost {
+                    cost: def.placement.cost.to_recipe_def(),
                 };
-                
-                let position = Position { 
-                    x: event.request.grid_x, 
-                    y: event.request.grid_y 
+
+                let position = Position {
+                    x: event.request.grid_x,
+                    y: event.request.grid_y,
                 };
 
                 // Create construction site instead of building
-                let construction_site_entity = commands.spawn(
-                    ConstructionSiteBundle::new(
+                let construction_site_entity = commands
+                    .spawn(ConstructionSiteBundle::new(
                         event.request.building_name.clone(),
                         building_cost.clone(),
                         position,
                         world_pos,
                         &def.appearance,
-                    )
-                ).id();
+                    ))
+                    .id();
 
-                if def.components.iter().any(|comp| matches!(comp, BuildingComponentDef::NetWorkComponent { .. })) {
-                    commands.entity(construction_site_entity).insert(NetWorkComponent);
+                if def
+                    .components
+                    .iter()
+                    .any(|comp| matches!(comp, BuildingComponentDef::NetWorkComponent))
+                {
+                    commands
+                        .entity(construction_site_entity)
+                        .insert(NetWorkComponent);
                 }
 
                 cell_children.0.push(construction_site_entity);
@@ -117,6 +133,7 @@ pub fn place_building(
     }
 }
 
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn remove_building(
     mut commands: Commands,
     mut remove_events: EventReader<RemoveBuildingEvent>,
@@ -129,7 +146,7 @@ pub fn remove_building(
         let Some((_, _, mut cell_children)) = grid_cells
             .iter_mut()
             .find(|(_, pos, _)| pos.x == event.grid_x && pos.y == event.grid_y)
-            else {
+        else {
             continue;
         };
 

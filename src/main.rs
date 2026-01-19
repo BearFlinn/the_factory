@@ -1,23 +1,23 @@
 use bevy::prelude::*;
 
-mod structures;
-mod grid;
-mod ui;
 mod camera;
-mod resources;
-mod workers;
-mod materials;
-mod systems;
 mod constants;
+mod grid;
+mod materials;
+mod resources;
+mod structures;
+mod systems;
+mod ui;
+mod workers;
 
-use grid::GridPlugin;
 use camera::CameraPlugin;
-use structures::BuildingsPlugin;
-use ui::UIPlugin;
-use resources::ResourcesPlugin;
-use workers::WorkersPlugin;
+use grid::GridPlugin;
 use materials::MaterialsPlugin;
+use resources::ResourcesPlugin;
+use structures::BuildingsPlugin;
 use systems::SystemsPlugin;
+use ui::UIPlugin;
+use workers::WorkersPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GameplaySet {
@@ -29,20 +29,23 @@ pub enum GameplaySet {
 }
 
 pub fn configure_system_sets(app: &mut App) {
-    app.configure_sets(Update, (
-        GameplaySet::GridUpdate,
-        GameplaySet::ResourceSpawning,
-        GameplaySet::SystemsUpdate,
-        GameplaySet::DomainOperations,
-        GameplaySet::UIUpdate,
-    ).chain());
+    app.configure_sets(
+        Update,
+        (
+            GameplaySet::GridUpdate,
+            GameplaySet::ResourceSpawning,
+            GameplaySet::SystemsUpdate,
+            GameplaySet::DomainOperations,
+            GameplaySet::UIUpdate,
+        )
+            .chain(),
+    );
 }
 
 fn main() {
     let mut app = App::new();
     configure_system_sets(&mut app);
-    app
-        .add_plugins(DefaultPlugins)
+    app.add_plugins(DefaultPlugins)
         .add_plugins((
             GridPlugin,
             ResourcesPlugin,
@@ -51,6 +54,7 @@ fn main() {
             BuildingsPlugin,
             WorkersPlugin,
             CameraPlugin,
-            UIPlugin))
+            UIPlugin,
+        ))
         .run();
 }

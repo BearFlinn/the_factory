@@ -1,7 +1,8 @@
-use bevy::prelude::*;
 use crate::{
-    grid::Grid, workers::{WorkerBundle, WorkersSystemSet}
+    grid::Grid,
+    workers::{WorkerBundle, WorkersSystemSet},
 };
+use bevy::prelude::*;
 
 #[derive(Component)]
 pub struct SpawnWorkerButton;
@@ -35,9 +36,13 @@ pub fn setup_spawn_worker_button(mut commands: Commands) {
         });
 }
 
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters require by-value
 pub fn handle_spawn_worker_button(
     mut commands: Commands,
-    mut button_query: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<SpawnWorkerButton>)>,
+    mut button_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<SpawnWorkerButton>),
+    >,
     grid: Res<Grid>,
 ) {
     for (interaction, mut background_color) in &mut button_query {
@@ -45,7 +50,7 @@ pub fn handle_spawn_worker_button(
             Interaction::Pressed => {
                 let spawn_world_pos = grid.grid_to_world_coordinates(0, 0);
                 commands.spawn(WorkerBundle::new(spawn_world_pos));
-                println!("Manual worker spawned at world position: {:?}", spawn_world_pos);
+                println!("Manual worker spawned at world position: {spawn_world_pos:?}");
             }
             Interaction::Hovered => {
                 *background_color = BackgroundColor(Color::srgb(0.3, 0.3, 0.3));
@@ -62,6 +67,9 @@ pub struct SpawnWorkerButtonPlugin;
 impl Plugin for SpawnWorkerButtonPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_spawn_worker_button)
-           .add_systems(Update, handle_spawn_worker_button.in_set(WorkersSystemSet::Lifecycle));
+            .add_systems(
+                Update,
+                handle_spawn_worker_button.in_set(WorkersSystemSet::Lifecycle),
+            );
     }
 }

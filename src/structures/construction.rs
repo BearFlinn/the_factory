@@ -1,13 +1,19 @@
-
 use std::collections::HashMap;
 
-use crate::{constants::structures::MINING_DRILL, grid::ExpandGridEvent, materials::{ItemName, RecipeDef, RecipeName}, resources::{ResourceNode, ResourceNodeRecipe}, systems::NetworkChangedEvent, workers::{Priority, TaskSequence}};
 pub use crate::{
-    grid::{CellChildren, Grid, Layer, Position}, 
-    structures::{building_config::*},
-    materials::items::{Inventory, InventoryType, InventoryTypes},
-    systems::Operational,
     constants::gridlayers::BUILDING_LAYER,
+    grid::{CellChildren, Grid, Layer, Position},
+    materials::items::{Inventory, InventoryType, InventoryTypes},
+    structures::building_config::*,
+    systems::Operational,
+};
+use crate::{
+    constants::structures::MINING_DRILL,
+    grid::ExpandGridEvent,
+    materials::{ItemName, RecipeDef, RecipeName},
+    resources::{ResourceNode, ResourceNodeRecipe},
+    systems::NetworkChangedEvent,
+    workers::{Priority, TaskSequence},
 };
 
 #[derive(Component)]
@@ -21,8 +27,8 @@ pub struct ViewRange {
 #[derive(Component, Debug)]
 pub struct RecipeCrafter {
     pub timer: Timer,
-    pub current_recipe: Option<RecipeName>,  // Currently selected recipe
-    pub available_recipes: Vec<RecipeName>,  // Available recipes (empty for single-recipe buildings)
+    pub current_recipe: Option<RecipeName>, // Currently selected recipe
+    pub available_recipes: Vec<RecipeName>, // Available recipes (empty for single-recipe buildings)
 }
 
 impl RecipeCrafter {
@@ -30,17 +36,17 @@ impl RecipeCrafter {
     pub fn is_single_recipe(&self) -> bool {
         self.available_recipes.is_empty()
     }
-    
-    // Helper method to check if this is a multi-recipe crafter  
+
+    // Helper method to check if this is a multi-recipe crafter
     pub fn is_multi_recipe(&self) -> bool {
         !self.available_recipes.is_empty()
     }
-    
+
     // Helper method to get the active recipe (for compatibility)
     pub fn get_active_recipe(&self) -> Option<&RecipeName> {
         self.current_recipe.as_ref()
     }
-    
+
     // Helper method to set the current recipe (validates against available recipes)
     pub fn set_recipe(&mut self, recipe_name: RecipeName) -> Result<(), String> {
         if self.is_single_recipe() {
@@ -53,7 +59,9 @@ impl RecipeCrafter {
                 self.current_recipe = Some(recipe_name);
                 Ok(())
             } else {
-                Err(format!("Recipe '{}' not available for this crafter", recipe_name))
+                Err(format!(
+                    "Recipe '{recipe_name}' not available for this crafter"
+                ))
             }
         }
     }
@@ -78,7 +86,6 @@ pub struct ComputeGenerator {
 pub struct ComputeConsumer {
     pub amount: i32,
 }
-
 
 #[derive(Component, Clone)]
 pub struct BuildingCost {
@@ -156,6 +163,9 @@ pub struct ConstructionMaterialRequest {
 }
 
 impl BuildingRegistry {
+    /// # Panics
+    /// Panics if the buildings.ron asset file is malformed or cannot be parsed.
+    #[allow(clippy::expect_used)]
     pub fn load_from_assets() -> Self {
         let ron_content = include_str!("../assets/buildings.ron");
         Self::from_ron(ron_content).expect("Failed to load building definitions")
@@ -193,7 +203,7 @@ pub fn occupy_area(
 #[derive(Component)]
 pub struct Hub;
 
-
+#[allow(clippy::needless_pass_by_value)]
 pub fn place_hub(
     mut commands: Commands,
     grid: Res<Grid>,
@@ -208,48 +218,67 @@ pub fn place_hub(
     central_inventory.add_item("Iron Ore", 400);
     central_inventory.add_item("Copper Ore", 400);
 
-    let building_entity = commands.spawn((
-        Building,
-        Hub,
-        Position { x: center_x, y: center_y },
-        MultiCellBuilding { 
-            width: 3, 
-            height: 3, 
-            center_x, 
-            center_y 
-        },
-        PowerGenerator { amount: 100 },
-        ComputeGenerator { amount: 60 },
-        central_inventory,
-        InventoryType (InventoryTypes::Storage),
-        Operational(None),
-        Layer(BUILDING_LAYER),
-    ))
-    .insert(Sprite::from_color(Color::srgb(0.3, 0.3, 0.7), Vec2::new(120.0, 120.0)))
-    .insert(Transform::from_xyz(world_pos.x, world_pos.y, 1.0))
-    .id();
+    let building_entity = commands
+        .spawn((
+            Building,
+            Hub,
+            Position {
+                x: center_x,
+                y: center_y,
+            },
+            MultiCellBuilding {
+                width: 3,
+                height: 3,
+                center_x,
+                center_y,
+            },
+            PowerGenerator { amount: 100 },
+            ComputeGenerator { amount: 60 },
+            central_inventory,
+            InventoryType(InventoryTypes::Storage),
+            Operational(None),
+            Layer(BUILDING_LAYER),
+        ))
+        .insert(Sprite::from_color(
+            Color::srgb(0.3, 0.3, 0.7),
+            Vec2::new(120.0, 120.0),
+        ))
+        .insert(Transform::from_xyz(world_pos.x, world_pos.y, 1.0))
+        .id();
 
     occupy_area(&mut grid_cells, center_x, center_y, 3, 3, building_entity);
 }
 
+#[allow(clippy::type_complexity, clippy::needless_pass_by_value)]
 pub fn monitor_construction_completion(
     mut commands: Commands,
-    construction_sites: Query<(Entity, &ConstructionSite, &Inventory, &BuildingCost, &Position, &Transform), (Changed<Inventory>, With<ConstructionSite>)>,
+    construction_sites: Query<
+        (
+            Entity,
+            &ConstructionSite,
+            &Inventory,
+            &BuildingCost,
+            &Position,
+            &Transform,
+        ),
+        (Changed<Inventory>, With<ConstructionSite>),
+    >,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
     mut network_events: EventWriter<NetworkChangedEvent>,
-    mut expand_events: EventWriter<ExpandGridEvent>,
 ) {
-    for (site_entity, construction_site, inventory, building_cost, position, transform) in construction_sites.iter() {
+    for (site_entity, construction_site, inventory, building_cost, position, transform) in
+        &construction_sites
+    {
         // Check if construction site has all required materials
         if inventory.has_items_for_recipe(&building_cost.cost.inputs) {
             // Remove construction site
             commands.entity(site_entity).despawn();
-            
+
             // Update grid cell children to remove construction site
             if let Some((_, _, mut cell_children)) = grid_cells
                 .iter_mut()
-                .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y) 
+                .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y)
             {
                 cell_children.0.retain(|&entity| entity != site_entity);
             }
@@ -263,22 +292,26 @@ pub fn monitor_construction_completion(
                 transform.translation.truncate(),
             ) {
                 // Set drill recipe
-                if &construction_site.building_name == MINING_DRILL {
-                    commands.entity(building_entity).insert(PendingDrillRecipeAssignment {
-                        position: *position,
-                    });
+                if construction_site.building_name == MINING_DRILL {
+                    commands
+                        .entity(building_entity)
+                        .insert(PendingDrillRecipeAssignment {
+                            position: *position,
+                        });
                 }
                 // Add building to grid cell
                 if let Some((_, _, mut cell_children)) = grid_cells
                     .iter_mut()
-                    .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y) 
+                    .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y)
                 {
                     cell_children.0.push(building_entity);
                 }
 
                 network_events.send(NetworkChangedEvent);
-                println!("Construction completed: {} at ({}, {})", 
-                         construction_site.building_name, position.x, position.y);
+                println!(
+                    "Construction completed: {} at ({}, {})",
+                    construction_site.building_name, position.x, position.y
+                );
             }
         }
     }
@@ -301,29 +334,33 @@ impl ConstructionMonitor {
             next_retry_time: current_time + 10.0, // Initial 10 second check
         }
     }
-    
+
     pub fn should_retry(&self, current_time: f32) -> bool {
         current_time >= self.next_retry_time
     }
-    
+
     pub fn schedule_next_retry(&mut self, current_time: f32) {
         self.retry_count += 1;
         self.next_retry_time = current_time + 10.0;
-        
+
         println!("Construction retry #{} scheduled in 10s", self.retry_count);
     }
-    
+
     pub fn reset_progress(&mut self, new_inventory: &HashMap<ItemName, u32>, current_time: f32) {
-        self.last_inventory_snapshot = new_inventory.clone();
+        self.last_inventory_snapshot.clone_from(new_inventory);
         self.last_progress_time = current_time;
         self.retry_count = 0;
         self.next_retry_time = current_time + 10.0;
     }
-    
+
     pub fn has_made_progress(&self, current_inventory: &HashMap<ItemName, u32>) -> bool {
         // Check if any required materials have increased
         for (item_name, &current_amount) in current_inventory {
-            let previous_amount = self.last_inventory_snapshot.get(item_name).copied().unwrap_or(0);
+            let previous_amount = self
+                .last_inventory_snapshot
+                .get(item_name)
+                .copied()
+                .unwrap_or(0);
             if current_amount > previous_amount {
                 return true;
             }
@@ -332,55 +369,57 @@ impl ConstructionMonitor {
     }
 }
 
+#[allow(clippy::type_complexity, clippy::needless_pass_by_value)]
 pub fn monitor_construction_progress(
     mut commands: Commands,
-    mut construction_sites: Query<(
-        Entity, 
-        &ConstructionSite, 
-        &Inventory, 
-        &BuildingCost, 
-        &Position,
-        Option<&mut ConstructionMonitor>
-    ), With<ConstructionSite>>,
+    mut construction_sites: Query<
+        (
+            Entity,
+            &ConstructionSite,
+            &Inventory,
+            &BuildingCost,
+            &Position,
+            Option<&mut ConstructionMonitor>,
+        ),
+        With<ConstructionSite>,
+    >,
     active_sequences: Query<&TaskSequence>,
     mut construction_requests: EventWriter<ConstructionMaterialRequest>,
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_secs();
-    
-    for (site_entity, construction_site, inventory, building_cost, position, monitor) in construction_sites.iter_mut() {
+
+    for (site_entity, construction_site, inventory, building_cost, position, monitor) in
+        &mut construction_sites
+    {
         let required_materials = &building_cost.cost.inputs;
         let current_materials = inventory.get_all_items();
-        
+
         // Check if construction is complete
         if inventory.has_items_for_recipe(required_materials) {
             continue; // Let the completion system handle this
         }
-        
+
         // Initialize or update monitor
-        let mut monitor = match monitor {
-            Some(mut monitor) => {
-                // Check for progress
-                if monitor.has_made_progress(&current_materials) {
-                    monitor.reset_progress(&current_materials, current_time);
-                    continue; // Progress detected, no action needed
-                }
-                monitor
-            }
-            None => {
-                // First time seeing this construction site
-                commands.entity(site_entity).insert(
-                    ConstructionMonitor::new(&current_materials, current_time)
-                );
-                continue;
-            }
+        let Some(mut monitor) = monitor else {
+            // First time seeing this construction site
+            commands
+                .entity(site_entity)
+                .insert(ConstructionMonitor::new(&current_materials, current_time));
+            continue;
         };
-        
+
+        // Check for progress
+        if monitor.has_made_progress(&current_materials) {
+            monitor.reset_progress(&current_materials, current_time);
+            continue; // Progress detected, no action needed
+        }
+
         // Check if we should retry supply planning
         if !monitor.should_retry(current_time) {
             continue;
         }
-        
+
         // Calculate what materials are still needed
         let mut still_needed = HashMap::new();
         for (item_name, &required_amount) in required_materials {
@@ -389,7 +428,7 @@ pub fn monitor_construction_progress(
                 still_needed.insert(item_name.clone(), required_amount - current_amount);
             }
         }
-        
+
         if !still_needed.is_empty() {
             // Check if there are any active task sequences targeting this construction site
             let has_active_tasks = active_sequences.iter().any(|sequence| {
@@ -397,16 +436,17 @@ pub fn monitor_construction_progress(
                 // way to track which sequences are targeting which construction sites
                 !sequence.is_complete()
             });
-            
+
             if !has_active_tasks {
                 println!(
                     "Construction stalled at ({}, {}): {} - requesting {} materials (retry #{})",
-                    position.x, position.y,
+                    position.x,
+                    position.y,
                     construction_site.building_name,
                     still_needed.len(),
                     monitor.retry_count + 1
                 );
-                
+
                 // Request new supply plan
                 construction_requests.send(ConstructionMaterialRequest {
                     site: site_entity,
@@ -414,20 +454,20 @@ pub fn monitor_construction_progress(
                     needed_materials: still_needed,
                     priority: Priority::High, // Higher priority for retries
                 });
-                
+
                 monitor.schedule_next_retry(current_time);
             }
         }
     }
 }
 
-
+#[allow(clippy::needless_pass_by_value)]
 pub fn assign_drill_recipes(
     mut commands: Commands,
     mut drills: Query<(Entity, &mut RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
     resource_nodes: Query<(&ResourceNodeRecipe, &Position), With<ResourceNode>>,
 ) {
-    for (drill_entity, mut recipe_crafter, pending) in drills.iter_mut() {
+    for (drill_entity, mut recipe_crafter, pending) in &mut drills {
         // Find the resource node at this position
         if let Some((resource_recipe, _)) = resource_nodes
             .iter()
@@ -435,37 +475,47 @@ pub fn assign_drill_recipes(
         {
             // Use the new set_recipe method to assign the recipe
             if let Err(error) = recipe_crafter.set_recipe(resource_recipe.recipe_name.clone()) {
-                println!("Failed to assign recipe to drill at ({}, {}): {}", 
-                         pending.position.x, pending.position.y, error);
+                println!(
+                    "Failed to assign recipe to drill at ({}, {}): {}",
+                    pending.position.x, pending.position.y, error
+                );
             } else {
-                commands.entity(drill_entity).remove::<PendingDrillRecipeAssignment>();
-                println!("Assigned recipe '{}' to drill at ({}, {})", 
-                         resource_recipe.recipe_name, pending.position.x, pending.position.y);
+                commands
+                    .entity(drill_entity)
+                    .remove::<PendingDrillRecipeAssignment>();
+                println!(
+                    "Assigned recipe '{}' to drill at ({}, {})",
+                    resource_recipe.recipe_name, pending.position.x, pending.position.y
+                );
             }
         }
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn drill_awaiting_assignment(
     drills: Query<(&RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
 ) -> bool {
     !drills.is_empty()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn handle_building_view_range_expansion(
     buildings_with_view_range: Query<(&ViewRange, &Position), Added<Building>>,
     mut expand_events: EventWriter<ExpandGridEvent>,
 ) {
-    for (view_range, position) in buildings_with_view_range.iter() {
+    for (view_range, position) in &buildings_with_view_range {
         if view_range.radius > 0 {
             expand_events.send(ExpandGridEvent {
                 center_x: position.x,
                 center_y: position.y,
                 radius: view_range.radius,
             });
-            
-            println!("Expanding grid for building at ({}, {}) with radius {}", 
-                     position.x, position.y, view_range.radius);
+
+            println!(
+                "Expanding grid for building at ({}, {}) with radius {}",
+                position.x, position.y, view_range.radius
+            );
         }
     }
 }

@@ -2,13 +2,13 @@ use bevy::scene::ron;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{materials::RecipeDef, systems::{OperationalCondition, Scanner}};
 pub use crate::{
-    grid::{Position, Layer},
-    systems::Operational,
-    structures::*,
+    grid::{Layer, Position},
     materials::items::{Inventory, InventoryType, InventoryTypes},
+    structures::*,
+    systems::Operational,
 };
+use crate::{materials::RecipeDef, systems::Scanner};
 
 pub type BuildingName = String;
 
@@ -31,7 +31,7 @@ pub struct BuildingDef {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppearanceDef {
     pub size: (f32, f32),
-    pub color: (f32, f32, f32, f32), // RGBA
+    pub color: (f32, f32, f32, f32),    // RGBA
     pub multi_cell: Option<(i32, i32)>, // (width, height)
 }
 
@@ -60,21 +60,35 @@ impl CostDef {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum BuildingComponentDef {
-    PowerConsumer { amount: i32 },
-    PowerGenerator { amount: i32 },
-    ComputeGenerator { amount: i32 },
-    ComputeConsumer { amount: i32 },
-    Inventory { capacity: u32 },
-    InventoryType { inv_type: InventoryTypes },
-    ViewRange { radius: i32 },
-    NetWorkComponent,
-    RecipeCrafter { 
-        recipe_name: Option<String>,           
-        available_recipes: Option<Vec<String>>, 
-        interval: f32 
+    PowerConsumer {
+        amount: i32,
     },
-    Scanner { 
-        base_scan_interval: f32  // Removed max_radius, simplified to just timing
+    PowerGenerator {
+        amount: i32,
+    },
+    ComputeGenerator {
+        amount: i32,
+    },
+    ComputeConsumer {
+        amount: i32,
+    },
+    Inventory {
+        capacity: u32,
+    },
+    InventoryType {
+        inv_type: InventoryTypes,
+    },
+    ViewRange {
+        radius: i32,
+    },
+    NetWorkComponent,
+    RecipeCrafter {
+        recipe_name: Option<String>,
+        available_recipes: Option<Vec<String>>,
+        interval: f32,
+    },
+    Scanner {
+        base_scan_interval: f32, // Removed max_radius, simplified to just timing
     },
 }
 
@@ -86,13 +100,13 @@ pub struct BuildingRegistry {
 impl BuildingRegistry {
     pub fn from_ron(ron_content: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let definitions_vec: Vec<BuildingDef> = ron::from_str(ron_content)?;
-        
+
         let mut definitions = HashMap::new();
-        
+
         for def in definitions_vec {
             definitions.insert(def.name.clone(), def);
         }
-        
+
         Ok(Self { definitions })
     }
 
@@ -114,7 +128,7 @@ impl BuildingRegistry {
 
     #[allow(dead_code)] // Is used in spawn_building_buttons, rust analyzer broky
     pub fn get_name_by_name(&self, building_name: &str) -> Option<String> {
-        let def = self.get_definition(building_name)?; 
+        let def = self.get_definition(building_name)?;
         Some(def.name.clone())
     }
 
@@ -130,8 +144,11 @@ impl BuildingRegistry {
         let mut entity_commands = commands.spawn((
             Building,
             def.category,
-            Name::new(format!("{}",&def.name)),
-            Position { x: grid_x, y: grid_y },
+            Name::new(def.name.clone()),
+            Position {
+                x: grid_x,
+                y: grid_y,
+            },
             Operational(Some(Vec::new())),
             Layer(BUILDING_LAYER),
             Sprite::from_color(
@@ -146,8 +163,8 @@ impl BuildingRegistry {
             Transform::from_xyz(world_pos.x, world_pos.y, 1.0),
         ));
 
-        entity_commands.insert(BuildingCost { 
-            cost: def.placement.cost.to_recipe_def() 
+        entity_commands.insert(BuildingCost {
+            cost: def.placement.cost.to_recipe_def(),
         });
 
         if let Some((width, height)) = def.appearance.multi_cell {
@@ -185,26 +202,31 @@ impl BuildingRegistry {
                 BuildingComponentDef::NetWorkComponent => {
                     entity_commands.insert(NetWorkComponent);
                 }
-                BuildingComponentDef::RecipeCrafter { recipe_name, available_recipes, interval } => {
-                    let (current_recipe, available_recipes_vec) = match (recipe_name, available_recipes) {
-                        // Single-recipe crafter: fixed recipe, empty available list
-                        (Some(recipe), None) => (Some(recipe.clone()), Vec::new()),
-                        
-                        // Multi-recipe crafter: no current recipe, provided available list
-                        (None, Some(recipes)) => (None, recipes.clone()),
-                        
-                        // Invalid configurations - handle gracefully
-                        (Some(recipe), Some(recipes)) => {
-                            // If both are provided, treat as multi-recipe with the single recipe pre-selected
-                            // This provides a migration path for existing configurations
-                            (Some(recipe.clone()), recipes.clone())
-                        },
-                        
-                        // Neither provided - create empty crafter (should probably be avoided)
-                        (None, None) => (None, Vec::new()),
-                    };
-                    
-                    entity_commands.insert(RecipeCrafter { 
+                BuildingComponentDef::RecipeCrafter {
+                    recipe_name,
+                    available_recipes,
+                    interval,
+                } => {
+                    let (current_recipe, available_recipes_vec) =
+                        match (recipe_name, available_recipes) {
+                            // Single-recipe crafter: fixed recipe, empty available list
+                            (Some(recipe), None) => (Some(recipe.clone()), Vec::new()),
+
+                            // Multi-recipe crafter: no current recipe, provided available list
+                            (None, Some(recipes)) => (None, recipes.clone()),
+
+                            // Invalid configurations - handle gracefully
+                            (Some(recipe), Some(recipes)) => {
+                                // If both are provided, treat as multi-recipe with the single recipe pre-selected
+                                // This provides a migration path for existing configurations
+                                (Some(recipe.clone()), recipes.clone())
+                            }
+
+                            // Neither provided - create empty crafter (should probably be avoided)
+                            (None, None) => (None, Vec::new()),
+                        };
+
+                    entity_commands.insert(RecipeCrafter {
                         current_recipe,
                         available_recipes: available_recipes_vec,
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
@@ -212,8 +234,11 @@ impl BuildingRegistry {
                 }
                 BuildingComponentDef::Scanner { base_scan_interval } => {
                     entity_commands.insert(Scanner::new(
-                        *base_scan_interval, 
-                        Position { x: grid_x, y: grid_y }
+                        *base_scan_interval,
+                        Position {
+                            x: grid_x,
+                            y: grid_y,
+                        },
                     ));
                 }
             }
