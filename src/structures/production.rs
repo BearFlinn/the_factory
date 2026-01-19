@@ -2,8 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     grid::Position,
-    materials::{items::Inventory, InventoryType, InventoryTypes, ItemName, RecipeRegistry},
-    structures::RecipeCrafter,
+    materials::{
+        items::{InputBuffer, Inventory, OutputBuffer},
+        InventoryType, InventoryTypes, ItemName, RecipeRegistry,
+    },
+    structures::{Processor, RecipeCrafter, Sink, Source},
     systems::Operational,
     workers::tasks::{Priority, Task, TaskTarget},
 };
@@ -43,6 +46,131 @@ pub fn update_recipe_crafters(
                         inventory.add_item(item_name, *quantity);
                     }
                 }
+            }
+
+            crafter.timer.reset();
+        }
+    }
+}
+
+/// Buffer-aware crafting for Processor buildings (input + output buffers).
+/// Consumes from `InputBuffer`, produces to `OutputBuffer` - no mixing of materials.
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_processor_crafters(
+    mut query: Query<
+        (
+            &mut RecipeCrafter,
+            &Operational,
+            &mut InputBuffer,
+            &mut OutputBuffer,
+        ),
+        With<Processor>,
+    >,
+    recipe_registry: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut crafter, operational, mut input_buffer, mut output_buffer) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if crafter.timer.tick(time.delta()).just_finished() {
+            let Some(recipe_name) = crafter.get_active_recipe() else {
+                continue;
+            };
+            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+                continue;
+            };
+
+            // Check if we have all required inputs in InputBuffer
+            let has_inputs = input_buffer.inventory.has_items_for_recipe(&recipe.inputs);
+
+            // Check if we have space for outputs in OutputBuffer
+            let has_output_space = output_buffer.inventory.has_space_for(&recipe.outputs);
+
+            if has_inputs && has_output_space {
+                // Consume inputs from InputBuffer
+                for (item_name, quantity) in &recipe.inputs {
+                    input_buffer.inventory.remove_item(item_name, *quantity);
+                }
+
+                // Produce outputs to OutputBuffer
+                for (item_name, quantity) in &recipe.outputs {
+                    output_buffer.inventory.add_item(item_name, *quantity);
+                }
+            }
+
+            crafter.timer.reset();
+        }
+    }
+}
+
+/// Buffer-aware crafting for Source buildings (output buffer only, no inputs).
+/// Mining drills and similar buildings that produce items from nothing (or from the world).
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_source_crafters(
+    mut query: Query<(&mut RecipeCrafter, &Operational, &mut OutputBuffer), With<Source>>,
+    recipe_registry: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut crafter, operational, mut output_buffer) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if crafter.timer.tick(time.delta()).just_finished() {
+            let Some(recipe_name) = crafter.get_active_recipe() else {
+                continue;
+            };
+            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+                continue;
+            };
+
+            // Sources don't consume inputs - check if we have space for outputs
+            let has_output_space = output_buffer.inventory.has_space_for(&recipe.outputs);
+
+            if has_output_space {
+                // Produce outputs to OutputBuffer
+                for (item_name, quantity) in &recipe.outputs {
+                    output_buffer.inventory.add_item(item_name, *quantity);
+                }
+            }
+
+            crafter.timer.reset();
+        }
+    }
+}
+
+/// Buffer-aware crafting for Sink buildings (input buffer only, consumes for non-item output).
+/// Generators and similar buildings that consume items but don't produce items.
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_sink_crafters(
+    mut query: Query<(&mut RecipeCrafter, &Operational, &mut InputBuffer), With<Sink>>,
+    recipe_registry: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut crafter, operational, mut input_buffer) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if crafter.timer.tick(time.delta()).just_finished() {
+            let Some(recipe_name) = crafter.get_active_recipe() else {
+                continue;
+            };
+            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+                continue;
+            };
+
+            // Check if we have all required inputs in InputBuffer
+            let has_inputs = input_buffer.inventory.has_items_for_recipe(&recipe.inputs);
+
+            if has_inputs {
+                // Consume inputs from InputBuffer (outputs are non-item effects like power)
+                for (item_name, quantity) in &recipe.inputs {
+                    input_buffer.inventory.remove_item(item_name, *quantity);
+                }
+                // Note: Outputs like power generation are handled by other systems
             }
 
             crafter.timer.reset();

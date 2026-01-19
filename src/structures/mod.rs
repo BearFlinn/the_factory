@@ -86,7 +86,13 @@ impl Plugin for BuildingsPlugin {
                         .chain()
                         .in_set(BuildingSystemSet::Placement),
                     ((
+                        // Legacy crafting system (for entities with Inventory only)
                         update_recipe_crafters,
+                        // New buffer-aware crafting systems
+                        update_processor_crafters,
+                        update_source_crafters,
+                        update_sink_crafters,
+                        // Logistics request systems
                         crafter_logistics_requests,
                         handle_recipe_selection_logistics,
                     )
