@@ -2,8 +2,8 @@ use core::fmt;
 
 use crate::{
     grid::Position,
-    materials::{Inventory, InventoryType, InventoryTypes, RecipeRegistry},
-    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter},
+    materials::{items::InputBuffer, Inventory, InventoryType, InventoryTypes, RecipeRegistry},
+    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter, Source},
     systems::{ComputeGrid, NetworkConnectivity, PowerGrid},
 };
 use bevy::prelude::*;
@@ -62,6 +62,7 @@ pub fn populate_operational_conditions(
         Option<&PowerConsumer>,
         Option<&ComputeConsumer>,
         Option<&RecipeCrafter>,
+        Option<&Source>,
         Option<&Inventory>,
         Option<&InventoryType>,
     )>,
@@ -72,6 +73,7 @@ pub fn populate_operational_conditions(
         power_consumer,
         compute_consumer,
         recipe_crafter,
+        source,
         inventory,
         inventory_type,
     ) in &mut operational_query
@@ -103,7 +105,8 @@ pub fn populate_operational_conditions(
         }
 
         // Add HasItems condition if entity crafts recipes (needs input materials)
-        if recipe_crafter.is_some() {
+        // Source buildings (e.g., mining drills) don't consume items, so skip them
+        if recipe_crafter.is_some() && source.is_none() {
             conditions.push(OperationalCondition::HasItems(false));
         }
 
@@ -122,12 +125,13 @@ pub fn populate_operational_conditions(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_operational_status(
     mut operational_query: Query<(
         &mut Operational,
         Option<&RecipeCrafter>,
         Option<&Inventory>,
+        Option<&InputBuffer>,
         &Position,
     )>,
     network_connectivity: Res<NetworkConnectivity>,
@@ -135,7 +139,7 @@ pub fn update_operational_status(
     compute_grid: Res<ComputeGrid>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
-    for (mut operational, crafter, inventory, pos) in &mut operational_query {
+    for (mut operational, crafter, inventory, input_buffer, pos) in &mut operational_query {
         // Skip entities without operational conditions
         let Some(ref mut conditions) = operational.0 else {
             continue;
@@ -157,18 +161,30 @@ pub fn update_operational_status(
                 }
 
                 OperationalCondition::HasItems(ref mut status) => {
-                    if let (Some(crafter), Some(inventory)) = (crafter, inventory) {
-                        let Some(recipe_name) = crafter.get_active_recipe() else {
-                            continue;
-                        };
-                        if let Some(recipe) = recipe_registry.get_definition(recipe_name) {
-                            let has_inputs = recipe.inputs.iter().all(|(item_name, quantity)| {
-                                inventory.has_at_least(item_name, *quantity)
-                            });
+                    let Some(crafter) = crafter else {
+                        continue;
+                    };
+                    let Some(recipe_name) = crafter.get_active_recipe() else {
+                        continue;
+                    };
+                    let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+                        continue;
+                    };
 
-                            *status = has_inputs;
-                        }
-                    }
+                    // Check InputBuffer first (Sink/Processor buildings), then legacy Inventory
+                    let has_inputs = if let Some(input_buffer) = input_buffer {
+                        recipe.inputs.iter().all(|(item_name, quantity)| {
+                            input_buffer.inventory.has_at_least(item_name, *quantity)
+                        })
+                    } else if let Some(inventory) = inventory {
+                        recipe.inputs.iter().all(|(item_name, quantity)| {
+                            inventory.has_at_least(item_name, *quantity)
+                        })
+                    } else {
+                        continue;
+                    };
+
+                    *status = has_inputs;
                 }
 
                 OperationalCondition::HasInventorySpace(ref mut status) => {

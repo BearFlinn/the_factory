@@ -1,6 +1,9 @@
 use crate::{
     grid::Grid,
-    materials::{items::Inventory, ItemRegistry},
+    materials::{
+        items::{InputBuffer, Inventory, OutputBuffer},
+        ItemRegistry,
+    },
     structures::{building_config::BuildingRegistry, Building, PlaceBuildingValidationEvent},
     systems::Operational,
     ui::SelectedBuilding,
@@ -27,16 +30,34 @@ pub struct PlacementErrorMessage {
 #[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_inventory_display(
     mut commands: Commands,
-    buildings_and_workers: Query<(Entity, &Inventory), Or<(With<Building>, With<Worker>)>>,
+    buildings_and_workers: Query<
+        (
+            Entity,
+            Option<&Inventory>,
+            Option<&OutputBuffer>,
+            Option<&InputBuffer>,
+        ),
+        Or<(With<Building>, With<Worker>)>,
+    >,
     mut inventory_displays: Query<&mut Text2d, With<InventoryDisplay>>,
     children: Query<&Children>,
-    changed_inventories: Query<Entity, (Or<(With<Worker>, With<Building>)>, Changed<Inventory>)>,
+    changed_inventories: Query<
+        Entity,
+        (
+            Or<(With<Worker>, With<Building>)>,
+            Or<(
+                Changed<Inventory>,
+                Changed<OutputBuffer>,
+                Changed<InputBuffer>,
+            )>,
+        ),
+    >,
     item_registry: Res<ItemRegistry>,
 ) {
-    for (building_entity, inventory) in buildings_and_workers.iter() {
-        let should_update = changed_inventories.contains(building_entity);
+    for (entity, inventory, output_buffer, input_buffer) in buildings_and_workers.iter() {
+        let should_update = changed_inventories.contains(entity);
 
-        let existing_display = children.get(building_entity).ok().and_then(|children| {
+        let existing_display = children.get(entity).ok().and_then(|children| {
             children.iter().find_map(|&child| {
                 if inventory_displays.contains(child) {
                     Some(child)
@@ -46,12 +67,21 @@ pub fn update_inventory_display(
             })
         });
 
+        // Get the inventory to display (priority: OutputBuffer > InputBuffer > Inventory)
+        let inv_to_display = output_buffer
+            .map(|ob| &ob.inventory)
+            .or_else(|| input_buffer.map(|ib| &ib.inventory))
+            .or(inventory);
+
+        let Some(inv) = inv_to_display else {
+            continue;
+        };
+
         // Format all items for display
-        let display_text = if inventory.items.is_empty() {
+        let display_text = if inv.items.is_empty() {
             "Empty".to_string()
         } else {
-            inventory
-                .items
+            inv.items
                 .iter()
                 .map(|(item_name, &quantity)| {
                     let name = item_registry
@@ -83,7 +113,7 @@ pub fn update_inventory_display(
                 ))
                 .id();
 
-            commands.entity(building_entity).add_child(display);
+            commands.entity(entity).add_child(display);
         }
     }
 }
