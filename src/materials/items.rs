@@ -5,6 +5,228 @@ use std::collections::HashMap;
 
 pub type ItemName = String;
 
+// ============================================================================
+// Inventory Access Trait
+// ============================================================================
+
+/// Shared behavior for all inventory-like components.
+/// Enables uniform operations across different port types.
+pub trait InventoryAccess {
+    /// Returns immutable reference to the items map.
+    fn items(&self) -> &HashMap<ItemName, u32>;
+
+    /// Returns mutable reference to the items map.
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32>;
+
+    /// Returns the maximum capacity of this inventory.
+    fn capacity(&self) -> u32;
+
+    /// Adds items to the inventory. Returns the quantity added.
+    /// Note: Does not enforce capacity limits.
+    fn add_item(&mut self, item_name: &str, quantity: u32) -> u32 {
+        *self.items_mut().entry(item_name.to_string()).or_insert(0) += quantity;
+        quantity
+    }
+
+    /// Removes items from the inventory. Returns the quantity actually removed.
+    fn remove_item(&mut self, item_name: &str, quantity: u32) -> u32 {
+        if let Some(current_quantity) = self.items_mut().get_mut(item_name) {
+            let removed = (*current_quantity).min(quantity);
+            *current_quantity -= removed;
+            if *current_quantity == 0 {
+                self.items_mut().remove(item_name);
+            }
+            removed
+        } else {
+            0
+        }
+    }
+
+    /// Returns the quantity of a specific item in the inventory.
+    fn get_item_quantity(&self, item_name: &str) -> u32 {
+        self.items().get(item_name).copied().unwrap_or(0)
+    }
+
+    /// Returns the total quantity of all items in the inventory.
+    fn get_total_quantity(&self) -> u32 {
+        self.items().values().sum::<u32>()
+    }
+
+    /// Returns true if the inventory is at capacity.
+    fn is_full(&self) -> bool {
+        self.get_total_quantity() == self.capacity()
+    }
+
+    /// Returns true if the inventory contains no items.
+    fn is_empty(&self) -> bool {
+        self.items().is_empty()
+    }
+
+    /// Returns true if the inventory has space for the given items.
+    fn has_space_for(&self, items: &HashMap<ItemName, u32>) -> bool {
+        let current_quantity = self.get_total_quantity();
+        let total_quantity = items.values().sum::<u32>();
+        current_quantity + total_quantity <= self.capacity()
+    }
+
+    /// Returns true if the inventory has at least the specified quantity of an item.
+    fn has_at_least(&self, item_name: &str, required_quantity: u32) -> bool {
+        self.get_item_quantity(item_name) >= required_quantity
+    }
+
+    /// Returns true if the inventory has all items required for a recipe.
+    fn has_items_for_recipe(&self, recipe: &HashMap<ItemName, u32>) -> bool {
+        recipe
+            .iter()
+            .all(|(item_name, quantity)| self.has_at_least(item_name, *quantity))
+    }
+
+    /// Returns a clone of all items in the inventory.
+    fn get_all_items(&self) -> HashMap<ItemName, u32> {
+        self.items().clone()
+    }
+}
+
+// ============================================================================
+// Port Components
+// ============================================================================
+
+/// Items can be picked up from here (Mining Drills, Smelter outputs).
+/// Used for buildings that provide items for logistics.
+#[derive(Component, Default, Debug, Clone)]
+pub struct OutputPort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+impl OutputPort {
+    /// Creates a new output port with the specified capacity.
+    #[must_use]
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            items: HashMap::new(),
+            capacity,
+        }
+    }
+}
+
+impl InventoryAccess for OutputPort {
+    fn items(&self) -> &HashMap<ItemName, u32> {
+        &self.items
+    }
+
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32> {
+        &mut self.items
+    }
+
+    fn capacity(&self) -> u32 {
+        self.capacity
+    }
+}
+
+/// Items can be delivered here (Generators, Smelter inputs).
+/// Used for buildings that accept items for processing.
+#[derive(Component, Default, Debug, Clone)]
+pub struct InputPort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+impl InputPort {
+    /// Creates a new input port with the specified capacity.
+    #[must_use]
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            items: HashMap::new(),
+            capacity,
+        }
+    }
+}
+
+impl InventoryAccess for InputPort {
+    fn items(&self) -> &HashMap<ItemName, u32> {
+        &self.items
+    }
+
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32> {
+        &mut self.items
+    }
+
+    fn capacity(&self) -> u32 {
+        self.capacity
+    }
+}
+
+/// Bidirectional storage - accepts deliveries and provides pickups.
+/// Used for storage buildings that can both receive and provide items.
+#[derive(Component, Default, Debug, Clone)]
+pub struct StoragePort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+impl StoragePort {
+    /// Creates a new storage port with the specified capacity.
+    #[must_use]
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            items: HashMap::new(),
+            capacity,
+        }
+    }
+}
+
+impl InventoryAccess for StoragePort {
+    fn items(&self) -> &HashMap<ItemName, u32> {
+        &self.items
+    }
+
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32> {
+        &mut self.items
+    }
+
+    fn capacity(&self) -> u32 {
+        self.capacity
+    }
+}
+
+/// Transient carrying capacity for workers.
+/// Used for entities that transport items between buildings.
+#[derive(Component, Default, Debug, Clone)]
+pub struct Cargo {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+impl Cargo {
+    /// Creates a new cargo component with the specified capacity.
+    #[must_use]
+    pub fn new(capacity: u32) -> Self {
+        Self {
+            items: HashMap::new(),
+            capacity,
+        }
+    }
+}
+
+impl InventoryAccess for Cargo {
+    fn items(&self) -> &HashMap<ItemName, u32> {
+        &self.items
+    }
+
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32> {
+        &mut self.items
+    }
+
+    fn capacity(&self) -> u32 {
+        self.capacity
+    }
+}
+
+// ============================================================================
+// Item Registry
+// ============================================================================
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemDef {
     pub name: String,
@@ -45,23 +267,8 @@ impl ItemRegistry {
     // TODO: Add methods for accessing individual item fields from definitions
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum InventoryTypes {
-    #[default]
-    Storage,
-    Sender,
-    Requester,
-    Carrier,
-    // TODO: Implement a better system for buildings with inputs and outputs
-    Producer,
-}
-
-#[derive(Component, Default, Serialize, Deserialize, Debug, Clone)]
-pub struct InventoryType(pub InventoryTypes);
-
 // TODO: Move this to its own module
 #[derive(Component, Debug)]
-#[require(InventoryType)]
 pub struct Inventory {
     pub items: HashMap<ItemName, u32>,
     pub capacity: u32,
@@ -176,77 +383,9 @@ impl Inventory {
     }
 }
 
-/// Input buffer for production buildings - holds items waiting to be processed.
-/// Separating input from output prevents mixing of raw materials with finished products,
-/// making logistics simpler and inventory jams easier to diagnose.
-#[derive(Component, Debug)]
-pub struct InputBuffer {
-    /// The inventory that holds incoming items for processing.
-    pub inventory: Inventory,
-    /// Request more items when fill level drops below this percentage (0.0-1.0).
-    pub request_threshold: f32,
-}
-
-impl InputBuffer {
-    /// Creates a new input buffer with the specified capacity and request threshold.
-    pub fn new(capacity: u32, request_threshold: f32) -> Self {
-        Self {
-            inventory: Inventory::new(capacity),
-            request_threshold: request_threshold.clamp(0.0, 1.0),
-        }
-    }
-
-    /// Returns the current fill level as a percentage (0.0-1.0).
-    /// Returns 1.0 for zero-capacity buffers to prevent division by zero.
-    #[allow(clippy::cast_precision_loss)]
-    pub fn fill_level(&self) -> f32 {
-        if self.inventory.capacity == 0 {
-            return 1.0;
-        }
-        self.inventory.get_total_quantity() as f32 / self.inventory.capacity as f32
-    }
-
-    /// Returns true if the buffer needs more items (fill level below request threshold).
-    pub fn needs_items(&self) -> bool {
-        self.fill_level() < self.request_threshold
-    }
-}
-
-/// Output buffer for production buildings - holds items that have been produced.
-/// Separating output from input ensures finished products don't compete with raw
-/// materials for inventory space.
-#[derive(Component, Debug)]
-pub struct OutputBuffer {
-    /// The inventory that holds produced items awaiting pickup.
-    pub inventory: Inventory,
-    /// Offer items for pickup when fill level exceeds this percentage (0.0-1.0).
-    pub offer_threshold: f32,
-}
-
-impl OutputBuffer {
-    /// Creates a new output buffer with the specified capacity and offer threshold.
-    pub fn new(capacity: u32, offer_threshold: f32) -> Self {
-        Self {
-            inventory: Inventory::new(capacity),
-            offer_threshold: offer_threshold.clamp(0.0, 1.0),
-        }
-    }
-
-    /// Returns the current fill level as a percentage (0.0-1.0).
-    /// Returns 1.0 for zero-capacity buffers to prevent division by zero.
-    #[allow(clippy::cast_precision_loss)]
-    pub fn fill_level(&self) -> f32 {
-        if self.inventory.capacity == 0 {
-            return 1.0;
-        }
-        self.inventory.get_total_quantity() as f32 / self.inventory.capacity as f32
-    }
-
-    /// Returns true if the buffer has items ready to offer (fill level above offer threshold).
-    pub fn has_items_to_offer(&self) -> bool {
-        self.fill_level() > self.offer_threshold
-    }
-}
+// ============================================================================
+// TRANSFER ERRORS AND EVENTS
+// ============================================================================
 
 #[derive(Debug)]
 pub enum TransferError {
@@ -293,21 +432,24 @@ pub fn print_transferred_items(mut events: EventReader<ItemTransferEvent>) {
     }
 }
 
-/// Validates item transfer requests, checking buffers first and falling back to Inventory.
-/// For pickups (building -> worker), uses `OutputBuffer` if available.
-/// For dropoffs (worker -> building), uses `InputBuffer` if available.
+/// Validates item transfer requests using explicit port component queries.
+/// No fallback chains - sender must have `OutputPort`, `StoragePort`, or `Cargo`.
+/// Receiver must have `InputPort`, `StoragePort`, or `Cargo`.
 #[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn validate_item_transfer(
     mut requests: EventReader<ItemTransferRequestEvent>,
     mut validation_events: EventWriter<ItemTransferValidationEvent>,
-    inventories: Query<&Inventory>,
-    output_buffers: Query<&OutputBuffer>,
-    input_buffers: Query<&InputBuffer>,
+    output_ports: Query<&OutputPort>,
+    input_ports: Query<&InputPort>,
+    storage_ports: Query<&StoragePort>,
+    cargo_query: Query<&Cargo>,
 ) {
     for request in requests.read() {
-        // Get sender inventory: OutputBuffer first, then legacy Inventory
-        let sender_inv = get_sender_inventory(request.sender, &output_buffers, &inventories);
-        let Some(sender_inventory) = sender_inv else {
+        // Get sender's items and capacity using explicit port matching
+        let sender_data =
+            get_sender_port_data(request.sender, &output_ports, &storage_ports, &cargo_query);
+
+        let Some((sender_items, _sender_capacity)) = sender_data else {
             validation_events.send(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
@@ -315,9 +457,11 @@ pub fn validate_item_transfer(
             continue;
         };
 
-        // Get receiver inventory: InputBuffer first, then legacy Inventory
-        let receiver_inv = get_receiver_inventory(request.receiver, &input_buffers, &inventories);
-        let Some(receiver_inventory) = receiver_inv else {
+        // Get receiver's capacity and current total using explicit port matching
+        let receiver_data =
+            get_receiver_port_data(request.receiver, &input_ports, &storage_ports, &cargo_query);
+
+        let Some((receiver_total, receiver_capacity)) = receiver_data else {
             validation_events.send(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
@@ -326,19 +470,17 @@ pub fn validate_item_transfer(
         };
 
         let mut validated_transfer = HashMap::new();
-        let mut current_receiver_total = receiver_inventory.items.values().sum::<u32>();
+        let mut current_receiver_total = receiver_total;
 
         for (item_name, &requested_quantity) in &request.items {
-            let available = sender_inventory.get_item_quantity(item_name);
+            let available = sender_items.get(item_name).copied().unwrap_or(0);
 
             if available == 0 {
                 continue;
             }
 
             let transfer_quantity = available.min(requested_quantity);
-            let remaining_capacity = receiver_inventory
-                .capacity
-                .saturating_sub(current_receiver_total);
+            let remaining_capacity = receiver_capacity.saturating_sub(current_receiver_total);
 
             if remaining_capacity == 0 {
                 break;
@@ -356,7 +498,7 @@ pub fn validate_item_transfer(
             let error = if request
                 .items
                 .iter()
-                .all(|(name, _)| sender_inventory.get_item_quantity(name) == 0)
+                .all(|(name, _)| sender_items.get(name).copied().unwrap_or(0) == 0)
             {
                 TransferError::NotEnoughItems
             } else {
@@ -376,96 +518,133 @@ pub fn validate_item_transfer(
     }
 }
 
-/// Gets the sender's inventory, preferring `OutputBuffer` over legacy Inventory.
-fn get_sender_inventory<'a>(
+/// Gets sender port data (items, capacity) from `OutputPort`, `StoragePort`, or `Cargo`.
+/// Returns None if the entity doesn't have any valid sender port.
+fn get_sender_port_data(
     entity: Entity,
-    output_buffers: &'a Query<&OutputBuffer>,
-    inventories: &'a Query<&Inventory>,
-) -> Option<&'a Inventory> {
-    // Check OutputBuffer first (for Source/Processor buildings)
-    if let Ok(output_buffer) = output_buffers.get(entity) {
-        return Some(&output_buffer.inventory);
+    output_ports: &Query<&OutputPort>,
+    storage_ports: &Query<&StoragePort>,
+    cargo_query: &Query<&Cargo>,
+) -> Option<(HashMap<ItemName, u32>, u32)> {
+    // Check OutputPort first (for buildings that produce items)
+    if let Ok(port) = output_ports.get(entity) {
+        return Some((port.items.clone(), port.capacity));
     }
-    // Fall back to legacy Inventory
-    inventories.get(entity).ok()
+    // Check StoragePort (for storage buildings)
+    if let Ok(port) = storage_ports.get(entity) {
+        return Some((port.items.clone(), port.capacity));
+    }
+    // Check Cargo (for workers)
+    if let Ok(cargo) = cargo_query.get(entity) {
+        return Some((cargo.items.clone(), cargo.capacity));
+    }
+    None
 }
 
-/// Gets the receiver's inventory, preferring `InputBuffer` over legacy Inventory.
-fn get_receiver_inventory<'a>(
+/// Gets receiver port data (current total, capacity) from `InputPort`, `StoragePort`, or `Cargo`.
+/// Returns None if the entity doesn't have any valid receiver port.
+fn get_receiver_port_data(
     entity: Entity,
-    input_buffers: &'a Query<&InputBuffer>,
-    inventories: &'a Query<&Inventory>,
-) -> Option<&'a Inventory> {
-    // Check InputBuffer first (for Processor/Sink buildings)
-    if let Ok(input_buffer) = input_buffers.get(entity) {
-        return Some(&input_buffer.inventory);
+    input_ports: &Query<&InputPort>,
+    storage_ports: &Query<&StoragePort>,
+    cargo_query: &Query<&Cargo>,
+) -> Option<(u32, u32)> {
+    // Check InputPort first (for buildings that consume items)
+    if let Ok(port) = input_ports.get(entity) {
+        let total: u32 = port.items.values().sum();
+        return Some((total, port.capacity));
     }
-    // Fall back to legacy Inventory
-    inventories.get(entity).ok()
+    // Check StoragePort (for storage buildings)
+    if let Ok(port) = storage_ports.get(entity) {
+        let total: u32 = port.items.values().sum();
+        return Some((total, port.capacity));
+    }
+    // Check Cargo (for workers)
+    if let Ok(cargo) = cargo_query.get(entity) {
+        let total: u32 = cargo.items.values().sum();
+        return Some((total, cargo.capacity));
+    }
+    None
 }
 
-/// Executes validated item transfers, using buffers when available.
-/// For pickups (building -> worker), removes from `OutputBuffer` if available.
-/// For dropoffs (worker -> building), adds to `InputBuffer` if available.
+/// Executes validated item transfers using explicit port component queries.
+/// Removes from sender's `OutputPort`, `StoragePort`, or `Cargo`.
+/// Adds to receiver's `InputPort`, `StoragePort`, or `Cargo`.
 #[allow(clippy::type_complexity)]
 pub fn execute_item_transfer(
     mut validation_events: EventReader<ItemTransferValidationEvent>,
-    mut inventories: Query<&mut Inventory>,
-    mut output_buffers: Query<&mut OutputBuffer>,
-    mut input_buffers: Query<&mut InputBuffer>,
+    mut output_ports: Query<&mut OutputPort>,
+    mut input_ports: Query<&mut InputPort>,
+    mut storage_ports: Query<&mut StoragePort>,
+    mut cargo_query: Query<&mut Cargo>,
     mut transfer_events: EventWriter<ItemTransferEvent>,
 ) {
     for validation in validation_events.read() {
-        if let Ok(validated_items) = &validation.result {
-            if validated_items.is_empty() {
-                continue;
-            }
+        let Ok(validated_items) = &validation.result else {
+            continue;
+        };
 
-            let sender = validation.request.sender;
-            let receiver = validation.request.receiver;
+        if validated_items.is_empty() {
+            continue;
+        }
 
-            if sender == receiver {
-                continue;
-            }
+        let sender = validation.request.sender;
+        let receiver = validation.request.receiver;
 
-            let mut actual_transfer = HashMap::new();
+        if sender == receiver {
+            continue;
+        }
 
-            // Remove items from sender: OutputBuffer first, then legacy Inventory
-            if let Ok(mut output_buffer) = output_buffers.get_mut(sender) {
-                for (item_name, &quantity) in validated_items {
-                    let removed = output_buffer.inventory.remove_item(item_name, quantity);
-                    if removed > 0 {
-                        actual_transfer.insert(item_name.clone(), removed);
-                    }
-                }
-            } else if let Ok(mut sender_inv) = inventories.get_mut(sender) {
-                for (item_name, &quantity) in validated_items {
-                    let removed = sender_inv.remove_item(item_name, quantity);
-                    if removed > 0 {
-                        actual_transfer.insert(item_name.clone(), removed);
-                    }
+        let mut actual_transfer = HashMap::new();
+
+        // Remove items from sender using explicit port matching
+        if let Ok(mut port) = output_ports.get_mut(sender) {
+            for (item_name, &quantity) in validated_items {
+                let removed = port.remove_item(item_name, quantity);
+                if removed > 0 {
+                    actual_transfer.insert(item_name.clone(), removed);
                 }
             }
-
-            if !actual_transfer.is_empty() {
-                // Add items to receiver: InputBuffer first, then legacy Inventory
-                if let Ok(mut input_buffer) = input_buffers.get_mut(receiver) {
-                    for (item_name, &quantity) in &actual_transfer {
-                        input_buffer.inventory.add_item(item_name, quantity);
-                    }
-                } else if let Ok(mut receiver_inv) = inventories.get_mut(receiver) {
-                    for (item_name, &quantity) in &actual_transfer {
-                        receiver_inv.add_item(item_name, quantity);
-                    }
+        } else if let Ok(mut port) = storage_ports.get_mut(sender) {
+            for (item_name, &quantity) in validated_items {
+                let removed = port.remove_item(item_name, quantity);
+                if removed > 0 {
+                    actual_transfer.insert(item_name.clone(), removed);
                 }
-
-                transfer_events.send(ItemTransferEvent {
-                    sender,
-                    receiver,
-                    items_transferred: actual_transfer,
-                });
+            }
+        } else if let Ok(mut cargo) = cargo_query.get_mut(sender) {
+            for (item_name, &quantity) in validated_items {
+                let removed = cargo.remove_item(item_name, quantity);
+                if removed > 0 {
+                    actual_transfer.insert(item_name.clone(), removed);
+                }
             }
         }
+
+        if actual_transfer.is_empty() {
+            continue;
+        }
+
+        // Add items to receiver using explicit port matching
+        if let Ok(mut port) = input_ports.get_mut(receiver) {
+            for (item_name, &quantity) in &actual_transfer {
+                port.add_item(item_name, quantity);
+            }
+        } else if let Ok(mut port) = storage_ports.get_mut(receiver) {
+            for (item_name, &quantity) in &actual_transfer {
+                port.add_item(item_name, quantity);
+            }
+        } else if let Ok(mut cargo) = cargo_query.get_mut(receiver) {
+            for (item_name, &quantity) in &actual_transfer {
+                cargo.add_item(item_name, quantity);
+            }
+        }
+
+        transfer_events.send(ItemTransferEvent {
+            sender,
+            receiver,
+            items_transferred: actual_transfer,
+        });
     }
 }
 
@@ -1054,167 +1233,5 @@ mod tests {
     fn test_transfer_error_display_inventory_full() {
         let error = TransferError::InventoryFull;
         assert_eq!(format!("{error}"), "Inventory full!");
-    }
-
-    // ==================== InputBuffer tests ====================
-
-    #[test]
-    fn test_input_buffer_new_creates_empty_buffer() {
-        let buffer = InputBuffer::new(100, 0.3);
-        assert!(buffer.inventory.is_empty());
-        assert_eq!(buffer.inventory.capacity, 100);
-        assert!((buffer.request_threshold - 0.3).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_new_clamps_threshold_above_one() {
-        let buffer = InputBuffer::new(100, 1.5);
-        assert!((buffer.request_threshold - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_new_clamps_threshold_below_zero() {
-        let buffer = InputBuffer::new(100, -0.5);
-        assert!((buffer.request_threshold - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_fill_level_empty() {
-        let buffer = InputBuffer::new(100, 0.3);
-        assert!((buffer.fill_level() - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_fill_level_partial() {
-        let mut buffer = InputBuffer::new(100, 0.3);
-        buffer.inventory.add_item("Iron Ore", 50);
-        assert!((buffer.fill_level() - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_fill_level_full() {
-        let mut buffer = InputBuffer::new(100, 0.3);
-        buffer.inventory.add_item("Iron Ore", 100);
-        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_fill_level_zero_capacity() {
-        let buffer = InputBuffer::new(0, 0.3);
-        // Zero-capacity buffer should report as full to avoid division by zero
-        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_input_buffer_needs_items_below_threshold() {
-        let mut buffer = InputBuffer::new(100, 0.5);
-        buffer.inventory.add_item("Iron Ore", 20); // 20% full, threshold 50%
-        assert!(buffer.needs_items());
-    }
-
-    #[test]
-    fn test_input_buffer_needs_items_at_threshold() {
-        let mut buffer = InputBuffer::new(100, 0.5);
-        buffer.inventory.add_item("Iron Ore", 50); // 50% full, threshold 50%
-        assert!(!buffer.needs_items());
-    }
-
-    #[test]
-    fn test_input_buffer_needs_items_above_threshold() {
-        let mut buffer = InputBuffer::new(100, 0.5);
-        buffer.inventory.add_item("Iron Ore", 80); // 80% full, threshold 50%
-        assert!(!buffer.needs_items());
-    }
-
-    #[test]
-    fn test_input_buffer_needs_items_zero_threshold() {
-        let buffer = InputBuffer::new(100, 0.0);
-        // With 0.0 threshold, never needs items (0.0 is not < 0.0)
-        assert!(!buffer.needs_items());
-    }
-
-    // ==================== OutputBuffer tests ====================
-
-    #[test]
-    fn test_output_buffer_new_creates_empty_buffer() {
-        let buffer = OutputBuffer::new(100, 0.2);
-        assert!(buffer.inventory.is_empty());
-        assert_eq!(buffer.inventory.capacity, 100);
-        assert!((buffer.offer_threshold - 0.2).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_new_clamps_threshold_above_one() {
-        let buffer = OutputBuffer::new(100, 1.5);
-        assert!((buffer.offer_threshold - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_new_clamps_threshold_below_zero() {
-        let buffer = OutputBuffer::new(100, -0.5);
-        assert!((buffer.offer_threshold - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_fill_level_empty() {
-        let buffer = OutputBuffer::new(100, 0.2);
-        assert!((buffer.fill_level() - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_fill_level_partial() {
-        let mut buffer = OutputBuffer::new(100, 0.2);
-        buffer.inventory.add_item("Iron Ingot", 30);
-        assert!((buffer.fill_level() - 0.3).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_fill_level_full() {
-        let mut buffer = OutputBuffer::new(100, 0.2);
-        buffer.inventory.add_item("Iron Ingot", 100);
-        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_fill_level_zero_capacity() {
-        let buffer = OutputBuffer::new(0, 0.2);
-        // Zero-capacity buffer should report as full to avoid division by zero
-        assert!((buffer.fill_level() - 1.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_output_buffer_has_items_to_offer_above_threshold() {
-        let mut buffer = OutputBuffer::new(100, 0.2);
-        buffer.inventory.add_item("Iron Ingot", 30); // 30% full, threshold 20%
-        assert!(buffer.has_items_to_offer());
-    }
-
-    #[test]
-    fn test_output_buffer_has_items_to_offer_at_threshold() {
-        let mut buffer = OutputBuffer::new(100, 0.2);
-        buffer.inventory.add_item("Iron Ingot", 20); // 20% full, threshold 20%
-        assert!(!buffer.has_items_to_offer());
-    }
-
-    #[test]
-    fn test_output_buffer_has_items_to_offer_below_threshold() {
-        let mut buffer = OutputBuffer::new(100, 0.2);
-        buffer.inventory.add_item("Iron Ingot", 10); // 10% full, threshold 20%
-        assert!(!buffer.has_items_to_offer());
-    }
-
-    #[test]
-    fn test_output_buffer_has_items_to_offer_one_threshold() {
-        let mut buffer = OutputBuffer::new(100, 1.0);
-        buffer.inventory.add_item("Iron Ingot", 100); // 100% full, threshold 100%
-                                                      // At threshold (not above), should not offer
-        assert!(!buffer.has_items_to_offer());
-    }
-
-    #[test]
-    fn test_output_buffer_has_items_to_offer_empty_with_zero_threshold() {
-        let buffer = OutputBuffer::new(100, 0.0);
-        // Empty buffer (0.0) is not > 0.0, so nothing to offer
-        assert!(!buffer.has_items_to_offer());
     }
 }

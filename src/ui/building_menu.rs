@@ -1,6 +1,6 @@
 use crate::{
     grid::Position,
-    materials::{Inventory, RecipeRegistry},
+    materials::{InputPort, Inventory, InventoryAccess, OutputPort, RecipeRegistry, StoragePort},
     structures::{Building, RecipeCrafter},
     systems::Operational,
     ui::{
@@ -351,7 +351,7 @@ pub fn update_menu_positions(
 }
 
 // Unified content update system with proper change detection
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
+#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)] // Bevy system parameters require by-value
 pub fn update_menu_content(
     mut content_query: Query<(Entity, &mut MenuContent)>,
     mut commands: Commands,
@@ -359,6 +359,9 @@ pub fn update_menu_content(
     // Building data queries
     buildings_operational: Query<&Operational, With<Building>>,
     buildings_inventory: Query<&Inventory, With<Building>>,
+    buildings_input_port: Query<&InputPort, With<Building>>,
+    buildings_output_port: Query<&OutputPort, With<Building>>,
+    buildings_storage_port: Query<&StoragePort, With<Building>>,
     buildings_crafting: Query<&RecipeCrafter, With<Building>>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
@@ -369,16 +372,34 @@ pub fn update_menu_content(
                 .map(simple_hash)
                 .map(|hash| menu_content.last_updated != Some(hash))
                 .unwrap_or(false),
-            ContentType::Inventory => buildings_inventory
-                .get(menu_content.target_building)
-                .map(simple_hash)
-                .map(|hash| menu_content.last_updated != Some(hash))
-                .unwrap_or(false),
+            ContentType::Inventory => {
+                // Check all port types for changes
+                let input_hash = buildings_input_port
+                    .get(menu_content.target_building)
+                    .map(simple_hash);
+                let output_hash = buildings_output_port
+                    .get(menu_content.target_building)
+                    .map(simple_hash);
+                let storage_hash = buildings_storage_port
+                    .get(menu_content.target_building)
+                    .map(simple_hash);
+                let legacy_hash = buildings_inventory
+                    .get(menu_content.target_building)
+                    .map(simple_hash);
+
+                // Combine hashes for combined change detection
+                let combined_hash = input_hash
+                    .ok()
+                    .or(output_hash.ok())
+                    .or(storage_hash.ok())
+                    .or(legacy_hash.ok());
+
+                combined_hash.is_some_and(|hash| menu_content.last_updated != Some(hash))
+            }
             ContentType::Crafting => buildings_crafting
                 .get(menu_content.target_building)
                 .map(simple_hash)
-                .map(|hash| menu_content.last_updated != Some(hash))
-                .unwrap_or(false),
+                .is_ok_and(|hash| menu_content.last_updated != Some(hash)),
         };
 
         if should_update {
@@ -401,8 +422,24 @@ pub fn update_menu_content(
                         }
                     }
                     ContentType::Inventory => {
-                        if let Ok(inventory) = buildings_inventory.get(menu_content.target_building)
-                        {
+                        // Try port-based components first, fall back to legacy
+                        let entity = menu_content.target_building;
+                        if let Ok(input_port) = buildings_input_port.get(entity) {
+                            let output_port = buildings_output_port.get(entity).ok();
+                            spawn_port_inventory_content(
+                                parent,
+                                Some(input_port),
+                                output_port,
+                                None,
+                            );
+                            menu_content.last_updated = Some(simple_hash(input_port));
+                        } else if let Ok(output_port) = buildings_output_port.get(entity) {
+                            spawn_port_inventory_content(parent, None, Some(output_port), None);
+                            menu_content.last_updated = Some(simple_hash(output_port));
+                        } else if let Ok(storage_port) = buildings_storage_port.get(entity) {
+                            spawn_port_inventory_content(parent, None, None, Some(storage_port));
+                            menu_content.last_updated = Some(simple_hash(storage_port));
+                        } else if let Ok(inventory) = buildings_inventory.get(entity) {
                             spawn_inventory_content(parent, inventory);
                             menu_content.last_updated = Some(simple_hash(inventory));
                         }
@@ -519,6 +556,88 @@ fn spawn_inventory_content(parent: &mut ChildBuilder, inventory: &Inventory) {
         },
         TextColor(Color::srgb(0.6, 0.6, 0.6)),
     ));
+}
+
+fn spawn_port_inventory_content(
+    parent: &mut ChildBuilder,
+    input_port: Option<&InputPort>,
+    output_port: Option<&OutputPort>,
+    storage_port: Option<&StoragePort>,
+) {
+    // Helper to display a port's contents
+    let spawn_port_items =
+        |parent: &mut ChildBuilder, label: &str, access: &dyn InventoryAccess, color: Color| {
+            parent.spawn((
+                Text::new(format!("{label}:")),
+                TextFont {
+                    font_size: 11.0,
+                    ..default()
+                },
+                TextColor(color),
+                Node {
+                    margin: UiRect::top(Val::Px(4.0)),
+                    ..default()
+                },
+            ));
+
+            if access.is_empty() {
+                parent.spawn((
+                    Text::new("  Empty"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                ));
+            } else {
+                for (item_name, &quantity) in access.items() {
+                    parent.spawn((
+                        Text::new(format!("  {item_name}: {quantity}")),
+                        TextFont {
+                            font_size: 12.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                    ));
+                }
+            }
+
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss
+            )]
+            let usage_percent =
+                (access.get_total_quantity() as f32 / access.capacity() as f32 * 100.0) as u32;
+            parent.spawn((
+                Text::new(format!(
+                    "  {}/{} ({}%)",
+                    access.get_total_quantity(),
+                    access.capacity(),
+                    usage_percent
+                )),
+                TextFont {
+                    font_size: 10.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.5, 0.5, 0.5)),
+            ));
+        };
+
+    // Display storage port (bidirectional)
+    if let Some(storage) = storage_port {
+        spawn_port_items(parent, "Storage", storage, Color::srgb(0.6, 0.8, 0.6));
+        return;
+    }
+
+    // Display input and output ports
+    if let Some(input) = input_port {
+        spawn_port_items(parent, "Input", input, Color::srgb(0.6, 0.7, 0.9));
+    }
+
+    if let Some(output) = output_port {
+        spawn_port_items(parent, "Output", output, Color::srgb(0.9, 0.7, 0.6));
+    }
 }
 
 fn spawn_crafting_content(

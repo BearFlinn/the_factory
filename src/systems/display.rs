@@ -1,8 +1,8 @@
 use crate::{
     grid::Grid,
     materials::{
-        items::{InputBuffer, Inventory, OutputBuffer},
-        ItemRegistry,
+        items::{Cargo, InputPort, Inventory, OutputPort, StoragePort},
+        InventoryAccess, ItemRegistry,
     },
     structures::{building_config::BuildingRegistry, Building, PlaceBuildingValidationEvent},
     systems::Operational,
@@ -33,9 +33,11 @@ pub fn update_inventory_display(
     buildings_and_workers: Query<
         (
             Entity,
+            Option<&OutputPort>,
+            Option<&InputPort>,
+            Option<&StoragePort>,
+            Option<&Cargo>,
             Option<&Inventory>,
-            Option<&OutputBuffer>,
-            Option<&InputBuffer>,
         ),
         Or<(With<Building>, With<Worker>)>,
     >,
@@ -46,15 +48,19 @@ pub fn update_inventory_display(
         (
             Or<(With<Worker>, With<Building>)>,
             Or<(
+                Changed<OutputPort>,
+                Changed<InputPort>,
+                Changed<StoragePort>,
+                Changed<Cargo>,
                 Changed<Inventory>,
-                Changed<OutputBuffer>,
-                Changed<InputBuffer>,
             )>,
         ),
     >,
     item_registry: Res<ItemRegistry>,
 ) {
-    for (entity, inventory, output_buffer, input_buffer) in buildings_and_workers.iter() {
+    for (entity, output_port, input_port, storage_port, cargo, inventory) in
+        buildings_and_workers.iter()
+    {
         let should_update = changed_inventories.contains(entity);
 
         let existing_display = children.get(entity).ok().and_then(|children| {
@@ -67,21 +73,23 @@ pub fn update_inventory_display(
             })
         });
 
-        // Get the inventory to display (priority: OutputBuffer > InputBuffer > Inventory)
-        let inv_to_display = output_buffer
-            .map(|ob| &ob.inventory)
-            .or_else(|| input_buffer.map(|ib| &ib.inventory))
-            .or(inventory);
+        // Get items to display (priority: OutputPort > InputPort > StoragePort > Cargo > Inventory)
+        let items_to_display: Option<std::collections::HashMap<String, u32>> = output_port
+            .map(InventoryAccess::get_all_items)
+            .or_else(|| input_port.map(InventoryAccess::get_all_items))
+            .or_else(|| storage_port.map(InventoryAccess::get_all_items))
+            .or_else(|| cargo.map(InventoryAccess::get_all_items))
+            .or_else(|| inventory.map(Inventory::get_all_items));
 
-        let Some(inv) = inv_to_display else {
+        let Some(items) = items_to_display else {
             continue;
         };
 
         // Format all items for display
-        let display_text = if inv.items.is_empty() {
+        let display_text = if items.is_empty() {
             "Empty".to_string()
         } else {
-            inv.items
+            items
                 .iter()
                 .map(|(item_name, &quantity)| {
                     let name = item_registry

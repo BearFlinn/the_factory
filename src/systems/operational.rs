@@ -2,8 +2,8 @@ use core::fmt;
 
 use crate::{
     grid::Position,
-    materials::{items::InputBuffer, Inventory, InventoryType, InventoryTypes, RecipeRegistry},
-    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter, Source},
+    materials::{InputPort, InventoryAccess, OutputPort, RecipeRegistry},
+    structures::{Building, ComputeConsumer, PowerConsumer, RecipeCrafter},
     systems::{ComputeGrid, NetworkConnectivity, PowerGrid},
 };
 use bevy::prelude::*;
@@ -62,9 +62,8 @@ pub fn populate_operational_conditions(
         Option<&PowerConsumer>,
         Option<&ComputeConsumer>,
         Option<&RecipeCrafter>,
-        Option<&Source>,
-        Option<&Inventory>,
-        Option<&InventoryType>,
+        Option<&InputPort>,
+        Option<&OutputPort>,
     )>,
 ) {
     for (
@@ -73,9 +72,8 @@ pub fn populate_operational_conditions(
         power_consumer,
         compute_consumer,
         recipe_crafter,
-        source,
-        inventory,
-        inventory_type,
+        input_port,
+        output_port,
     ) in &mut operational_query
     {
         // Only populate if conditions are None or empty
@@ -104,20 +102,15 @@ pub fn populate_operational_conditions(
             conditions.push(OperationalCondition::Compute(false));
         }
 
-        // Add HasItems condition if entity crafts recipes (needs input materials)
-        // Source buildings (e.g., mining drills) don't consume items, so skip them
-        if recipe_crafter.is_some() && source.is_none() {
+        // Add HasItems condition if entity has InputPort (consumes items)
+        // Buildings with only OutputPort (Sources) don't consume items
+        if recipe_crafter.is_some() && input_port.is_some() {
             conditions.push(OperationalCondition::HasItems(false));
         }
 
-        // Add HasInventorySpace condition if entity has inventory and produces/sends items
-        if let (Some(_inventory), Some(inv_type)) = (inventory, inventory_type) {
-            match inv_type.0 {
-                InventoryTypes::Sender | InventoryTypes::Producer => {
-                    conditions.push(OperationalCondition::HasInventorySpace(false));
-                }
-                _ => {} // Storage, Requester, Carrier don't need space checks for operation
-            }
+        // Add HasInventorySpace condition if entity has OutputPort (produces items)
+        if output_port.is_some() {
+            conditions.push(OperationalCondition::HasInventorySpace(false));
         }
 
         // Set the populated conditions
@@ -130,8 +123,8 @@ pub fn update_operational_status(
     mut operational_query: Query<(
         &mut Operational,
         Option<&RecipeCrafter>,
-        Option<&Inventory>,
-        Option<&InputBuffer>,
+        Option<&InputPort>,
+        Option<&OutputPort>,
         &Position,
     )>,
     network_connectivity: Res<NetworkConnectivity>,
@@ -139,7 +132,7 @@ pub fn update_operational_status(
     compute_grid: Res<ComputeGrid>,
     recipe_registry: Res<RecipeRegistry>,
 ) {
-    for (mut operational, crafter, inventory, input_buffer, pos) in &mut operational_query {
+    for (mut operational, crafter, input_port, output_port, pos) in &mut operational_query {
         // Skip entities without operational conditions
         let Some(ref mut conditions) = operational.0 else {
             continue;
@@ -171,14 +164,10 @@ pub fn update_operational_status(
                         continue;
                     };
 
-                    // Check InputBuffer first (Sink/Processor buildings), then legacy Inventory
-                    let has_inputs = if let Some(input_buffer) = input_buffer {
+                    // Check InputPort for required inputs
+                    let has_inputs = if let Some(input_port) = input_port {
                         recipe.inputs.iter().all(|(item_name, quantity)| {
-                            input_buffer.inventory.has_at_least(item_name, *quantity)
-                        })
-                    } else if let Some(inventory) = inventory {
-                        recipe.inputs.iter().all(|(item_name, quantity)| {
-                            inventory.has_at_least(item_name, *quantity)
+                            input_port.has_at_least(item_name, *quantity)
                         })
                     } else {
                         continue;
@@ -188,8 +177,8 @@ pub fn update_operational_status(
                 }
 
                 OperationalCondition::HasInventorySpace(ref mut status) => {
-                    if let Some(inventory) = inventory {
-                        *status = !inventory.is_full();
+                    if let Some(output_port) = output_port {
+                        *status = !output_port.is_full();
                     } else {
                         *status = false;
                     }

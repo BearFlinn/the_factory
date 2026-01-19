@@ -11,27 +11,6 @@ pub use validation::*;
 
 use bevy::prelude::*;
 
-// ============================================================================
-// Building Archetype Markers
-// ============================================================================
-// These marker components identify a building's role in the production chain.
-// They replace the complex InventoryTypes enum with simple, composable markers.
-
-/// Marker for buildings that only produce items (e.g., Mining Drill).
-/// Source buildings have only an output buffer - they don't consume items.
-#[derive(Component, Debug, Default)]
-pub struct Source;
-
-/// Marker for buildings that transform items (e.g., Smelter, Assembler).
-/// Processor buildings have both input and output buffers.
-#[derive(Component, Debug, Default)]
-pub struct Processor;
-
-/// Marker for buildings that consume items for non-item output (e.g., Generator).
-/// Sink buildings have only an input buffer - they consume items but don't produce items.
-#[derive(Component, Debug, Default)]
-pub struct Sink;
-
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum BuildingSystemSet {
     Input,
@@ -67,9 +46,9 @@ impl Plugin for BuildingsPlugin {
         app.add_event::<PlaceBuildingRequestEvent>()
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
-            .add_event::<BufferLogisticsRequest>()
+            .add_event::<PortLogisticsRequest>()
             .add_event::<ConstructionMaterialRequest>()
-            .init_resource::<LogisticsPlannerTimer>()
+            .init_resource::<PortLogisticsTimer>()
             .add_systems(Startup, (setup, place_hub).chain())
             .add_systems(
                 Update,
@@ -87,14 +66,11 @@ impl Plugin for BuildingsPlugin {
                         .chain()
                         .in_set(BuildingSystemSet::Placement),
                     ((
-                        // Legacy crafting system (for entities with Inventory only)
-                        update_recipe_crafters,
-                        // New buffer-aware crafting systems
-                        update_processor_crafters,
-                        update_source_crafters,
-                        update_sink_crafters,
-                        // Polling-based logistics (replaces reactive systems)
-                        poll_buffer_logistics,
+                        // Port-based crafting systems
+                        update_port_crafters,
+                        update_source_port_crafters,
+                        update_sink_port_crafters,
+                        poll_port_logistics,
                     )
                         .chain())
                     .in_set(BuildingSystemSet::Operations),

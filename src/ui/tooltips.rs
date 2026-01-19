@@ -194,17 +194,6 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 let _ = writeln!(content, "  - Storage capacity: {capacity}");
                 has_capabilities = true;
             }
-            BuildingComponentDef::InventoryType { inv_type } => {
-                let type_desc = match inv_type {
-                    crate::materials::InventoryTypes::Storage => "Storage for items",
-                    crate::materials::InventoryTypes::Sender => "Sends items to network",
-                    crate::materials::InventoryTypes::Requester => "Requests items from network",
-                    crate::materials::InventoryTypes::Carrier => "Carries items",
-                    crate::materials::InventoryTypes::Producer => "Produces items",
-                };
-                let _ = writeln!(content, "  - {type_desc}");
-                has_capabilities = true;
-            }
             BuildingComponentDef::ViewRange { radius } => {
                 let _ = writeln!(content, "  - View range: {radius} tiles");
                 has_capabilities = true;
@@ -229,38 +218,19 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 );
                 has_capabilities = true;
             }
-            BuildingComponentDef::InputBuffer {
-                capacity,
-                request_threshold,
-            } => {
-                let threshold_pct = request_threshold * 100.0;
+            BuildingComponentDef::InputPort { capacity } => {
+                let _ = writeln!(content, "  - Input port: {capacity} capacity");
+                has_capabilities = true;
+            }
+            BuildingComponentDef::OutputPort { capacity } => {
+                let _ = writeln!(content, "  - Output port: {capacity} capacity");
+                has_capabilities = true;
+            }
+            BuildingComponentDef::StoragePort { capacity } => {
                 let _ = writeln!(
                     content,
-                    "  - Input buffer: {capacity} (requests below {threshold_pct:.0}%)"
+                    "  - Storage port: {capacity} capacity (bidirectional)"
                 );
-                has_capabilities = true;
-            }
-            BuildingComponentDef::OutputBuffer {
-                capacity,
-                offer_threshold,
-            } => {
-                let threshold_pct = offer_threshold * 100.0;
-                let _ = writeln!(
-                    content,
-                    "  - Output buffer: {capacity} (offers above {threshold_pct:.0}%)"
-                );
-                has_capabilities = true;
-            }
-            BuildingComponentDef::Source => {
-                content.push_str("  - Source: Produces items\n");
-                has_capabilities = true;
-            }
-            BuildingComponentDef::Processor => {
-                content.push_str("  - Processor: Transforms items\n");
-                has_capabilities = true;
-            }
-            BuildingComponentDef::Sink => {
-                content.push_str("  - Sink: Consumes items\n");
                 has_capabilities = true;
             }
         }

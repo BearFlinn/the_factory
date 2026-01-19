@@ -4,7 +4,7 @@ use super::components::{
 };
 use crate::{
     grid::Position,
-    materials::{Inventory, InventoryType, InventoryTypes},
+    materials::{Cargo, InventoryAccess, StoragePort},
     structures::Building,
     workers::{manhattan_distance_coords, AssignedSequence, Worker, WorkerPath, WorkerState},
 };
@@ -19,7 +19,7 @@ pub fn assign_available_sequences_to_workers(
             &Position,
             &WorkerState,
             &mut AssignedSequence,
-            &Inventory,
+            &Cargo,
         ),
         With<Worker>,
     >,
@@ -150,7 +150,7 @@ fn cleanup_orphaned_assignments(
             &Position,
             &WorkerState,
             &mut AssignedSequence,
-            &Inventory,
+            &Cargo,
         ),
         With<Worker>,
     >,
@@ -184,7 +184,7 @@ fn find_available_worker(
             &Position,
             &WorkerState,
             &mut AssignedSequence,
-            &Inventory,
+            &Cargo,
         ),
         With<Worker>,
     >,
@@ -192,10 +192,9 @@ fn find_available_worker(
     let mut best_worker = None;
     let mut closest_distance = i32::MAX;
 
-    for (entity, pos, worker_state, assigned_sequence, inventory) in workers.iter() {
-        let is_available = assigned_sequence.0.is_none()
-            && *worker_state == WorkerState::Idle
-            && inventory.is_empty();
+    for (entity, pos, worker_state, assigned_sequence, cargo) in workers.iter() {
+        let is_available =
+            assigned_sequence.0.is_none() && *worker_state == WorkerState::Idle && cargo.is_empty();
 
         if is_available {
             let distance = manhattan_distance_coords(position, (pos.x, pos.y));
@@ -344,26 +343,16 @@ pub fn debug_clear_all_workers(
 #[allow(clippy::needless_pass_by_value)]
 pub fn emergency_dropoff_idle_workers(
     mut commands: Commands,
-    workers: Query<
-        (
-            Entity,
-            &Position,
-            &WorkerState,
-            &AssignedSequence,
-            &Inventory,
-        ),
-        With<Worker>,
-    >,
-    storage_buildings: Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    workers: Query<(Entity, &Position, &WorkerState, &AssignedSequence, &Cargo), With<Worker>>,
+    storage_buildings: Query<(Entity, &Position, &StoragePort), With<Building>>,
     mut interrupt_events: EventWriter<WorkerInterruptEvent>,
 ) {
-    for (worker_entity, worker_pos, worker_state, assigned_sequence, worker_inventory) in
-        workers.iter()
+    for (worker_entity, worker_pos, worker_state, assigned_sequence, worker_cargo) in workers.iter()
     {
         // Only process idle workers with items and no current assignment
         if *worker_state != WorkerState::Idle
             || assigned_sequence.0.is_some()
-            || worker_inventory.is_empty()
+            || worker_cargo.is_empty()
         {
             continue;
         }
@@ -373,8 +362,8 @@ pub fn emergency_dropoff_idle_workers(
         let nearest_storage = find_nearest_available_storage(worker_grid_pos, &storage_buildings);
 
         if let Some((storage_entity, storage_pos)) = nearest_storage {
-            // Get all items from worker inventory
-            let worker_items = worker_inventory.get_all_items();
+            // Get all items from worker cargo
+            let worker_items = worker_cargo.get_all_items();
 
             if !worker_items.is_empty() {
                 // Create pickup task (worker → temporary holding)
@@ -415,14 +404,14 @@ pub fn emergency_dropoff_idle_workers(
 /// Find the nearest storage building with available inventory space
 fn find_nearest_available_storage(
     worker_pos: (i32, i32),
-    storage_buildings: &Query<(Entity, &Position, &Inventory, &InventoryType), With<Building>>,
+    storage_buildings: &Query<(Entity, &Position, &StoragePort), With<Building>>,
 ) -> Option<(Entity, Position)> {
     let mut nearest_storage = None;
     let mut closest_distance = i32::MAX;
 
-    for (entity, position, inventory, inventory_type) in storage_buildings.iter() {
+    for (entity, position, storage_port) in storage_buildings.iter() {
         // Only consider storage buildings with available space
-        if inventory_type.0 != InventoryTypes::Storage || inventory.is_full() {
+        if storage_port.is_full() {
             continue;
         }
 

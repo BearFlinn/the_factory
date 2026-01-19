@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub use crate::{
     grid::{Layer, Position},
-    materials::items::{InputBuffer, Inventory, InventoryType, InventoryTypes, OutputBuffer},
+    materials::items::{InputPort, Inventory, OutputPort, StoragePort},
     structures::*,
     systems::Operational,
 };
@@ -72,11 +72,9 @@ pub enum BuildingComponentDef {
     ComputeConsumer {
         amount: i32,
     },
+    // Legacy inventory component (used by Hub)
     Inventory {
         capacity: u32,
-    },
-    InventoryType {
-        inv_type: InventoryTypes,
     },
     ViewRange {
         radius: i32,
@@ -90,19 +88,16 @@ pub enum BuildingComponentDef {
     Scanner {
         base_scan_interval: f32, // Removed max_radius, simplified to just timing
     },
-    // New buffer-based components for the inventory refactor
-    InputBuffer {
+    // Port-based components
+    InputPort {
         capacity: u32,
-        request_threshold: f32, // Request more when below this % (0.0-1.0)
     },
-    OutputBuffer {
+    OutputPort {
         capacity: u32,
-        offer_threshold: f32, // Offer items when above this % (0.0-1.0)
     },
-    // Building archetype markers
-    Source,    // Mining Drill - output only (produces items)
-    Processor, // Smelter, Assembler - input + output (transforms items)
-    Sink,      // Generator - input only (consumes for non-item output)
+    StoragePort {
+        capacity: u32,
+    },
 }
 
 #[derive(Resource)]
@@ -209,9 +204,6 @@ impl BuildingRegistry {
                 BuildingComponentDef::Inventory { capacity } => {
                     entity_commands.insert(Inventory::new(*capacity));
                 }
-                BuildingComponentDef::InventoryType { inv_type } => {
-                    entity_commands.insert(InventoryType(inv_type.clone()));
-                }
                 BuildingComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
                 }
@@ -257,28 +249,15 @@ impl BuildingRegistry {
                         },
                     ));
                 }
-                // New buffer-based components
-                BuildingComponentDef::InputBuffer {
-                    capacity,
-                    request_threshold,
-                } => {
-                    entity_commands.insert(InputBuffer::new(*capacity, *request_threshold));
+                // Port-based components
+                BuildingComponentDef::InputPort { capacity } => {
+                    entity_commands.insert(InputPort::new(*capacity));
                 }
-                BuildingComponentDef::OutputBuffer {
-                    capacity,
-                    offer_threshold,
-                } => {
-                    entity_commands.insert(OutputBuffer::new(*capacity, *offer_threshold));
+                BuildingComponentDef::OutputPort { capacity } => {
+                    entity_commands.insert(OutputPort::new(*capacity));
                 }
-                // Building archetype markers
-                BuildingComponentDef::Source => {
-                    entity_commands.insert(Source);
-                }
-                BuildingComponentDef::Processor => {
-                    entity_commands.insert(Processor);
-                }
-                BuildingComponentDef::Sink => {
-                    entity_commands.insert(Sink);
+                BuildingComponentDef::StoragePort { capacity } => {
+                    entity_commands.insert(StoragePort::new(*capacity));
                 }
             }
         }

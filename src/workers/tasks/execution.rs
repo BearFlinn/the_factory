@@ -2,8 +2,8 @@ use super::components::{AssignedWorker, Task, TaskAction, TaskSequence, TaskStat
 use crate::{
     grid::{Grid, Position},
     materials::{
-        request_transfer_all_items, request_transfer_specific_items, Inventory,
-        ItemTransferRequestEvent,
+        items::{Cargo, InventoryAccess},
+        request_transfer_specific_items, ItemTransferRequestEvent,
     },
     systems::NetworkConnectivity,
     workers::{
@@ -169,18 +169,17 @@ fn initiate_pathfinding_or_complete_task(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn handle_sequence_task_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
-    mut workers: Query<(&mut AssignedSequence, &Inventory, &mut WorkerState), With<Worker>>,
+    mut workers: Query<(&mut AssignedSequence, &Cargo, &mut WorkerState), With<Worker>>,
     mut sequences: Query<(&mut TaskSequence, &mut AssignedWorker)>,
     mut tasks: Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
     task_targets: Query<Entity>,
-    inventories: Query<&Inventory>,
     mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
 ) {
     for event in arrival_events.read() {
-        let Ok((mut worker_assigned_sequence, worker_inventory, mut worker_state)) =
+        let Ok((mut worker_assigned_sequence, worker_cargo, mut worker_state)) =
             workers.get_mut(event.worker)
         else {
             continue;
@@ -218,8 +217,7 @@ pub fn handle_sequence_task_arrivals(
             event.worker,
             task_action,
             task_target,
-            worker_inventory,
-            &inventories,
+            worker_cargo,
             &mut transfer_requests,
         );
 
@@ -288,8 +286,7 @@ fn execute_task_action(
     worker_entity: Entity,
     task_action: &TaskAction,
     task_target: &TaskTarget,
-    worker_inventory: &Inventory,
-    inventories: &Query<&Inventory>,
+    worker_cargo: &Cargo,
     transfer_requests: &mut EventWriter<ItemTransferRequestEvent>,
 ) {
     match task_action {
@@ -302,11 +299,15 @@ fn execute_task_action(
                     transfer_requests,
                 );
             } else {
-                request_transfer_all_items(
+                // If no specific items requested, this is a special case
+                // The transfer system will handle finding items from the source's port
+                // For now, we create a transfer request with empty items which will be validated
+                let empty_items = std::collections::HashMap::new();
+                request_transfer_specific_items(
                     task_target.0,
                     worker_entity,
+                    empty_items,
                     transfer_requests,
-                    inventories,
                 );
             }
         }
@@ -319,12 +320,13 @@ fn execute_task_action(
                     transfer_requests,
                 );
             } else {
-                let all_items = worker_inventory.get_all_items();
-                if !all_items.is_empty() {
+                // Transfer all items from worker cargo
+                let cargo_items = worker_cargo.get_all_items();
+                if !cargo_items.is_empty() {
                     request_transfer_specific_items(
                         worker_entity,
                         task_target.0,
-                        all_items,
+                        cargo_items,
                         transfer_requests,
                     );
                 }

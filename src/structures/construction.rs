@@ -3,7 +3,7 @@ use std::collections::HashMap;
 pub use crate::{
     constants::gridlayers::BUILDING_LAYER,
     grid::{CellChildren, Grid, Layer, Position},
-    materials::items::{Inventory, InventoryType, InventoryTypes},
+    materials::items::{InputPort, InventoryAccess, StoragePort},
     structures::building_config::*,
     systems::Operational,
 };
@@ -117,8 +117,7 @@ pub struct ConstructionSite {
 pub struct ConstructionSiteBundle {
     pub construction_site: ConstructionSite,
     pub building_cost: BuildingCost,
-    pub inventory: Inventory,
-    pub inventory_type: InventoryType,
+    pub input_port: InputPort,
     pub position: Position,
     pub layer: Layer,
     pub sprite: Sprite,
@@ -136,8 +135,7 @@ impl ConstructionSiteBundle {
         Self {
             construction_site: ConstructionSite { building_name },
             building_cost,
-            inventory: Inventory::new(1000), // Large capacity for construction materials
-            inventory_type: InventoryType(InventoryTypes::Requester),
+            input_port: InputPort::new(1000), // Large capacity for construction materials
             position,
             layer: Layer(BUILDING_LAYER),
             sprite: Sprite::from_color(
@@ -214,9 +212,9 @@ pub fn place_hub(
 
     let world_pos = grid.grid_to_world_coordinates(center_x, center_y);
 
-    let mut central_inventory = Inventory::new(10000);
-    central_inventory.add_item("Iron Ore", 400);
-    central_inventory.add_item("Copper Ore", 400);
+    let mut storage_port = StoragePort::new(10000);
+    storage_port.add_item("Iron Ore", 400);
+    storage_port.add_item("Copper Ore", 400);
 
     let building_entity = commands
         .spawn((
@@ -234,8 +232,7 @@ pub fn place_hub(
             },
             PowerGenerator { amount: 100 },
             ComputeGenerator { amount: 60 },
-            central_inventory,
-            InventoryType(InventoryTypes::Storage),
+            storage_port,
             Operational(None),
             Layer(BUILDING_LAYER),
         ))
@@ -256,22 +253,22 @@ pub fn monitor_construction_completion(
         (
             Entity,
             &ConstructionSite,
-            &Inventory,
+            &InputPort,
             &BuildingCost,
             &Position,
             &Transform,
         ),
-        (Changed<Inventory>, With<ConstructionSite>),
+        (Changed<InputPort>, With<ConstructionSite>),
     >,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
     mut network_events: EventWriter<NetworkChangedEvent>,
 ) {
-    for (site_entity, construction_site, inventory, building_cost, position, transform) in
+    for (site_entity, construction_site, input_port, building_cost, position, transform) in
         &construction_sites
     {
         // Check if construction site has all required materials
-        if inventory.has_items_for_recipe(&building_cost.cost.inputs) {
+        if input_port.has_items_for_recipe(&building_cost.cost.inputs) {
             // Remove construction site
             commands.entity(site_entity).despawn();
 
@@ -376,7 +373,7 @@ pub fn monitor_construction_progress(
         (
             Entity,
             &ConstructionSite,
-            &Inventory,
+            &InputPort,
             &BuildingCost,
             &Position,
             Option<&mut ConstructionMonitor>,
@@ -389,14 +386,14 @@ pub fn monitor_construction_progress(
 ) {
     let current_time = time.elapsed_secs();
 
-    for (site_entity, construction_site, inventory, building_cost, position, monitor) in
+    for (site_entity, construction_site, input_port, building_cost, position, monitor) in
         &mut construction_sites
     {
         let required_materials = &building_cost.cost.inputs;
-        let current_materials = inventory.get_all_items();
+        let current_materials = input_port.get_all_items();
 
         // Check if construction is complete
-        if inventory.has_items_for_recipe(required_materials) {
+        if input_port.has_items_for_recipe(required_materials) {
             continue; // Let the completion system handle this
         }
 

@@ -1,212 +1,39 @@
-use std::collections::HashMap;
-
 use crate::{
-    grid::Position,
     materials::{
-        items::{InputBuffer, Inventory, OutputBuffer},
+        items::{InputPort, InventoryAccess, OutputPort, StoragePort},
         ItemName, RecipeRegistry,
     },
-    structures::{Processor, RecipeCrafter, Sink, Source},
+    structures::RecipeCrafter,
     systems::Operational,
-    workers::tasks::{Priority, Task, TaskTarget},
+    workers::tasks::{Task, TaskTarget},
 };
 use bevy::prelude::*;
 
-#[allow(clippy::needless_pass_by_value)]
-pub fn update_recipe_crafters(
-    mut query: Query<(&mut RecipeCrafter, &Operational, &mut Inventory)>,
-    recipe_registry: Res<RecipeRegistry>,
-    time: Res<Time>,
-) {
-    for (mut crafter, operational, mut inventory) in &mut query {
-        if !operational.get_status() {
-            continue;
-        }
-
-        if crafter.timer.tick(time.delta()).just_finished() {
-            let Some(recipe_name) = crafter.get_active_recipe() else {
-                continue;
-            };
-            if let Some(recipe) = recipe_registry.get_definition(recipe_name) {
-                // Check if we have all required inputs
-                let can_craft = !inventory.is_full()
-                    || recipe
-                        .inputs
-                        .iter()
-                        .all(|(item_name, quantity)| inventory.has_at_least(item_name, *quantity));
-
-                if can_craft {
-                    // Consume inputs
-                    for (item_name, quantity) in &recipe.inputs {
-                        inventory.remove_item(item_name, *quantity);
-                    }
-
-                    // Produce outputs
-                    for (item_name, quantity) in &recipe.outputs {
-                        inventory.add_item(item_name, *quantity);
-                    }
-                }
-            }
-
-            crafter.timer.reset();
-        }
-    }
-}
-
-/// Buffer-aware crafting for Processor buildings (input + output buffers).
-/// Consumes from `InputBuffer`, produces to `OutputBuffer` - no mixing of materials.
-#[allow(clippy::needless_pass_by_value)]
-pub fn update_processor_crafters(
-    mut query: Query<
-        (
-            &mut RecipeCrafter,
-            &Operational,
-            &mut InputBuffer,
-            &mut OutputBuffer,
-        ),
-        With<Processor>,
-    >,
-    recipe_registry: Res<RecipeRegistry>,
-    time: Res<Time>,
-) {
-    for (mut crafter, operational, mut input_buffer, mut output_buffer) in &mut query {
-        if !operational.get_status() {
-            continue;
-        }
-
-        if crafter.timer.tick(time.delta()).just_finished() {
-            let Some(recipe_name) = crafter.get_active_recipe() else {
-                continue;
-            };
-            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
-                continue;
-            };
-
-            // Check if we have all required inputs in InputBuffer
-            let has_inputs = input_buffer.inventory.has_items_for_recipe(&recipe.inputs);
-
-            // Check if we have space for outputs in OutputBuffer
-            let has_output_space = output_buffer.inventory.has_space_for(&recipe.outputs);
-
-            if has_inputs && has_output_space {
-                // Consume inputs from InputBuffer
-                for (item_name, quantity) in &recipe.inputs {
-                    input_buffer.inventory.remove_item(item_name, *quantity);
-                }
-
-                // Produce outputs to OutputBuffer
-                for (item_name, quantity) in &recipe.outputs {
-                    output_buffer.inventory.add_item(item_name, *quantity);
-                }
-            }
-
-            crafter.timer.reset();
-        }
-    }
-}
-
-/// Buffer-aware crafting for Source buildings (output buffer only, no inputs).
-/// Mining drills and similar buildings that produce items from nothing (or from the world).
-#[allow(clippy::needless_pass_by_value)]
-pub fn update_source_crafters(
-    mut query: Query<(&mut RecipeCrafter, &Operational, &mut OutputBuffer), With<Source>>,
-    recipe_registry: Res<RecipeRegistry>,
-    time: Res<Time>,
-) {
-    for (mut crafter, operational, mut output_buffer) in &mut query {
-        if !operational.get_status() {
-            continue;
-        }
-
-        if crafter.timer.tick(time.delta()).just_finished() {
-            let Some(recipe_name) = crafter.get_active_recipe() else {
-                continue;
-            };
-            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
-                continue;
-            };
-
-            // Sources don't consume inputs - check if we have space for outputs
-            let has_output_space = output_buffer.inventory.has_space_for(&recipe.outputs);
-
-            if has_output_space {
-                // Produce outputs to OutputBuffer
-                for (item_name, quantity) in &recipe.outputs {
-                    output_buffer.inventory.add_item(item_name, *quantity);
-                }
-            }
-
-            crafter.timer.reset();
-        }
-    }
-}
-
-/// Buffer-aware crafting for Sink buildings (input buffer only, consumes for non-item output).
-/// Generators and similar buildings that consume items but don't produce items.
-#[allow(clippy::needless_pass_by_value)]
-pub fn update_sink_crafters(
-    mut query: Query<(&mut RecipeCrafter, &Operational, &mut InputBuffer), With<Sink>>,
-    recipe_registry: Res<RecipeRegistry>,
-    time: Res<Time>,
-) {
-    for (mut crafter, operational, mut input_buffer) in &mut query {
-        if !operational.get_status() {
-            continue;
-        }
-
-        if crafter.timer.tick(time.delta()).just_finished() {
-            let Some(recipe_name) = crafter.get_active_recipe() else {
-                continue;
-            };
-            let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
-                continue;
-            };
-
-            // Check if we have all required inputs in InputBuffer
-            let has_inputs = input_buffer.inventory.has_items_for_recipe(&recipe.inputs);
-
-            if has_inputs {
-                // Consume inputs from InputBuffer (outputs are non-item effects like power)
-                for (item_name, quantity) in &recipe.inputs {
-                    input_buffer.inventory.remove_item(item_name, *quantity);
-                }
-                // Note: Outputs like power generation are handled by other systems
-            }
-
-            crafter.timer.reset();
-        }
-    }
-}
-
 // ============================================================================
-// Polling-Based Buffer Logistics System
+// PORT-BASED CRAFTING SYSTEMS
 // ============================================================================
-// Replaces the reactive Changed<Inventory> approach with declarative polling.
-// This evaluates buffer states holistically and avoids race conditions.
 
-/// Event for requesting logistics operations between buffer-based buildings.
-/// Unlike `CrafterLogisticsRequest`, this is designed for the new buffer system.
+/// Event for requesting logistics operations with port-based buildings.
+/// Emitted when `OutputPort`s have items for pickup or `InputPort`s need delivery.
 #[derive(Event)]
-pub struct BufferLogisticsRequest {
-    /// Entity that needs items (has `InputBuffer` below threshold) or `None` for offers.
-    pub requester: Option<Entity>,
-    /// Entity that has items to offer (has `OutputBuffer` above threshold) or `None` for requests.
-    pub offerer: Option<Entity>,
-    /// Position for pathfinding (requester position for requests, offerer for offers).
-    pub position: Position,
-    /// Items being requested or offered.
-    pub items: HashMap<ItemName, u32>,
-    /// Task priority.
-    pub priority: Priority,
+pub struct PortLogisticsRequest {
+    /// The building entity that needs logistics service.
+    pub building: Entity,
+    /// The item type being requested or offered.
+    pub item: ItemName,
+    /// The quantity to transfer.
+    pub quantity: u32,
+    /// If true, this is an output (needs pickup). If false, this is an input (needs delivery).
+    pub is_output: bool,
 }
 
-/// Timer resource for polling buffer logistics at regular intervals.
+/// Timer resource for polling port logistics at regular intervals.
 #[derive(Resource)]
-pub struct LogisticsPlannerTimer {
+pub struct PortLogisticsTimer {
     pub timer: Timer,
 }
 
-impl Default for LogisticsPlannerTimer {
+impl Default for PortLogisticsTimer {
     fn default() -> Self {
         Self {
             timer: Timer::from_seconds(1.0, TimerMode::Repeating),
@@ -214,37 +41,169 @@ impl Default for LogisticsPlannerTimer {
     }
 }
 
-/// Polls buffer states and emits logistics requests.
-/// Runs on a timer rather than reactively to avoid race conditions and evaluate
-/// the system state holistically.
-// Multiple queries are needed to handle different building archetypes and check existing tasks.
+/// Port-based crafting for buildings with both `InputPort` and `OutputPort` (e.g., Smelter, Assembler).
+/// Consumes from `InputPort`, produces to `OutputPort` - cleanly separated materials.
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_port_crafters(
+    mut query: Query<(
+        &mut InputPort,
+        &mut OutputPort,
+        &mut RecipeCrafter,
+        &Operational,
+    )>,
+    recipes: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut input_port, mut output_port, mut crafter, operational) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if !crafter.timer.tick(time.delta()).just_finished() {
+            continue;
+        }
+
+        let Some(recipe_name) = crafter.get_active_recipe() else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        let Some(recipe) = recipes.get_definition(recipe_name) else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        // Check if we have all required inputs
+        let has_inputs = recipe
+            .inputs
+            .iter()
+            .all(|(item, qty)| input_port.get_item_quantity(item) >= *qty);
+
+        // Check if we have space for all outputs
+        let has_space = output_port.has_space_for(&recipe.outputs);
+
+        if has_inputs && has_space {
+            // Consume from input port
+            for (item, qty) in &recipe.inputs {
+                input_port.remove_item(item, *qty);
+            }
+            // Produce to output port
+            for (item, qty) in &recipe.outputs {
+                output_port.add_item(item, *qty);
+            }
+        }
+
+        crafter.timer.reset();
+    }
+}
+
+/// Port-based crafting for Source buildings (`OutputPort` only, e.g., Mining Drill).
+/// These buildings produce items without consuming any inputs.
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_source_port_crafters(
+    mut query: Query<(&mut OutputPort, &mut RecipeCrafter, &Operational), Without<InputPort>>,
+    recipes: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut output_port, mut crafter, operational) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if !crafter.timer.tick(time.delta()).just_finished() {
+            continue;
+        }
+
+        let Some(recipe_name) = crafter.get_active_recipe() else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        let Some(recipe) = recipes.get_definition(recipe_name) else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        // Sources don't consume - only check output space
+        let has_space = output_port.has_space_for(&recipe.outputs);
+
+        if has_space {
+            // Produce to output port
+            for (item, qty) in &recipe.outputs {
+                output_port.add_item(item, *qty);
+            }
+        }
+
+        crafter.timer.reset();
+    }
+}
+
+/// Port-based crafting for Sink buildings (`InputPort` only, e.g., Generator).
+/// These buildings consume items but produce non-item outputs (like power).
+#[allow(clippy::needless_pass_by_value)]
+pub fn update_sink_port_crafters(
+    mut query: Query<(&mut InputPort, &mut RecipeCrafter, &Operational), Without<OutputPort>>,
+    recipes: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut input_port, mut crafter, operational) in &mut query {
+        if !operational.get_status() {
+            continue;
+        }
+
+        if !crafter.timer.tick(time.delta()).just_finished() {
+            continue;
+        }
+
+        let Some(recipe_name) = crafter.get_active_recipe() else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        let Some(recipe) = recipes.get_definition(recipe_name) else {
+            crafter.timer.reset();
+            continue;
+        };
+
+        // Check if we have all required inputs
+        let has_inputs = recipe
+            .inputs
+            .iter()
+            .all(|(item, qty)| input_port.get_item_quantity(item) >= *qty);
+
+        if has_inputs {
+            // Consume from input port (non-item outputs like power handled elsewhere)
+            for (item, qty) in &recipe.inputs {
+                input_port.remove_item(item, *qty);
+            }
+        }
+
+        crafter.timer.reset();
+    }
+}
+
+/// Polls port states and emits logistics requests.
+/// Runs on a timer to evaluate the system state holistically.
 #[allow(
     clippy::needless_pass_by_value,
     clippy::type_complexity,
     clippy::too_many_arguments
 )]
-pub fn poll_buffer_logistics(
+pub fn poll_port_logistics(
     time: Res<Time>,
-    mut timer: ResMut<LogisticsPlannerTimer>,
-    // Query for buildings with OutputBuffers that might have items to offer
-    output_buffers: Query<(Entity, &Position, &OutputBuffer), Without<InputBuffer>>,
-    // Query for buildings with InputBuffers that might need items
-    input_buffers: Query<(Entity, &Position, &InputBuffer, Option<&RecipeCrafter>)>,
-    // Query for Processor buildings (have both buffers)
-    processors: Query<
-        (
-            Entity,
-            &Position,
-            &InputBuffer,
-            &OutputBuffer,
-            Option<&RecipeCrafter>,
-        ),
-        With<Processor>,
-    >,
+    mut timer: ResMut<PortLogisticsTimer>,
+    // Buildings with only OutputPort (sources)
+    source_ports: Query<(Entity, &OutputPort), Without<InputPort>>,
+    // Buildings with only InputPort (sinks)
+    sink_ports: Query<(Entity, &InputPort, Option<&RecipeCrafter>), Without<OutputPort>>,
+    // Buildings with both ports (processors)
+    processor_ports: Query<(Entity, &InputPort, &OutputPort, Option<&RecipeCrafter>)>,
+    // Storage buildings
+    storage_ports: Query<(Entity, &StoragePort)>,
     // Check existing tasks to avoid duplicates
     tasks: Query<&TaskTarget, With<Task>>,
     recipe_registry: Res<RecipeRegistry>,
-    mut events: EventWriter<BufferLogisticsRequest>,
+    mut events: EventWriter<PortLogisticsRequest>,
 ) {
     if !timer.timer.tick(time.delta()).just_finished() {
         return;
@@ -253,139 +212,135 @@ pub fn poll_buffer_logistics(
     let existing_targets: std::collections::HashSet<Entity> =
         tasks.iter().map(|target| target.0).collect();
 
-    // Collect offers from OutputBuffers above threshold
-    let mut offers: Vec<(Entity, Position, HashMap<ItemName, u32>)> = Vec::new();
-
-    // Source buildings (output only)
-    for (entity, position, output_buffer) in &output_buffers {
+    // Emit pickup requests from OutputPorts (source buildings)
+    for (entity, output_port) in &source_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
-        if output_buffer.has_items_to_offer() {
-            let items = output_buffer.inventory.get_all_items();
-            if !items.is_empty() {
-                offers.push((entity, *position, items));
+        for (item_name, &quantity) in output_port.items() {
+            if quantity > 0 {
+                events.send(PortLogisticsRequest {
+                    building: entity,
+                    item: item_name.clone(),
+                    quantity,
+                    is_output: true,
+                });
             }
         }
     }
 
-    // Processor buildings (output buffer part)
-    for (entity, position, _, output_buffer, _) in &processors {
+    // Emit pickup requests from processor OutputPorts
+    for (entity, _, output_port, _) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
-        if output_buffer.has_items_to_offer() {
-            let items = output_buffer.inventory.get_all_items();
-            if !items.is_empty() {
-                offers.push((entity, *position, items));
+        for (item_name, &quantity) in output_port.items() {
+            if quantity > 0 {
+                events.send(PortLogisticsRequest {
+                    building: entity,
+                    item: item_name.clone(),
+                    quantity,
+                    is_output: true,
+                });
             }
         }
     }
 
-    // Collect requests from InputBuffers below threshold
-    let mut requests: Vec<(Entity, Position, HashMap<ItemName, u32>)> = Vec::new();
-
-    // Sink buildings (input only) and other input-buffer buildings
-    for (entity, position, input_buffer, maybe_crafter) in &input_buffers {
+    // Emit delivery requests for InputPorts (sink buildings)
+    for (entity, input_port, maybe_crafter) in &sink_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
-        if !input_buffer.needs_items() {
-            continue;
-        }
-
-        // If building has a recipe, request recipe inputs
-        if let Some(crafter) = maybe_crafter {
-            if let Some(recipe_name) = crafter.get_active_recipe() {
-                if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
-                    let needed = calculate_buffer_needs(input_buffer, &recipe_def.inputs);
-                    if !needed.is_empty() {
-                        requests.push((entity, *position, needed));
-                    }
-                }
-            }
-        }
+        emit_input_port_requests(
+            entity,
+            input_port,
+            maybe_crafter,
+            &recipe_registry,
+            &mut events,
+        );
     }
 
-    // Processor buildings (input buffer part)
-    for (entity, position, input_buffer, _, maybe_crafter) in &processors {
+    // Emit delivery requests for processor InputPorts
+    for (entity, input_port, _, maybe_crafter) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
-        if !input_buffer.needs_items() {
+        emit_input_port_requests(
+            entity,
+            input_port,
+            maybe_crafter,
+            &recipe_registry,
+            &mut events,
+        );
+    }
+
+    // Storage ports can both receive and provide - emit based on contents
+    for (entity, storage_port) in &storage_ports {
+        if existing_targets.contains(&entity) {
             continue;
         }
-
-        if let Some(crafter) = maybe_crafter {
-            if let Some(recipe_name) = crafter.get_active_recipe() {
-                if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
-                    let needed = calculate_buffer_needs(input_buffer, &recipe_def.inputs);
-                    if !needed.is_empty() {
-                        requests.push((entity, *position, needed));
-                    }
-                }
+        // Storage offers items for pickup
+        for (item_name, &quantity) in storage_port.items() {
+            if quantity > 0 {
+                events.send(PortLogisticsRequest {
+                    building: entity,
+                    item: item_name.clone(),
+                    quantity,
+                    is_output: true,
+                });
             }
         }
-    }
-
-    // Emit offer events (items available for pickup)
-    for (entity, position, items) in offers {
-        events.send(BufferLogisticsRequest {
-            requester: None,
-            offerer: Some(entity),
-            position,
-            items,
-            priority: Priority::Medium,
-        });
-    }
-
-    // Emit request events (items needed for delivery)
-    for (entity, position, items) in requests {
-        events.send(BufferLogisticsRequest {
-            requester: Some(entity),
-            offerer: None,
-            position,
-            items,
-            priority: Priority::Medium,
-        });
     }
 }
 
-/// Calculate what items a buffer needs based on recipe inputs and current inventory.
-fn calculate_buffer_needs(
-    input_buffer: &InputBuffer,
-    recipe_inputs: &HashMap<ItemName, u32>,
-) -> HashMap<ItemName, u32> {
-    let mut needed = HashMap::new();
-    let available_space = input_buffer
-        .inventory
-        .capacity
-        .saturating_sub(input_buffer.inventory.get_total_quantity());
+/// Helper to emit delivery requests for an `InputPort` based on recipe needs.
+fn emit_input_port_requests(
+    entity: Entity,
+    input_port: &InputPort,
+    maybe_crafter: Option<&RecipeCrafter>,
+    recipe_registry: &RecipeRegistry,
+    events: &mut EventWriter<PortLogisticsRequest>,
+) {
+    let Some(crafter) = maybe_crafter else {
+        return;
+    };
+    let Some(recipe_name) = crafter.get_active_recipe() else {
+        return;
+    };
+    let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+        return;
+    };
 
+    let available_space = input_port
+        .capacity()
+        .saturating_sub(input_port.get_total_quantity());
     if available_space == 0 {
-        return needed;
+        return;
     }
 
-    let mut total_needed = 0u32;
+    let mut total_requested = 0u32;
 
-    for (item_name, &recipe_quantity) in recipe_inputs {
-        let current = input_buffer.inventory.get_item_quantity(item_name);
+    for (item_name, &recipe_quantity) in &recipe.inputs {
+        let current = input_port.get_item_quantity(item_name);
         let target = recipe_quantity * 10; // Buffer 10x recipe amount
 
         if current < target {
             let deficit = target - current;
-            let feasible = deficit.min(available_space.saturating_sub(total_needed));
+            let feasible = deficit.min(available_space.saturating_sub(total_requested));
 
             if feasible > 0 {
-                needed.insert(item_name.clone(), feasible);
-                total_needed += feasible;
+                events.send(PortLogisticsRequest {
+                    building: entity,
+                    item: item_name.clone(),
+                    quantity: feasible,
+                    is_output: false,
+                });
+                total_requested += feasible;
             }
         }
 
-        if total_needed >= available_space {
+        if total_requested >= available_space {
             break;
         }
     }
-
-    needed
 }

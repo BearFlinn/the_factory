@@ -4,9 +4,9 @@ pub mod items;
 pub mod recipes;
 
 pub use items::{
-    execute_item_transfer, request_transfer_all_items, request_transfer_specific_items,
-    validate_item_transfer, Inventory, InventoryType, InventoryTypes, ItemName, ItemRegistry,
-    ItemTransferEvent, ItemTransferRequestEvent, ItemTransferValidationEvent,
+    execute_item_transfer, request_transfer_specific_items, validate_item_transfer, Cargo,
+    InputPort, Inventory, InventoryAccess, ItemName, ItemRegistry, ItemTransferEvent,
+    ItemTransferRequestEvent, ItemTransferValidationEvent, OutputPort, StoragePort,
 };
 pub use recipes::{RecipeDef, RecipeName, RecipeRegistry};
 

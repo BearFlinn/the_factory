@@ -18,8 +18,7 @@
             PowerConsumer(amount: 10),
             ViewRange(radius: 2),
             RecipeCrafter(recipe_name: None, available_recipes: None, interval: 1.0),
-            Source,
-            OutputBuffer(capacity: 100, offer_threshold: 0.2),
+            OutputPort(capacity: 100),
         ]
     ),
     
@@ -86,8 +85,7 @@
             PowerGenerator(amount: 40),
             RecipeCrafter(recipe_name: Some("Power"), available_recipes: None, interval: 2.0),
             ViewRange(radius: 2),
-            Sink,
-            InputBuffer(capacity: 100, request_threshold: 0.5),
+            InputPort(capacity: 100),
         ]
     ),
     
@@ -132,9 +130,8 @@
             PowerConsumer(amount: 60),
             RecipeCrafter(recipe_name: None, available_recipes: Some(["Iron Ingot", "Copper Ingot"]), interval: 2.0),
             ViewRange(radius: 2),
-            Processor,
-            InputBuffer(capacity: 50, request_threshold: 0.3),
-            OutputBuffer(capacity: 50, offer_threshold: 0.2),
+            InputPort(capacity: 50),
+            OutputPort(capacity: 50),
         ]
     ),
     
@@ -154,8 +151,7 @@
             rules: [AdjacentToNetwork],
         ),
         components: [
-            Inventory(capacity: 200),
-            InventoryType(inv_type: Storage),
+            StoragePort(capacity: 200),
             ViewRange(radius: 2),
         ]
     ),
@@ -188,9 +184,8 @@
                 interval: 1.5
             ),
             ViewRange(radius: 2),
-            Processor,
-            InputBuffer(capacity: 50, request_threshold: 0.3),
-            OutputBuffer(capacity: 50, offer_threshold: 0.2),
+            InputPort(capacity: 50),
+            OutputPort(capacity: 50),
         ]
     ),
 

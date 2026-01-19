@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    materials::{items::Inventory, ItemRegistry},
+    materials::{items::Inventory, InventoryAccess, ItemRegistry, StoragePort},
     structures::Hub,
     systems::{ComputeGrid, PowerGrid},
 };
@@ -83,17 +83,27 @@ pub fn update_power_grid_text(
 
 #[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_production_text(
+    central_storage_port: Query<&StoragePort, (With<Hub>, Changed<StoragePort>)>,
     central_inventory: Query<&Inventory, (With<Hub>, Changed<Inventory>)>,
     mut text_query: Query<&mut Text, With<ProductionText>>,
     item_registry: Res<ItemRegistry>,
 ) {
-    if let Ok(inventory) = central_inventory.get_single() {
+    // Try new StoragePort first, fall back to legacy Inventory
+    let items: Option<&std::collections::HashMap<crate::materials::ItemName, u32>> =
+        if let Ok(storage_port) = central_storage_port.get_single() {
+            Some(storage_port.items())
+        } else if let Ok(inventory) = central_inventory.get_single() {
+            Some(&inventory.items)
+        } else {
+            None
+        };
+
+    if let Some(items) = items {
         if let Ok(mut text) = text_query.get_single_mut() {
-            if inventory.items.is_empty() {
+            if items.is_empty() {
                 **text = "Central Storage: Empty".to_string();
             } else {
-                let items_text = inventory
-                    .items
+                let items_text = items
                     .iter()
                     .map(|(item_name, &quantity)| {
                         let name = item_registry

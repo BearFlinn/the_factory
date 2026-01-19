@@ -1,232 +1,504 @@
-# Inventory & Production System Refactor
+# Inventory & Production System Refactor (v2)
+
+## Background
+
+This document supersedes the original refactor plan. The first attempt at this refactor introduced `InputBuffer`/`OutputBuffer` components and archetype markers (`Source`, `Processor`, `Sink`), but the migration was incomplete. The result was two parallel systems (legacy `InventoryType` and new buffers) coexisting awkwardly, making the codebase harder to reason about than before.
+
+This revision takes a cleaner approach: **port components** that follow Bevy-idiomatic ECS patterns.
+
+---
 
 ## Current State Analysis
 
-### The Problem
+### The Original Problem (Still Valid)
 
-The current inventory and production system is difficult to reason about, which has downstream effects on the task system and makes bugs hard to diagnose. The foundational confusion makes everything built on top more complex than it needs to be.
-
-### Current InventoryTypes
-
-The system currently uses five inventory types defined in `src/materials/items.rs`:
-
-```rust
-pub enum InventoryTypes {
-    Storage,    // General storage buildings
-    Sender,     // Output-only (Mining Drills)
-    Requester,  // Input-only (Generator)
-    Carrier,    // Workers
-    Producer,   // Both input and output (Smelter, Assembler)
-}
-```
-
-**The core issue**: `Producer` is trying to be both `Requester` AND `Sender`, which creates the most complex handling in `crafter_logistics_requests` (`src/structures/production.rs:127-193`). The branching logic treats each type differently, and Producer gets the longest, most tangled branch.
-
-### Single Inventory Problem
-
-Buildings like Smelter have ONE inventory (100 slots) that holds both incoming ore AND outgoing ingots. This causes:
+Buildings like Smelter have ONE inventory that holds both incoming ore AND outgoing ingots. This causes:
 
 1. **Inventory jams**: The inventory fills with a mix of inputs and outputs, blocking both delivery and production
 2. **Confusing crafting logic**: The system has to reason about "do I have space AND inputs" in a shared pool
 
-The crafting condition in `update_recipe_crafters` (`src/structures/production.rs:29-33`):
+### The Partial Refactor Problem (New)
 
+The first refactor attempt created a hybrid state:
+
+- Some buildings use `Inventory` + `InventoryType` (Storage)
+- Some buildings use `InputBuffer`/`OutputBuffer` + archetype markers (Smelter, Mining Drill)
+- Task creation code queries both patterns with fallback logic
+- Transfer validation checks buffers first, then falls back to legacy inventory
+- UI queries `Inventory` only, so buffer-based buildings disappeared from tooltips
+
+This hybrid state is worse than either pure approach would be.
+
+---
+
+## Proposed Solution: Port Components
+
+### Core Concept
+
+Instead of inventory "types" that encode behavior in an enum, use **separate component types** that represent logistics roles. The presence of a component IS the type information—no runtime checks needed.
+
+### Port Component Definitions
+
+```rust
+/// Shared behavior for all inventory-like components
+pub trait InventoryAccess {
+    fn items(&self) -> &HashMap<ItemName, u32>;
+    fn items_mut(&mut self) -> &mut HashMap<ItemName, u32>;
+    fn capacity(&self) -> u32;
+
+    // Default implementations for common operations
+    fn add_item(&mut self, name: &str, quantity: u32) -> u32 { ... }
+    fn remove_item(&mut self, name: &str, quantity: u32) -> u32 { ... }
+    fn get_item_quantity(&self, name: &str) -> u32 { ... }
+    fn get_total_quantity(&self) -> u32 { ... }
+    fn is_full(&self) -> bool { ... }
+    fn is_empty(&self) -> bool { ... }
+    fn has_space_for(&self, items: &HashMap<ItemName, u32>) -> bool { ... }
+    // ... etc
+}
+
+/// Items can be picked up from here (Mining Drills, Smelter outputs)
+#[derive(Component)]
+pub struct OutputPort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+/// Items can be delivered here (Generators, Smelter inputs)
+#[derive(Component)]
+pub struct InputPort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+/// Bidirectional storage - accepts deliveries and provides pickups
+#[derive(Component)]
+pub struct StoragePort {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+/// Transient carrying capacity for workers
+#[derive(Component)]
+pub struct Cargo {
+    pub items: HashMap<ItemName, u32>,
+    pub capacity: u32,
+}
+
+impl InventoryAccess for OutputPort { ... }
+impl InventoryAccess for InputPort { ... }
+impl InventoryAccess for StoragePort { ... }
+impl InventoryAccess for Cargo { ... }
+```
+
+### Building Compositions
+
+| Building | Components | Logistics Role |
+|----------|------------|----------------|
+| Mining Drill | `OutputPort` | Provides items only |
+| Generator | `InputPort` | Accepts items only |
+| Smelter | `InputPort` + `OutputPort` | Accepts inputs, provides outputs |
+| Assembler | `InputPort` + `OutputPort` | Accepts inputs, provides outputs |
+| Storage | `StoragePort` | Bidirectional buffer |
+| Worker | `Cargo` | Transient carrying |
+
+### Why This Is Better
+
+1. **No `InventoryType` enum.** Component presence IS the type. A building with `OutputPort` is a supplier by structure, not by checking a field.
+
+2. **No archetype markers.** We don't need `Source`, `Processor`, `Sink` components. A building with only `OutputPort` is a source. A building with both `InputPort` and `OutputPort` is a processor. The component combination encodes the archetype.
+
+3. **Bevy-idiomatic queries.** Systems can efficiently query exactly what they need:
+   ```rust
+   // Find all suppliers
+   fn find_suppliers(
+       outputs: Query<(Entity, &Position, &OutputPort)>,
+       storage: Query<(Entity, &Position, &StoragePort)>,
+   ) { ... }
+
+   // Find all destinations
+   fn find_destinations(
+       inputs: Query<(Entity, &Position, &InputPort)>,
+       storage: Query<(Entity, &Position, &StoragePort)>,
+   ) { ... }
+
+   // Crafting only matches buildings with both ports
+   fn update_crafters(
+       crafters: Query<(&mut InputPort, &mut OutputPort, &RecipeCrafter, &Operational)>,
+   ) { ... }
+   ```
+
+4. **Fine-grained change detection.** `Changed<OutputPort>` won't trigger systems watching `Changed<InputPort>`.
+
+5. **System parallelism.** Systems reading only `InputPort` can run in parallel with systems reading only `OutputPort`.
+
+6. **UI works naturally.** Query all port types, display contents:
+   ```rust
+   fn building_tooltip(
+       entity: Entity,
+       inputs: Query<&InputPort>,
+       outputs: Query<&OutputPort>,
+       storage: Query<&StoragePort>,
+   ) -> String {
+       let mut lines = Vec::new();
+       if let Ok(input) = inputs.get(entity) {
+           lines.push(format!("Input: {} items", input.get_total_quantity()));
+       }
+       if let Ok(output) = outputs.get(entity) {
+           lines.push(format!("Output: {} items", output.get_total_quantity()));
+       }
+       if let Ok(store) = storage.get(entity) {
+           lines.push(format!("Storage: {} items", store.get_total_quantity()));
+       }
+       lines.join("\n")
+   }
+   ```
+
+---
+
+## System Changes
+
+### Crafting System
+
+Before (complex single-inventory logic):
 ```rust
 let can_craft = !inventory.is_full()
-    || recipe
-        .inputs
-        .iter()
-        .all(|(item_name, quantity)| inventory.has_at_least(item_name, *quantity));
+    || recipe.inputs.iter()
+        .all(|(item, qty)| inventory.has_at_least(item, *qty));
 ```
 
-This OR logic is confusing. The apparent intent: "craft if there's space OR if you have inputs (because transforming inputs to outputs is net-zero space)." But the logic is hard to follow and may not handle edge cases correctly.
+After (clean separated logic):
+```rust
+fn update_crafters(
+    mut crafters: Query<(&mut InputPort, &mut OutputPort, &RecipeCrafter, &Operational)>,
+    recipes: Res<RecipeRegistry>,
+    time: Res<Time>,
+) {
+    for (mut input, mut output, crafter, operational) in &mut crafters {
+        if !operational.is_active() { continue; }
+        if !crafter.timer.tick(time.delta()).just_finished() { continue; }
 
-### Current Building Inventory Configurations
+        let Some(recipe) = recipes.get(crafter.current_recipe()) else { continue };
 
-From `src/assets/buildings.ron`:
+        // Simple checks: do we have inputs? do we have output space?
+        let has_inputs = recipe.inputs.iter()
+            .all(|(item, qty)| input.get_item_quantity(item) >= *qty);
+        let has_space = output.has_space_for(&recipe.outputs);
 
-| Building | InventoryType | Capacity | Role |
-|----------|---------------|----------|------|
-| Mining Drill | Sender | 100 | Extracts ore from nodes |
-| Generator | Requester | 100 | Consumes coal for power |
-| Smelter | Producer | 100 | Ore → Ingots |
-| Assembler | Producer | 100 | Ingots → Components |
-| Storage | Storage | 200 | General buffer |
+        if has_inputs && has_space {
+            // Consume from input
+            for (item, qty) in &recipe.inputs {
+                input.remove_item(item, *qty);
+            }
+            // Produce to output
+            for (item, qty) in &recipe.outputs {
+                output.add_item(item, *qty);
+            }
+        }
+    }
+}
+```
+
+### Task Creation
+
+```rust
+/// Find buildings that have items available for pickup
+fn find_available_pickups(
+    outputs: Query<(Entity, &Position, &OutputPort), With<Building>>,
+    storage: Query<(Entity, &Position, &StoragePort), With<Building>>,
+) -> Vec<(Entity, Position, HashMap<ItemName, u32>)> {
+    let mut available = Vec::new();
+
+    for (entity, pos, output) in &outputs {
+        if !output.is_empty() {
+            available.push((entity, *pos, output.items.clone()));
+        }
+    }
+
+    for (entity, pos, storage) in &storage {
+        if !storage.is_empty() {
+            available.push((entity, *pos, storage.items.clone()));
+        }
+    }
+
+    available
+}
+
+/// Find buildings that need items delivered
+fn find_delivery_destinations(
+    inputs: Query<(Entity, &Position, &InputPort, Option<&RecipeCrafter>), With<Building>>,
+    storage: Query<(Entity, &Position, &StoragePort), With<Building>>,
+    recipes: Res<RecipeRegistry>,
+) -> Vec<(Entity, Position, HashMap<ItemName, u32>)> {
+    let mut destinations = Vec::new();
+
+    for (entity, pos, input, maybe_crafter) in &inputs {
+        if input.is_full() { continue; }
+
+        // If building has a recipe, only request recipe inputs
+        let needed = if let Some(crafter) = maybe_crafter {
+            calculate_recipe_needs(input, crafter, &recipes)
+        } else {
+            // No recipe - accept anything (e.g., Generator with fixed fuel type)
+            HashMap::new() // or specific item filter
+        };
+
+        if !needed.is_empty() {
+            destinations.push((entity, *pos, needed));
+        }
+    }
+
+    for (entity, pos, storage) in &storage {
+        if !storage.is_full() {
+            destinations.push((entity, *pos, HashMap::new())); // Accepts anything
+        }
+    }
+
+    destinations
+}
+```
+
+### Transfer Execution
+
+```rust
+fn execute_pickup(
+    entity: Entity,
+    items: &HashMap<ItemName, u32>,
+    outputs: &mut Query<&mut OutputPort>,
+    storage: &mut Query<&mut StoragePort>,
+    cargo: &mut Query<&mut Cargo>,
+    worker: Entity,
+) {
+    // Try OutputPort first, then StoragePort
+    let source = outputs.get_mut(entity)
+        .map(|o| o.into_inner() as &mut dyn InventoryAccess)
+        .or_else(|_| storage.get_mut(entity)
+            .map(|s| s.into_inner() as &mut dyn InventoryAccess));
+
+    let Ok(mut worker_cargo) = cargo.get_mut(worker) else { return };
+
+    if let Ok(source) = source {
+        for (item, qty) in items {
+            let removed = source.remove_item(item, *qty);
+            worker_cargo.add_item(item, removed);
+        }
+    }
+}
+
+fn execute_dropoff(
+    entity: Entity,
+    inputs: &mut Query<&mut InputPort>,
+    storage: &mut Query<&mut StoragePort>,
+    cargo: &mut Query<&mut Cargo>,
+    worker: Entity,
+) {
+    // Try InputPort first, then StoragePort
+    let destination = inputs.get_mut(entity)
+        .map(|i| i.into_inner() as &mut dyn InventoryAccess)
+        .or_else(|_| storage.get_mut(entity)
+            .map(|s| s.into_inner() as &mut dyn InventoryAccess));
+
+    let Ok(mut worker_cargo) = cargo.get_mut(worker) else { return };
+
+    if let Ok(dest) = destination {
+        for (item, qty) in worker_cargo.items().clone() {
+            let space = dest.capacity() - dest.get_total_quantity();
+            let transfer = qty.min(space);
+            if transfer > 0 {
+                worker_cargo.remove_item(&item, transfer);
+                dest.add_item(&item, transfer);
+            }
+        }
+    }
+}
+```
 
 ---
 
-## Proposed Refactor
+## Building Configuration
 
-### Separate Input/Output Buffers
+### RON Definitions
 
-Instead of one inventory, production buildings should have **two distinct inventories**:
+```ron
+(
+    name: "Mining Drill",
+    category: Production,
+    appearance: ( ... ),
+    placement: ( ... ),
+    components: [
+        PowerConsumer(amount: 10),
+        ViewRange(radius: 2),
+        RecipeCrafter(recipe_name: None, available_recipes: None, interval: 1.0),
+        OutputPort(capacity: 100),
+    ]
+),
 
-- **Input Buffer**: Holds items waiting to be processed
-- **Output Buffer**: Holds items that have been produced
+(
+    name: "Generator",
+    category: Production,
+    appearance: ( ... ),
+    placement: ( ... ),
+    components: [
+        PowerGenerator(amount: 40),
+        RecipeCrafter(recipe_name: Some("Power"), available_recipes: None, interval: 2.0),
+        ViewRange(radius: 2),
+        InputPort(capacity: 100),
+    ]
+),
 
-Benefits:
-- **No mixing**: Inputs and outputs can't compete for the same slots
-- **Clear jam diagnosis**: If output buffer is full, outputs aren't being collected. If input buffer is empty, inputs aren't being delivered.
-- **Simpler crafting logic**: Pull from input buffer, push to output buffer. No complex space calculations.
-- **Simpler logistics**: Task system doesn't need to understand recipes—just "move items from output buffers to input buffers"
+(
+    name: "Smelter",
+    category: Production,
+    appearance: ( ... ),
+    placement: ( ... ),
+    components: [
+        PowerConsumer(amount: 60),
+        RecipeCrafter(recipe_name: None, available_recipes: Some(["Iron Ingot", "Copper Ingot"]), interval: 2.0),
+        ViewRange(radius: 2),
+        InputPort(capacity: 50),
+        OutputPort(capacity: 50),
+    ]
+),
 
-Example flow for Smelter:
+(
+    name: "Storage",
+    category: Logistics,
+    appearance: ( ... ),
+    placement: ( ... ),
+    components: [
+        StoragePort(capacity: 200),
+        ViewRange(radius: 2),
+    ]
+),
 ```
-[Mining Drill Output] → Worker → [Smelter Input Buffer]
-                                         ↓
-                                    (Crafting)
-                                         ↓
-                                 [Smelter Output Buffer] → Worker → [Storage or next Processor]
-```
 
-### Building Archetypes
-
-Replace inventory-type-based categorization with **role-based archetypes** that map to production graph topology:
-
-#### Source
-- **Role**: Entry point where items enter the production chain
-- **Examples**: Mining Drill (extracts ore from world)
-- **Buffers**: Output only
-- **Graph topology**: Only outgoing edges
-- **Logistics concern**: "Where do outputs go?"
-
-#### Processor
-- **Role**: Transforms items according to recipes
-- **Examples**: Smelter, Assembler
-- **Buffers**: Input AND Output (separate)
-- **Graph topology**: Incoming and outgoing edges
-- **Logistics concerns**: "Where do inputs come from?" + "Where do outputs go?"
-
-#### Storage
-- **Role**: Buffer node that holds items in transit
-- **Examples**: Storage building
-- **Buffers**: Single general-purpose inventory (or could be split for organization)
-- **Graph topology**: Pass-through node
-- **Logistics concern**: Balancing, overflow handling
-
-#### Sink
-- **Role**: Exit point where items leave the system for a purpose
-- **Examples**: Not yet implemented—needed for gameplay loop
-- **Buffers**: Input only
-- **Graph topology**: Only incoming edges
-- **Logistics concern**: "Where do inputs come from?"
-- **Purpose**: Consumes items for research, victory points, progression
-
-### Buffer Policies (Declarative Approach)
-
-Instead of reactive event-driven requests (`Changed<Inventory>` triggers), buffers should express **standing policies**:
+### BuildingComponentDef Updates
 
 ```rust
-// Conceptual - not exact implementation
-struct InputBuffer {
-    inventory: Inventory,
-    request_threshold: f32,  // Request more when below this % full (e.g., 0.5)
-}
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum BuildingComponentDef {
+    PowerConsumer { amount: i32 },
+    PowerGenerator { amount: i32 },
+    ComputeGenerator { amount: i32 },
+    ComputeConsumer { amount: i32 },
+    ViewRange { radius: i32 },
+    NetWorkComponent,
+    RecipeCrafter { ... },
+    Scanner { ... },
 
-struct OutputBuffer {
-    inventory: Inventory,
-    offer_threshold: f32,    // Offer items when above this % full (e.g., 0.2)
+    // New port components (replacing Inventory, InventoryType, InputBuffer, OutputBuffer, Source, Processor, Sink)
+    InputPort { capacity: u32 },
+    OutputPort { capacity: u32 },
+    StoragePort { capacity: u32 },
 }
 ```
-
-The logistics planner **polls** all buffers periodically:
-1. Collect all "requests" (input buffers below threshold)
-2. Collect all "offers" (output buffers above threshold)
-3. Match requests to offers based on item type, distance, priority
-4. Create transfer tasks
-
-Benefits:
-- Decouples "what buildings want" from "when we check"
-- No race conditions from rapid inventory changes
-- Easier to reason about—the system state is evaluated holistically
-- Can add smarter planning later (prioritization, batching) without changing building logic
 
 ---
 
-## Implementation Considerations
+## Implementation Plan
 
-### Data Structure Changes
+### Phase 1: Add New Components
 
-Current:
-```rust
-// Single inventory component
-#[derive(Component)]
-pub struct Inventory { ... }
+1. Define `InputPort`, `OutputPort`, `StoragePort`, `Cargo` components
+2. Define `InventoryAccess` trait with shared behavior
+3. Implement the trait for all port types
+4. Add to `BuildingComponentDef` enum
+5. Update `spawn_building` to handle new component types
 
-#[derive(Component)]
-pub struct InventoryType(pub InventoryTypes);
-```
+### Phase 2: Update Core Systems
 
-Proposed:
-```rust
-// Separate buffer components
-#[derive(Component)]
-pub struct InputBuffer {
-    pub inventory: Inventory,
-    pub request_threshold: f32,
-}
+1. Rewrite crafting systems to use `InputPort`/`OutputPort`
+2. Rewrite transfer validation/execution to use port components
+3. Update task creation to query port components
+4. Update worker systems to use `Cargo`
 
-#[derive(Component)]
-pub struct OutputBuffer {
-    pub inventory: Inventory,
-    pub offer_threshold: f32,
-}
+### Phase 3: Update UI
 
-// Building archetype marker components
-#[derive(Component)]
-pub struct Source;
+1. Update tooltip systems to query all port types
+2. Update any inventory display widgets
+3. Test that all buildings appear correctly
 
-#[derive(Component)]
-pub struct Processor;
+### Phase 4: Update Building Definitions
 
-#[derive(Component)]
-pub struct Sink;
+1. Convert all buildings in `buildings.ron` to use port components
+2. Remove `Inventory`, `InventoryType`, `InputBuffer`, `OutputBuffer`, `Source`, `Processor`, `Sink` from definitions
 
-// Storage might just use a regular Inventory without the archetype markers
-```
+### Phase 5: Remove Legacy Code
 
-### Migration Path
-
-1. **Add new buffer components** alongside existing Inventory
-2. **Update crafting logic** to use input/output buffers
-3. **Update task generation** to use buffer policies
-4. **Update building definitions** in RON files
-5. **Remove old InventoryType system** once everything is migrated
+1. Delete `InventoryType` enum and component
+2. Delete `InputBuffer`, `OutputBuffer` components
+3. Delete `Source`, `Processor`, `Sink` marker components
+4. Delete `Inventory` component (replaced by port-specific types)
+5. Delete legacy task creation code (`create_proactive_tasks` using InventoryTypes)
+6. Delete buffer polling system (`poll_buffer_logistics`)
+7. Clean up any remaining fallback logic
 
 ### Files to Modify
 
-- `src/materials/items.rs` - Add buffer types, potentially deprecate InventoryTypes
-- `src/structures/production.rs` - Update crafting and logistics request logic
-- `src/structures/building_config.rs` - Update BuildingComponentDef for new buffer system
-- `src/workers/tasks/creation.rs` - Update task creation to work with buffers
-- `src/assets/buildings.ron` - Update building definitions
+**Core inventory system:**
+- `src/materials/items.rs` - Define port components and trait
+- `src/materials/mod.rs` - Update exports
+
+**Building system:**
+- `src/structures/building_config.rs` - Update BuildingComponentDef
+- `src/structures/production.rs` - Rewrite crafting systems
+- `src/assets/buildings.ron` - Update all building definitions
+
+**Task system:**
+- `src/workers/tasks/creation.rs` - Rewrite task creation
+- `src/workers/tasks/execution.rs` - Update transfer logic
+
+**Worker system:**
+- `src/workers/mod.rs` - Add Cargo component to workers
+
+**UI:**
+- `src/ui/` - Update tooltip and inventory display systems
 
 ---
 
-## Open Questions
+## Optional Future Enhancements
 
-1. **Should Storage buildings have input/output buffers or a single inventory?**
-   - Single inventory is simpler for pure storage
-   - Split could enable "input side" vs "output side" for logistics
-A: Single inventory.
+### Threshold Policies
 
-2. **How should workers' Carrier inventory work with the new system?**
-   - Workers pick up from output buffers, drop off to input buffers
-   - Worker inventory is transient, probably stays as single inventory
-A: Minimal changes should be needed.
+If we want threshold-based logistics (request when low, offer when high), add optional policy components:
 
-3. **What about buildings that don't fit the archetypes cleanly?**
-   - Generator consumes coal but doesn't "produce" items (produces power)
-   - Could model power as a pseudo-item, or treat Generator as a Sink for coal
-A: Generators fall neatly under the Sink role, as would any building that takes items as input and produces a non-item output
+```rust
+#[derive(Component)]
+pub struct InputPolicy {
+    pub request_threshold: f32,  // Request more when below this % full
+}
 
-4. **Buffer size ratios**
-   - Should input and output buffers be equal size?
-   - Should they be configurable per building type?
-   - Smaller output buffers would force more frequent collection
-A: Configurable by building.
+#[derive(Component)]
+pub struct OutputPolicy {
+    pub offer_threshold: f32,  // Offer items when above this % full
+}
+```
 
-5. **Threshold tuning**
-   - What are good default request/offer thresholds?
-   - Should these be configurable per building or global?
-A: Global for now.
+These are separate from the ports themselves, keeping the core model clean.
+
+### Item Filtering
+
+If specific ports should only accept certain items:
+
+```rust
+#[derive(Component)]
+pub struct ItemFilter {
+    pub allowed_items: HashSet<ItemName>,
+}
+```
+
+Attach to buildings that need filtering; task creation checks for it.
+
+---
+
+## Summary
+
+The key insight is that **component presence should encode logistics role**, not runtime field checks. This aligns with Bevy's ECS philosophy and results in:
+
+- Cleaner queries
+- Better change detection
+- Potential system parallelism
+- No hybrid/fallback code paths
+- Self-documenting building definitions
+
+The migration is a full replacement rather than incremental addition, which avoids the hybrid state that made the first attempt problematic.
