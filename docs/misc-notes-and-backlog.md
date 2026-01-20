@@ -12,9 +12,10 @@ Lower priority items to revisit after the inventory/production refactor is compl
 
 The scanner uses **sector-based scanning** inspired by Factorio's radar:
 - World divided into sectors on a grid (default: 5x5)
-- Scanner picks unexplored sectors adjacent to explored ones
+- Scanner finds the closest sector with any unexplored tiles
+- Partially-revealed sectors get filled in before moving outward
 - Each scan reveals the full sector area (5x5 with default settings)
-- Sectors prioritized by distance from scanner, then clockwise angle
+- Handles irregular explored areas from building visibility radii
 
 ### Configuration
 
