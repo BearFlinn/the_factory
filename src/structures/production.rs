@@ -21,6 +21,8 @@ pub struct PortLogisticsRequest {
     pub quantity: u32,
     /// If true, this is an output (needs pickup). If false, this is an input (needs delivery).
     pub is_output: bool,
+    /// Urgency score from 0.0 (low) to 1.0 (critical) based on input buffer state.
+    pub urgency: f32,
 }
 
 /// Timer resource for polling port logistics at regular intervals.
@@ -242,6 +244,7 @@ pub fn poll_port_logistics(
                     item: item_name.clone(),
                     quantity,
                     is_output: true,
+                    urgency: 0.0,
                 });
             }
         }
@@ -258,6 +261,7 @@ pub fn poll_port_logistics(
                     item: item_name.clone(),
                     quantity,
                     is_output: true,
+                    urgency: 0.0,
                 });
             }
         }
@@ -302,6 +306,7 @@ pub fn poll_port_logistics(
                     item: item_name.clone(),
                     quantity,
                     is_output: true,
+                    urgency: 0.0,
                 });
             }
         }
@@ -309,6 +314,7 @@ pub fn poll_port_logistics(
 }
 
 /// Helper to emit delivery requests for an `InputPort` based on recipe needs.
+/// Calculates urgency based on how many production cycles the current inputs support.
 fn emit_input_port_requests(
     entity: Entity,
     input_port: &InputPort,
@@ -344,6 +350,30 @@ fn emit_input_port_requests(
         return;
     }
 
+    // Calculate urgency based on available production cycles
+    // cycles_available = min(current_qty / recipe_qty) for each input
+    // urgency = 1.0 - (cycles_available / 10.0).clamp(0.0, 1.0)
+    let cycles_available = recipe
+        .inputs
+        .iter()
+        .map(|(item_name, &recipe_qty)| {
+            let current = input_port.get_item_quantity(item_name);
+            let in_transit = maybe_commitment
+                .and_then(|c| c.in_transit_items.get(item_name).copied())
+                .unwrap_or(0);
+            let effective = current.saturating_add(in_transit);
+            if recipe_qty > 0 {
+                effective / recipe_qty
+            } else {
+                u32::MAX
+            }
+        })
+        .min()
+        .unwrap_or(0);
+
+    #[allow(clippy::cast_precision_loss)]
+    let urgency = 1.0 - (cycles_available as f32 / 10.0).clamp(0.0, 1.0);
+
     let mut total_requested = 0u32;
 
     for (item_name, &recipe_quantity) in &recipe.inputs {
@@ -364,6 +394,7 @@ fn emit_input_port_requests(
                     item: item_name.clone(),
                     quantity: feasible,
                     is_output: false,
+                    urgency,
                 });
                 total_requested += feasible;
             }

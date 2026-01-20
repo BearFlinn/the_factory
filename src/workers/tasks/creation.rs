@@ -9,7 +9,7 @@ use crate::{
     },
     structures::{Building, ConstructionMaterialRequest, PortLogisticsRequest, RecipeCrafter},
     systems::NetworkConnectivity,
-    workers::{manhattan_distance_coords, Worker},
+    workers::{dispatcher::DispatchRequest, manhattan_distance_coords, Worker, WorkerDispatcher},
 };
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -61,9 +61,11 @@ fn chunk_contribution_by_capacity(
     chunks
 }
 
+/// Collects port logistics events and routes them through the dispatcher.
+/// Finds appropriate source/destination pairs and adds dispatch requests.
 pub fn create_port_logistics_tasks(
-    mut commands: Commands,
     mut events: EventReader<PortLogisticsRequest>,
+    mut dispatcher: ResMut<WorkerDispatcher>,
     buildings_with_pos: Query<&Position, With<Building>>,
     output_ports: Query<(Entity, &OutputPort, &Position), With<Building>>,
     input_ports: Query<(Entity, &InputPort, &Position, Option<&RecipeCrafter>), With<Building>>,
@@ -71,7 +73,6 @@ pub fn create_port_logistics_tasks(
     existing_tasks: Query<&TaskTarget, With<Task>>,
     network: Res<NetworkConnectivity>,
     recipe_registry: Res<RecipeRegistry>,
-    mut delivery_started_events: EventWriter<super::components::LogisticsDeliveryStartedEvent>,
 ) {
     let existing_targets: HashSet<Entity> = existing_tasks.iter().map(|target| target.0).collect();
 
@@ -100,15 +101,17 @@ pub fn create_port_logistics_tasks(
             );
 
             if let Some((receiver_entity, receiver_pos)) = receiver {
-                create_pickup_dropoff_sequence(
-                    &mut commands,
+                let request = DispatchRequest::new(
                     event.building,
                     *building_pos,
                     receiver_entity,
                     receiver_pos,
-                    Some(items),
+                    items,
                     Priority::Medium,
-                );
+                )
+                .with_urgency(event.urgency);
+
+                dispatcher.add_request(request);
             }
         } else {
             let supply_plan = find_port_suppliers(
@@ -121,22 +124,47 @@ pub fn create_port_logistics_tasks(
             );
 
             for (supplier_entity, supplier_pos, items_to_pickup) in supply_plan {
-                create_pickup_dropoff_sequence(
-                    &mut commands,
+                let request = DispatchRequest::new(
                     supplier_entity,
                     supplier_pos,
                     event.building,
                     *building_pos,
-                    Some(items_to_pickup.clone()),
+                    items_to_pickup,
                     Priority::Medium,
-                );
+                )
+                .with_urgency(event.urgency);
 
-                delivery_started_events.send(super::components::LogisticsDeliveryStartedEvent {
-                    building: event.building,
-                    items: items_to_pickup,
-                });
+                dispatcher.add_request(request);
             }
         }
+    }
+}
+
+/// Processes pending dispatch requests and creates task sequences.
+/// This is the compatibility layer that maintains current behavior.
+/// Phase 3 will replace this with batch optimization.
+pub fn process_dispatcher_requests(
+    mut commands: Commands,
+    mut dispatcher: ResMut<WorkerDispatcher>,
+    mut delivery_started_events: EventWriter<super::components::LogisticsDeliveryStartedEvent>,
+) {
+    let requests: Vec<DispatchRequest> = dispatcher.pending_requests.drain(..).collect();
+
+    for request in requests {
+        create_pickup_dropoff_sequence(
+            &mut commands,
+            request.source,
+            request.source_pos,
+            request.destination,
+            request.destination_pos,
+            Some(request.items.clone()),
+            request.priority,
+        );
+
+        delivery_started_events.send(super::components::LogisticsDeliveryStartedEvent {
+            building: request.destination,
+            items: request.items,
+        });
     }
 }
 

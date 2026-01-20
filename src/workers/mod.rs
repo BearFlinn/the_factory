@@ -1,7 +1,9 @@
+pub mod dispatcher;
 pub mod pathfinding;
 pub mod spawning;
 pub mod tasks;
 
+pub use dispatcher::*;
 pub use pathfinding::*;
 pub use spawning::*;
 pub use tasks::*;

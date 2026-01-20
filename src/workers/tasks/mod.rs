@@ -9,17 +9,24 @@ pub use creation::*;
 pub use execution::*;
 
 use crate::{
-    materials::execute_item_transfer, structures::RecipeCommitment, workers::WorkersSystemSet,
+    materials::execute_item_transfer,
+    structures::RecipeCommitment,
+    workers::{
+        dispatcher::{clear_dispatcher_on_task_clear, DispatcherConfig, WorkerDispatcher},
+        WorkersSystemSet,
+    },
 };
 use bevy::prelude::*;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TaskSystemSet {
     Interrupts,
+    Prediction,
     Assignment,
     Processing,
     Arrivals,
     Generation,
+    Pooling,
     Cleanup,
 }
 
@@ -48,14 +55,18 @@ impl Plugin for TasksPlugin {
             .add_event::<LogisticsDeliveryStartedEvent>()
             .add_event::<LogisticsDeliveryCompletedEvent>()
             .init_resource::<ProactiveTaskTimer>()
+            .init_resource::<WorkerDispatcher>()
+            .init_resource::<DispatcherConfig>()
             .configure_sets(
                 Update,
                 (
                     TaskSystemSet::Interrupts,
+                    TaskSystemSet::Prediction,
                     TaskSystemSet::Assignment,
                     TaskSystemSet::Processing,
                     TaskSystemSet::Arrivals,
                     TaskSystemSet::Generation,
+                    TaskSystemSet::Pooling,
                     TaskSystemSet::Cleanup,
                 )
                     .chain()
@@ -64,7 +75,11 @@ impl Plugin for TasksPlugin {
             .add_systems(
                 Update,
                 (
-                    (handle_worker_interrupts, debug_clear_all_workers)
+                    (
+                        handle_worker_interrupts,
+                        debug_clear_all_workers,
+                        clear_dispatcher_on_task_clear,
+                    )
                         .in_set(TaskSystemSet::Interrupts),
                     emergency_dropoff_idle_workers
                         .in_set(TaskSystemSet::Interrupts)
@@ -80,6 +95,9 @@ impl Plugin for TasksPlugin {
                         clear_all_tasks,
                     )
                         .in_set(TaskSystemSet::Generation),
+                    process_dispatcher_requests
+                        .in_set(TaskSystemSet::Generation)
+                        .after(create_port_logistics_tasks),
                     (
                         clear_completed_tasks,
                         update_in_transit_tracking,

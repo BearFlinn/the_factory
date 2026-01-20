@@ -54,6 +54,7 @@ fn select_random_ore() -> (RecipeName, Color) {
 }
 
 // TODO: Add clustering
+// Implemented on branch feature/ore-clustering-all
 pub fn spawn_resource_node(
     mut commands: Commands,
     grid: Res<Grid>,
