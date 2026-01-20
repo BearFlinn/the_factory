@@ -11,7 +11,7 @@ use crate::{
 use bevy::prelude::*;
 
 pub fn process_worker_sequences(
-    mut workers: Query<(Entity, &Transform, &mut AssignedSequence, &mut WorkerPath), With<Worker>>,
+    mut workers: Query<(Entity, &Position, &mut AssignedSequence, &mut WorkerPath), With<Worker>>,
     mut sequences: Query<&mut TaskSequence>,
     mut tasks: Query<(&Position, &mut TaskStatus, &TaskTarget), With<Task>>,
     task_targets: Query<Entity>,
@@ -19,7 +19,7 @@ pub fn process_worker_sequences(
     network: Res<NetworkConnectivity>,
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
-    for (worker_entity, transform, mut assigned_sequence, mut worker_path) in &mut workers {
+    for (worker_entity, worker_position, mut assigned_sequence, mut worker_path) in &mut workers {
         let Some(sequence_entity) = assigned_sequence.0 else {
             continue;
         };
@@ -54,7 +54,7 @@ pub fn process_worker_sequences(
 
         initiate_pathfinding_or_complete_task(
             worker_entity,
-            transform,
+            *worker_position,
             *task_position,
             &mut worker_path,
             &mut assigned_sequence,
@@ -109,7 +109,7 @@ fn validate_and_process_sequence(
 #[allow(clippy::too_many_arguments)]
 fn initiate_pathfinding_or_complete_task(
     worker_entity: Entity,
-    transform: &Transform,
+    worker_position: Position,
     task_position: Position,
     worker_path: &mut WorkerPath,
     assigned_sequence: &mut AssignedSequence,
@@ -118,12 +118,7 @@ fn initiate_pathfinding_or_complete_task(
     network: &NetworkConnectivity,
     arrival_events: &mut EventWriter<WorkerArrivedEvent>,
 ) {
-    let Some(worker_coords) = grid.world_to_grid_coordinates(transform.translation.truncate())
-    else {
-        return;
-    };
-
-    let worker_pos = (worker_coords.grid_x, worker_coords.grid_y);
+    let worker_pos = (worker_position.x, worker_position.y);
     let target_pos = (task_position.x, task_position.y);
 
     if let Some(path) = calculate_path(worker_pos, target_pos, network, grid) {
