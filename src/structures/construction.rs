@@ -232,6 +232,9 @@ pub fn occupy_area(
 #[derive(Component)]
 pub struct Hub;
 
+#[derive(Component)]
+pub struct Launchpad;
+
 pub fn place_hub(
     mut commands: Commands,
     grid: Res<Grid>,

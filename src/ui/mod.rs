@@ -4,6 +4,7 @@ pub mod building_buttons;
 pub mod building_menu;
 pub mod interaction_handler;
 pub mod production_display;
+pub mod score_display;
 pub mod sidebar;
 pub mod sidebar_tabs;
 pub mod spawn_worker_button;
@@ -13,6 +14,7 @@ pub use building_buttons::*;
 pub use building_menu::*;
 pub use interaction_handler::*;
 pub use production_display::*;
+pub use score_display::*;
 pub use sidebar::*;
 pub use sidebar_tabs::*;
 pub use spawn_worker_button::*;
@@ -54,6 +56,7 @@ impl Plugin for UIPlugin {
             SpawnWorkerButtonPlugin,
             TooltipsPlugin,
             BuildingMenuPlugin,
+            ScoreDisplayPlugin,
         ));
     }
 }

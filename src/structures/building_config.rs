@@ -251,6 +251,10 @@ impl BuildingRegistry {
             }
         }
 
+        if building_name == "Launchpad" {
+            entity_commands.insert(Launchpad);
+        }
+
         let entity = entity_commands.id();
         Some(entity)
     }

@@ -189,4 +189,42 @@
         ]
     ),
 
+    (
+        name: "Launchpad",
+        category: Utility,
+        appearance: (
+            size: (48.0, 48.0),
+            color: (0.2, 0.6, 0.9, 1.0),
+            multi_cell: None,
+        ),
+        placement: (
+            cost: (
+                inputs: {"Iron Ore": 80, "Copper Ore": 60},
+                crafting_time: 0.0,
+            ),
+            rules: [AdjacentToNetwork],
+        ),
+        components: [
+            PowerConsumer(amount: 20),
+            ViewRange(radius: 2),
+            InputPort(capacity: 150),
+            RecipeCrafter(
+                recipe_name: None,
+                available_recipes: Some([
+                    "Launch Iron Ore",
+                    "Launch Copper Ore",
+                    "Launch Coal",
+                    "Launch Iron Ingot",
+                    "Launch Copper Ingot",
+                    "Launch Gear",
+                    "Launch Copper Wire",
+                    "Launch Iron Plate",
+                    "Launch Gearbox",
+                    "Launch Electronic Circuit",
+                ]),
+                interval: 1.0
+            ),
+        ]
+    ),
+
 ]

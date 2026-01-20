@@ -25,6 +25,12 @@ pub use scanning::{handle_progressive_scanning, Scanner};
 
 use bevy::prelude::*;
 
+#[derive(Resource, Default)]
+pub struct GameScore {
+    pub total_score: u64,
+    pub launches_completed: u32,
+}
+
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SystemsSet {
     Infrastructure,
@@ -39,6 +45,7 @@ impl Plugin for SystemsPlugin {
         app.insert_resource(PowerGrid::default())
             .insert_resource(ComputeGrid::default())
             .insert_resource(NetworkConnectivity::default())
+            .init_resource::<GameScore>()
             .add_event::<NetworkChangedEvent>()
             .configure_sets(
                 Update,

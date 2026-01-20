@@ -1,10 +1,10 @@
 use crate::{
     materials::{
         items::{InputPort, InventoryAccess, OutputPort, StoragePort},
-        ItemName, RecipeRegistry,
+        ItemName, ItemRegistry, RecipeRegistry,
     },
-    structures::{RecipeCommitment, RecipeCrafter},
-    systems::Operational,
+    structures::{Launchpad, RecipeCommitment, RecipeCrafter},
+    systems::{GameScore, Operational},
     workers::tasks::{Task, TaskTarget},
 };
 use bevy::prelude::*;
@@ -126,14 +126,24 @@ pub fn update_source_port_crafters(
     }
 }
 
-/// Port-based crafting for Sink buildings (`InputPort` only, e.g., Generator).
-/// These buildings consume items but produce non-item outputs (like power).
+/// Port-based crafting for Sink buildings (`InputPort` only, e.g., Generator, Launchpad).
+/// These buildings consume items but produce non-item outputs (like power or score).
 pub fn update_sink_port_crafters(
-    mut query: Query<(&mut InputPort, &mut RecipeCrafter, &Operational), Without<OutputPort>>,
+    mut query: Query<
+        (
+            &mut InputPort,
+            &mut RecipeCrafter,
+            &Operational,
+            Option<&Launchpad>,
+        ),
+        Without<OutputPort>,
+    >,
     recipes: Res<RecipeRegistry>,
+    item_registry: Res<ItemRegistry>,
+    mut score: ResMut<GameScore>,
     time: Res<Time>,
 ) {
-    for (mut input_port, mut crafter, operational) in &mut query {
+    for (mut input_port, mut crafter, operational, is_launchpad) in &mut query {
         if !operational.get_status() {
             continue;
         }
@@ -160,6 +170,21 @@ pub fn update_sink_port_crafters(
         if has_inputs {
             for (item, qty) in &recipe.inputs {
                 input_port.remove_item(item, *qty);
+            }
+
+            if is_launchpad.is_some() {
+                if let Some((item_name, _)) = recipe.inputs.iter().next() {
+                    let tier = item_registry
+                        .get_definition(item_name)
+                        .map_or(0, |def| def.tier);
+                    let points = 10 * u64::from((tier + 1).pow(2));
+                    score.total_score += points;
+                    score.launches_completed += 1;
+                    println!(
+                        "Launch completed! {} items launched for {} points (total: {})",
+                        item_name, points, score.total_score
+                    );
+                }
             }
         }
 
