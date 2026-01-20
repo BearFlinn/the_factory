@@ -16,7 +16,6 @@ pub struct BuildingClickEvent {
     pub world_position: Vec2,
 }
 
-// Event-driven approach for menu closure to avoid race conditions
 #[derive(Event)]
 pub struct CloseMenuEvent {
     pub menu_entity: Entity,
@@ -28,18 +27,16 @@ pub struct BuildingMenu {
     pub world_position: Vec2,
 }
 
-// Direct entity reference - eliminates hierarchy traversal
 #[derive(Component)]
 pub struct MenuCloseButton {
     pub menu_entity: Entity,
 }
 
-// Content sections that track their own state
 #[derive(Component)]
 pub struct MenuContent {
     pub target_building: Entity,
     pub content_type: ContentType,
-    pub last_updated: Option<u32>, // Simple change detection
+    pub last_updated: Option<u32>,
 }
 
 #[derive(PartialEq, Clone)]
@@ -61,7 +58,6 @@ pub struct RecipeChangeEvent {
     pub recipe_name: String,
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn detect_building_clicks(
     mouse_button: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -70,7 +66,6 @@ pub fn detect_building_clicks(
     mut click_events: EventWriter<BuildingClickEvent>,
     ui_interactions: Query<&Interaction, With<Button>>,
 ) {
-    // Skip if UI is active
     if ui_interactions
         .iter()
         .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered))
@@ -99,7 +94,6 @@ pub fn detect_building_clicks(
         return;
     };
 
-    // Find closest building within interaction range
     for (entity, _position, transform) in buildings.iter() {
         let building_world_pos = transform.translation.truncate();
         if world_pos.distance(building_world_pos) < 32.0 {
@@ -112,7 +106,6 @@ pub fn detect_building_clicks(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn spawn_building_menu(
     mut commands: Commands,
     mut click_events: EventReader<BuildingClickEvent>,
@@ -122,7 +115,6 @@ pub fn spawn_building_menu(
     buildings: Query<&Name, With<Building>>,
 ) {
     for click in click_events.read() {
-        // Preserve multiple menus - only skip if menu exists for this specific building
         if existing_menus
             .iter()
             .any(|(menu, _)| menu.target_building == click.building_entity)
@@ -148,11 +140,9 @@ pub fn spawn_building_menu(
             .map(Name::as_str)
             .unwrap_or("Unknown Building");
 
-        // Calculate initial position with bounds checking
         let menu_x = (screen_pos.x + 50.0).clamp(10.0, window.width() - 300.0);
         let menu_y = (screen_pos.y - 100.0).clamp(10.0, window.height() - 250.0);
 
-        // Spawn menu container
         let menu_entity = commands
             .spawn((
                 Node {
@@ -174,12 +164,9 @@ pub fn spawn_building_menu(
             ))
             .id();
 
-        // Build menu structure
         commands.entity(menu_entity).with_children(|parent| {
-            // Header with title and close button
             spawn_menu_header(parent, building_name, menu_entity);
 
-            // Content sections
             spawn_content_section(parent, click.building_entity, ContentType::Status);
             spawn_content_section(parent, click.building_entity, ContentType::Storage);
             spawn_content_section(parent, click.building_entity, ContentType::Crafting);
@@ -199,7 +186,6 @@ fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity
             ..default()
         })
         .with_children(|parent| {
-            // Title
             parent.spawn((
                 Text::new(title),
                 TextFont {
@@ -209,7 +195,6 @@ fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
 
-            // Close button with direct menu reference
             let close_styles = InteractiveUI::new()
                 .default(DynamicStyles::new().with_background(Color::srgb(0.6, 0.2, 0.2)))
                 .on_hover(DynamicStyles::new().with_background(Color::srgb(0.8, 0.3, 0.3)));
@@ -226,7 +211,7 @@ fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity
                     },
                     close_styles,
                     Selectable::new(),
-                    MenuCloseButton { menu_entity }, // Direct reference - no traversal needed
+                    MenuCloseButton { menu_entity },
                 ))
                 .with_children(|parent| {
                     parent.spawn((
@@ -267,7 +252,6 @@ fn spawn_content_section(
             },
         ))
         .with_children(|parent| {
-            // Section header
             parent.spawn((
                 Text::new(section_title),
                 TextFont {
@@ -281,7 +265,6 @@ fn spawn_content_section(
                 },
             ));
 
-            // Placeholder content - will be populated by update system
             parent.spawn((
                 Text::new("Loading..."),
                 TextFont {
@@ -293,7 +276,6 @@ fn spawn_content_section(
         });
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_menu_close_buttons_interaction(
     close_buttons: Query<(&MenuCloseButton, &Interaction), Changed<Interaction>>,
     mut close_events: EventWriter<CloseMenuEvent>,
@@ -307,23 +289,18 @@ pub fn handle_menu_close_buttons_interaction(
     }
 }
 
-// Event-driven menu closure to avoid race conditions
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn process_menu_close_events(
     mut commands: Commands,
     mut close_events: EventReader<CloseMenuEvent>,
     menu_query: Query<Entity, With<BuildingMenu>>,
 ) {
     for close_event in close_events.read() {
-        // Verify menu still exists before attempting to despawn
         if menu_query.contains(close_event.menu_entity) {
             commands.entity(close_event.menu_entity).despawn_recursive();
         }
     }
 }
 
-// Restore dynamic positioning functionality
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_menu_positions(
     mut menu_query: Query<(&mut Node, &BuildingMenu)>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
@@ -340,7 +317,6 @@ pub fn update_menu_positions(
         if let Ok(screen_pos) =
             camera.world_to_viewport(camera_transform, menu.world_position.extend(0.0))
         {
-            // Clamp to screen bounds
             let max_x = window.width() - 300.0;
             let max_y = window.height() - 250.0;
 
@@ -350,8 +326,7 @@ pub fn update_menu_positions(
     }
 }
 
-// Unified content update system with proper change detection
-#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)] // Bevy system parameters require by-value
+#[allow(clippy::too_many_arguments)]
 pub fn update_menu_content(
     mut content_query: Query<(Entity, &mut MenuContent)>,
     mut commands: Commands,
@@ -383,7 +358,6 @@ pub fn update_menu_content(
                     .get(menu_content.target_building)
                     .map(simple_hash);
 
-                // Combine hashes for combined change detection
                 let combined_hash = input_hash.ok().or(output_hash.ok()).or(storage_hash.ok());
 
                 combined_hash.is_some_and(|hash| menu_content.last_updated != Some(hash))
@@ -395,14 +369,12 @@ pub fn update_menu_content(
         };
 
         if should_update {
-            // Clear existing content (preserve header)
             if let Ok(content_children) = children.get(content_entity) {
                 for &child in content_children.iter().skip(1) {
                     commands.entity(child).despawn_recursive();
                 }
             }
 
-            // Generate new content based on type
             commands.entity(content_entity).with_children(|parent| {
                 match menu_content.content_type {
                     ContentType::Status => {
@@ -449,8 +421,7 @@ pub fn update_menu_content(
     }
 }
 
-// Simple hash function for change detection
-#[allow(clippy::cast_possible_truncation)] // Intentional truncation for hash comparison
+#[allow(clippy::cast_possible_truncation)]
 fn simple_hash<T: std::fmt::Debug>(value: &T) -> u32 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -507,7 +478,6 @@ fn spawn_port_inventory_content(
     output_port: Option<&OutputPort>,
     storage_port: Option<&StoragePort>,
 ) {
-    // Helper to display a port's contents
     let spawn_port_items =
         |parent: &mut ChildBuilder, label: &str, access: &dyn InventoryAccess, color: Color| {
             parent.spawn((
@@ -567,13 +537,11 @@ fn spawn_port_inventory_content(
             ));
         };
 
-    // Display storage port (bidirectional)
     if let Some(storage) = storage_port {
         spawn_port_items(parent, "Storage", storage, Color::srgb(0.6, 0.8, 0.6));
         return;
     }
 
-    // Display input and output ports
     if let Some(input) = input_port {
         spawn_port_items(parent, "Input", input, Color::srgb(0.6, 0.7, 0.9));
     }
@@ -589,12 +557,10 @@ fn spawn_crafting_content(
     recipe_registry: &RecipeRegistry,
     building_entity: Entity,
 ) {
-    // If this is a multi-recipe building, show recipe selector
     if crafter.is_multi_recipe() {
         spawn_recipe_selector(parent, crafter, building_entity);
     }
 
-    // Show current recipe info if one is selected
     if let Some(recipe_name) = crafter.get_active_recipe() {
         parent.spawn((
             Text::new(format!("Recipe: {recipe_name}")),
@@ -691,7 +657,6 @@ fn spawn_recipe_selector(
         },
     ));
 
-    // Create recipe selection buttons
     for recipe_name in &crafter.available_recipes {
         let is_selected = crafter.get_active_recipe() == Some(recipe_name);
 
@@ -751,8 +716,6 @@ fn spawn_recipe_selector(
     }
 }
 
-// Safe escape handling with proper entity existence checks
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_escape_close_menus(
     keyboard: Res<ButtonInput<KeyCode>>,
     menu_query: Query<Entity, With<BuildingMenu>>,
@@ -765,7 +728,6 @@ pub fn handle_escape_close_menus(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_recipe_selection(
     recipe_selectors: Query<(Entity, &RecipeSelector, &Selectable), Changed<Selectable>>,
     mut recipe_change_events: EventWriter<RecipeChangeEvent>,
@@ -775,7 +737,6 @@ pub fn handle_recipe_selection(
         let was_selected = previous_states.get(&entity).copied().unwrap_or(false);
         let is_selected = selectable.is_selected;
 
-        // Only fire event on transition from false to true (edge detection)
         if !was_selected && is_selected {
             recipe_change_events.send(RecipeChangeEvent {
                 building_entity: selector.target_building,
@@ -783,7 +744,6 @@ pub fn handle_recipe_selection(
             });
         }
 
-        // Update tracked state for next frame comparison
         previous_states.insert(entity, is_selected);
     }
 }

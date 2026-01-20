@@ -36,7 +36,6 @@ pub fn setup_spawn_worker_button(mut commands: Commands) {
         });
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters require by-value
 pub fn handle_spawn_worker_button(
     mut commands: Commands,
     mut button_query: Query<

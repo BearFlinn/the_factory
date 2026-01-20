@@ -57,7 +57,6 @@ pub fn setup_production_ui(mut commands: Commands) {
         });
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_compute_grid_text(
     compute_grid: Res<ComputeGrid>,
     mut text_query: Query<&mut Text, With<ComputeGridText>>,
@@ -69,7 +68,6 @@ pub fn update_compute_grid_text(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_power_grid_text(
     power_grid: Res<PowerGrid>,
     mut text_query: Query<&mut Text, With<PowerGridText>>,
@@ -81,7 +79,6 @@ pub fn update_power_grid_text(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_production_text(
     central_storage_port: Query<&StoragePort, (With<Hub>, Changed<StoragePort>)>,
     mut text_query: Query<&mut Text, With<ProductionText>>,

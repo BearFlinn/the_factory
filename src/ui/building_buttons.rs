@@ -30,10 +30,9 @@ impl BuildingButton {
     pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
         let Some(definition) = registry.get_definition(&self.building_name) else {
             warn!("Building definition not found: {}", self.building_name);
-            return parent.spawn(Node::default()).id(); // Return dummy entity
+            return parent.spawn(Node::default()).id();
         };
 
-        // Define styles for the building button
         let button_styles = InteractiveUI::new()
             .default(
                 DynamicStyles::new()
@@ -77,7 +76,6 @@ impl BuildingButton {
                 TooltipTarget,
             ))
             .with_children(|parent| {
-                // Left side: Icon and name
                 parent
                     .spawn(Node {
                         flex_direction: FlexDirection::Row,
@@ -86,7 +84,6 @@ impl BuildingButton {
                         ..default()
                     })
                     .with_children(|parent| {
-                        // Building icon
                         parent.spawn((
                             Node {
                                 width: Val::Px(40.0),
@@ -102,7 +99,6 @@ impl BuildingButton {
                             )),
                         ));
 
-                        // Building name
                         parent.spawn((
                             Text::new(&definition.name),
                             TextFont {
@@ -112,7 +108,6 @@ impl BuildingButton {
                         ));
                     });
 
-                // Right side: Cost display
                 parent
                     .spawn(Node {
                         flex_direction: FlexDirection::Column,
@@ -143,19 +138,16 @@ fn format_cost_display(inputs: &std::collections::HashMap<String, u32>) -> Strin
         return "Free".to_string();
     }
 
-    // Sort inputs by name for consistent display
     let mut sorted_inputs: Vec<_> = inputs.iter().collect();
     sorted_inputs.sort_by_key(|(name, _)| name.as_str());
 
     if sorted_inputs.len() <= 3 {
-        // Show all items
         sorted_inputs
             .iter()
             .map(|(name, quantity)| format!("{quantity} {name}"))
             .collect::<Vec<_>>()
             .join("\n")
     } else {
-        // Show first 2 + "..."
         let first_two: Vec<String> = sorted_inputs
             .iter()
             .take(2)
@@ -204,7 +196,6 @@ pub fn handle_building_button_interactions(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system requires Res, not &Res
 pub fn handle_building_selection_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut button_query: Query<(&mut BuildingButton, &mut Selectable)>,
@@ -222,7 +213,6 @@ pub fn handle_building_selection_hotkeys(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Query must be passed by value in this helper
 pub fn update_building_buttons_for_active_tab(
     commands: &mut Commands,
     active_building_type: Option<BuildingCategory>,
@@ -230,12 +220,10 @@ pub fn update_building_buttons_for_active_tab(
     registry: &BuildingRegistry,
     existing_buttons: Query<Entity, With<BuildingButton>>,
 ) {
-    // Clear existing buttons
     for entity in existing_buttons.iter() {
         commands.entity(entity).despawn_recursive();
     }
 
-    // Spawn new buttons for the active tab
     if let Some(building_category) = active_building_type {
         commands.entity(content_container).with_children(|parent| {
             spawn_building_buttons_for_category(parent, building_category, registry);

@@ -25,7 +25,6 @@ impl SidebarTab {
         let color = get_building_type_color(registry, self.building_type);
         let hotkey = get_building_type_hotkey(self.building_type);
 
-        // Define styles for the tab
         let tab_styles = InteractiveUI::new()
             .default(
                 DynamicStyles::new()
@@ -43,7 +42,6 @@ impl SidebarTab {
                     .with_border(Color::srgb(0.4, 0.6, 0.4)),
             );
 
-        // Create the main tab button with children
         let tab_button = parent
             .spawn((
                 Button,
@@ -66,7 +64,6 @@ impl SidebarTab {
                 },
             ))
             .with_children(|parent| {
-                // Create the color indicator
                 parent.spawn((
                     Node {
                         width: Val::Px(20.0),
@@ -77,7 +74,6 @@ impl SidebarTab {
                     BackgroundColor(color),
                 ));
 
-                // Create the tab label text
                 parent.spawn((
                     Text::new(format!("{:?}\n{}", self.building_type, hotkey)),
                     TextFont {
@@ -99,7 +95,6 @@ impl SidebarTab {
 pub fn spawn_sidebar_tabs(parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
     let available_types = get_available_building_categories(registry);
 
-    // Create the tab container with tabs as children
     let tab_container = parent
         .spawn((
             Node {
@@ -112,7 +107,7 @@ pub fn spawn_sidebar_tabs(parent: &mut ChildBuilder, registry: &BuildingRegistry
         ))
         .with_children(|parent| {
             for (index, building_type) in available_types.iter().enumerate() {
-                let is_active = index == 0; // First tab is active by default
+                let is_active = index == 0;
                 let tab = SidebarTab::new(*building_type, is_active);
                 tab.spawn(parent, registry);
             }
@@ -125,21 +120,15 @@ pub fn spawn_sidebar_tabs(parent: &mut ChildBuilder, registry: &BuildingRegistry
 pub fn handle_tab_interactions(
     mut tab_query: Query<(&mut SidebarTab, &Selectable), Changed<Selectable>>,
 ) {
-    // Check if any tab was selected
     for (mut tab, selectable) in &mut tab_query {
         if selectable.is_selected && !tab.is_active {
             tab.set_active(true);
-
-            // The InteractiveUI system with Exclusive selection behavior
-            // will automatically handle deselecting other tabs in the group
         }
 
-        // Update active state based on selection
         tab.is_active = selectable.is_selected;
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_tab_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tab_query: Query<(&mut SidebarTab, &mut Selectable)>,
@@ -155,7 +144,6 @@ pub fn handle_tab_hotkeys(
     }
 
     if let Some(building_type) = target_building_type {
-        // Find and select the matching tab
         for (mut tab, mut selectable) in &mut tab_query {
             if tab.building_type == building_type {
                 selectable.is_selected = true;
@@ -206,7 +194,7 @@ fn get_building_type_color(
             }
         }
     }
-    Color::srgb(0.5, 0.5, 0.5) // Default gray if not found
+    Color::srgb(0.5, 0.5, 0.5)
 }
 
 fn get_building_type_hotkey(building_type: BuildingCategory) -> &'static str {

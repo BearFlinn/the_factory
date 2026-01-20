@@ -32,21 +32,18 @@ impl Sidebar {
         Self { is_visible: true }
     }
 
-    #[allow(clippy::too_many_lines)] // UI building function - complex but straightforward
+    #[allow(clippy::too_many_lines)]
     pub fn spawn(&self, commands: &mut Commands, registry: &BuildingRegistry) -> Entity {
-        // Define styles for the close button
         let close_button_styles = InteractiveUI::new()
             .default(DynamicStyles::new().with_background(Color::srgb(0.4, 0.2, 0.2)))
             .on_hover(DynamicStyles::new().with_background(Color::srgb(0.6, 0.3, 0.3)))
             .on_click(DynamicStyles::new().with_background(Color::srgb(0.5, 0.25, 0.25)));
 
-        // Define styles for the toggle button
         let toggle_button_styles = InteractiveUI::new()
             .default(DynamicStyles::new().with_background(Color::srgb(0.2, 0.2, 0.2)))
             .on_hover(DynamicStyles::new().with_background(Color::srgb(0.3, 0.3, 0.3)))
             .on_click(DynamicStyles::new().with_background(Color::srgb(0.25, 0.25, 0.25)));
 
-        // Create the main sidebar container
         let sidebar_container = commands
             .spawn((
                 Node {
@@ -71,7 +68,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the header section
         let header = commands
             .spawn(Node {
                 width: Val::Percent(100.0),
@@ -86,7 +82,6 @@ impl Sidebar {
             .insert(BorderColor(Color::srgb(0.3, 0.3, 0.3)))
             .id();
 
-        // Create the title text
         let title_text = commands
             .spawn((
                 Text::new("Buildings"),
@@ -114,7 +109,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the close button text
         let close_button_text = commands
             .spawn((
                 Text::new("x"),
@@ -125,7 +119,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the content area
         let content_area = commands
             .spawn((
                 Node {
@@ -140,7 +133,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the toggle button (separate from sidebar container, always visible)
         let toggle_button = commands
             .spawn((
                 Button,
@@ -160,7 +152,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the toggle button text
         let toggle_button_text = commands
             .spawn((
                 Text::new(if self.is_visible { "▼" } else { "▲" }),
@@ -171,14 +162,12 @@ impl Sidebar {
             ))
             .id();
 
-        // Assemble the hierarchy using add_child
         commands.entity(close_button).add_child(close_button_text);
         commands.entity(toggle_button).add_child(toggle_button_text);
         commands.entity(header).add_child(title_text);
         commands.entity(header).add_child(close_button);
         commands.entity(sidebar_container).add_child(header);
 
-        // Add tabs between header and content
         commands.entity(sidebar_container).with_children(|parent| {
             spawn_sidebar_tabs(parent, registry);
         });
@@ -197,14 +186,12 @@ impl Sidebar {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_sidebar_interactions(
     close_button_query: Query<&Selectable, (With<SidebarCloseButton>, Changed<Selectable>)>,
     toggle_button_query: Query<&Selectable, (With<SidebarToggleButton>, Changed<Selectable>)>,
     mut sidebar_query: Query<(&mut Sidebar, &mut Node), With<SidebarContainer>>,
     mut toggle_text_query: Query<&mut Text, With<SidebarToggleButton>>,
 ) {
-    // Handle close button
     for selectable in &close_button_query {
         if selectable.is_selected {
             for (mut sidebar, mut node) in &mut sidebar_query {
@@ -212,14 +199,12 @@ pub fn handle_sidebar_interactions(
                 node.display = Display::None;
             }
 
-            // Update toggle button text
             for mut text in &mut toggle_text_query {
                 **text = "x".to_string();
             }
         }
     }
 
-    // Handle toggle button
     for selectable in &toggle_button_query {
         if selectable.is_selected {
             for (mut sidebar, mut node) in &mut sidebar_query {
@@ -231,7 +216,6 @@ pub fn handle_sidebar_interactions(
                 };
             }
 
-            // Update toggle button text
             for mut text in &mut toggle_text_query {
                 let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
                 **text = if sidebar_visible { ">" } else { "<" }.to_string();
@@ -240,7 +224,6 @@ pub fn handle_sidebar_interactions(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_sidebar_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut sidebar_query: Query<(&mut Sidebar, &mut Node), With<SidebarContainer>>,
@@ -256,7 +239,6 @@ pub fn handle_sidebar_hotkeys(
             };
         }
 
-        // Update toggle button text
         for mut text in &mut toggle_text_query {
             let sidebar_visible = sidebar_query.iter().any(|(sidebar, _)| sidebar.is_visible);
             **text = if sidebar_visible { ">" } else { "<" }.to_string();
@@ -264,7 +246,6 @@ pub fn handle_sidebar_hotkeys(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_building_buttons_on_tab_change(
     mut commands: Commands,
     tab_query: Query<&SidebarTab, Changed<SidebarTab>>,
@@ -273,15 +254,12 @@ pub fn update_building_buttons_on_tab_change(
     existing_buttons: Query<Entity, With<BuildingButton>>,
     registry: Res<BuildingRegistry>,
 ) {
-    // Check if any tab changed
     if tab_query.is_empty() {
         return;
     }
 
-    // Get the currently active tab
     let active_tab_type = get_active_tab_type(&all_tabs_query);
 
-    // Get the content container
     if let Ok(content_entity) = content_query.get_single() {
         update_building_buttons_for_active_tab(
             &mut commands,
@@ -293,7 +271,6 @@ pub fn update_building_buttons_on_tab_change(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn setup_sidebar(mut commands: Commands, registry: Res<BuildingRegistry>) {
     let sidebar = Sidebar::new();
     sidebar.spawn(&mut commands, &registry);

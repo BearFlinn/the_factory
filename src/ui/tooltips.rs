@@ -28,7 +28,6 @@ impl TooltipTimer {
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters require by-value
 pub fn handle_tooltip_hover_detection(
     mut commands: Commands,
     button_query: Query<
@@ -41,25 +40,21 @@ pub fn handle_tooltip_hover_detection(
     for (button_entity, interaction, _building_button) in button_query.iter() {
         match interaction {
             Interaction::Hovered => {
-                // Check if timer already exists for this button
                 let timer_exists = timer_query
                     .iter()
                     .any(|(_, timer)| timer.target_entity == button_entity);
 
                 if !timer_exists {
-                    // Start hover timer
                     commands.spawn(TooltipTimer::new(button_entity, 0.8));
                 }
             }
             Interaction::None => {
-                // Remove any existing timer and tooltip for this button
                 for (timer_entity, timer) in timer_query.iter() {
                     if timer.target_entity == button_entity {
                         commands.entity(timer_entity).despawn();
                     }
                 }
 
-                // Remove any existing tooltips (we'll only have one at a time)
                 for tooltip_entity in existing_tooltips.iter() {
                     commands.entity(tooltip_entity).despawn_recursive();
                 }
@@ -69,7 +64,6 @@ pub fn handle_tooltip_hover_detection(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_tooltip_timers(
     mut commands: Commands,
     mut timer_query: Query<(Entity, &mut TooltipTimer)>,
@@ -82,15 +76,12 @@ pub fn update_tooltip_timers(
         tooltip_timer.timer.tick(time.delta());
 
         if tooltip_timer.timer.just_finished() {
-            // Remove the timer
             commands.entity(timer_entity).despawn();
 
-            // Remove any existing tooltips first
             for tooltip_entity in existing_tooltips.iter() {
                 commands.entity(tooltip_entity).despawn_recursive();
             }
 
-            // Get button info and spawn tooltip
             if let Ok((building_button, button_transform)) =
                 button_query.get(tooltip_timer.target_entity)
             {
@@ -117,7 +108,7 @@ fn spawn_tooltip(commands: &mut Commands, content: String, position: Vec2) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(position.x + 150.0), // Offset to the right of the sidebar
+                left: Val::Px(position.x + 150.0),
                 top: Val::Px(position.y - 100.0),
                 max_width: Val::Px(300.0),
                 padding: UiRect::all(Val::Px(12.0)),
@@ -143,19 +134,15 @@ fn spawn_tooltip(commands: &mut Commands, content: String, position: Vec2) {
         });
 }
 
-// The line count is high due to the match statement mapping component types to descriptions.
-// Each arm is simple and the structure is readable despite the length.
 #[allow(clippy::too_many_lines)]
 fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> String {
     use std::fmt::Write;
 
     let mut content = String::new();
 
-    // Building name and category
     let _ = writeln!(content, "{}", definition.name);
     let _ = writeln!(content, "Category: {:?}\n", definition.category);
 
-    // Full cost breakdown
     content.push_str("Cost:\n");
     if definition.placement.cost.inputs.is_empty() {
         content.push_str("  Free\n");
@@ -168,7 +155,6 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
         }
     }
 
-    // Building capabilities based on components
     content.push_str("\nCapabilities:\n");
     let mut has_capabilities = false;
 

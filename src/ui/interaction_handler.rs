@@ -104,9 +104,8 @@ fn apply_dynamic_styles(
     commands: &mut Commands,
     entity: Entity,
     styles: &DynamicStyles,
-    entities: &Query<(), With<Node>>, // Add this parameter to validate entity existence
+    entities: &Query<(), With<Node>>,
 ) {
-    // Only apply styles if the entity still exists
     if !entities.contains(entity) {
         return;
     }
@@ -119,7 +118,6 @@ fn apply_dynamic_styles(
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters require by-value
 pub fn handle_interactive_ui(
     mut commands: Commands,
     entities: Query<(), With<Node>>,
@@ -128,10 +126,8 @@ pub fn handle_interactive_ui(
         Query<(Entity, &mut Selectable, &InteractiveUI)>,
     )>,
 ) {
-    // First, collect entities that were interacted with and their selection changes
     let mut entities_to_process = Vec::new();
 
-    // Process interactions and collect what needs to be done
     for (entity, interaction, mut selectable, interactive_ui) in &mut query_set.p0() {
         if *interaction == Interaction::Pressed {
             match &selectable.selection_behavior {
@@ -139,19 +135,16 @@ pub fn handle_interactive_ui(
                     selectable.is_selected = !selectable.is_selected;
                 }
                 SelectionBehavior::Exclusive(group) => {
-                    // Store information about what needs to be deselected
                     entities_to_process.push((entity, group.clone(), interactive_ui.clone()));
                     selectable.is_selected = true;
                 }
             }
         }
 
-        // Apply visual styles for this entity with safety check
         let styles_to_apply = determine_styles(*interaction, &selectable, interactive_ui);
         apply_dynamic_styles(&mut commands, entity, styles_to_apply, &entities);
     }
 
-    // Now handle exclusive deselection using the second query
     for (selected_entity, group, _) in entities_to_process {
         for (other_entity, mut other_selectable, other_ui) in &mut query_set.p1() {
             if other_selectable.selection_group.as_ref() == Some(&group)
@@ -170,8 +163,6 @@ pub fn handle_interactive_ui(
     }
 }
 
-// Also handle visual updates when selection changes outside of interactions
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn update_selection_visuals(
     mut commands: Commands,
     entities: Query<(), With<Node>>,
@@ -220,7 +211,6 @@ fn determine_styles<'a>(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters require by-value
 pub fn handle_escape_clear_selection(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selectables: Query<&mut Selectable>,
