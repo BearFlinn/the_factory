@@ -117,7 +117,6 @@ pub fn create_port_logistics_tasks(
                 event.building,
                 &output_ports,
                 &storage_ports,
-                &existing_targets,
                 &network,
             );
 
@@ -191,15 +190,17 @@ fn find_port_receiver(
         }
 
         if let Some(crafter) = maybe_crafter {
-            if let Some(recipe_name) = crafter.get_active_recipe() {
-                if let Some(recipe_def) = recipe_registry.get_definition(recipe_name) {
-                    let accepts_any_item = items
-                        .keys()
-                        .any(|item_name| recipe_def.inputs.contains_key(item_name));
-                    if !accepts_any_item {
-                        continue;
-                    }
-                }
+            let Some(recipe_name) = crafter.get_active_recipe() else {
+                continue;
+            };
+            let Some(recipe_def) = recipe_registry.get_definition(recipe_name) else {
+                continue;
+            };
+            let accepts_any_item = items
+                .keys()
+                .any(|item_name| recipe_def.inputs.contains_key(item_name));
+            if !accepts_any_item {
+                continue;
             }
         }
 
@@ -218,7 +219,6 @@ fn find_port_suppliers(
     receiver: Entity,
     output_ports: &Query<(Entity, &OutputPort, &Position), With<Building>>,
     storage_ports: &Query<(Entity, &StoragePort, &Position), With<Building>>,
-    existing_targets: &HashSet<Entity>,
     network: &NetworkConnectivity,
 ) -> Vec<(Entity, Position, HashMap<ItemName, u32>)> {
     const WORKER_CAPACITY: u32 = 20;
@@ -232,7 +232,7 @@ fn find_port_suppliers(
         let mut best_supplier: Option<(Entity, Position, HashMap<ItemName, u32>, f32)> = None;
 
         for (entity, output, pos) in output_ports.iter() {
-            if entity == receiver || existing_targets.contains(&entity) {
+            if entity == receiver {
                 continue;
             }
 
@@ -264,7 +264,7 @@ fn find_port_suppliers(
         }
 
         for (entity, storage, pos) in storage_ports.iter() {
-            if entity == receiver || existing_targets.contains(&entity) {
+            if entity == receiver {
                 continue;
             }
 
