@@ -2,13 +2,14 @@ use super::components::{AssignedWorker, Task, TaskAction, TaskSequence, TaskStat
 use crate::{
     grid::{Grid, Position},
     materials::{
-        items::{Cargo, InventoryAccess},
+        items::{Cargo, InventoryAccess, OutputPort, StoragePort},
         request_transfer_specific_items, ItemTransferRequestEvent,
     },
     systems::NetworkConnectivity,
     workers::{calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath},
 };
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 pub fn process_worker_sequences(
     mut workers: Query<(Entity, &Position, &mut AssignedSequence, &mut WorkerPath), With<Worker>>,
@@ -140,12 +141,15 @@ fn initiate_pathfinding_or_complete_task(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_sequence_task_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
     mut workers: Query<(&mut AssignedSequence, &Cargo), With<Worker>>,
     mut sequences: Query<(&mut TaskSequence, &mut AssignedWorker)>,
     mut tasks: Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
     task_targets: Query<Entity>,
+    output_ports: Query<&OutputPort>,
+    storage_ports: Query<&StoragePort>,
     mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
     mut delivery_completed_events: EventWriter<super::components::LogisticsDeliveryCompletedEvent>,
 ) {
@@ -181,6 +185,31 @@ pub fn handle_sequence_task_arrivals(
             continue;
         };
 
+        if let TaskAction::Pickup(Some(items)) = task_action {
+            let available = get_available_items(task_target.0, &output_ports, &storage_ports);
+            let has_any_requested = items
+                .keys()
+                .any(|item| available.get(item).copied().unwrap_or(0) > 0);
+
+            if !has_any_requested {
+                *task_status = TaskStatus::Completed;
+                worker_assigned_sequence.0 = None;
+                sequence_assigned_worker.0 = None;
+                continue;
+            }
+        }
+
+        if let TaskAction::Dropoff(Some(_)) = task_action {
+            if worker_cargo.is_empty() {
+                *task_status = TaskStatus::Completed;
+                if sequence.advance_to_next().is_none() {
+                    worker_assigned_sequence.0 = None;
+                    sequence_assigned_worker.0 = None;
+                }
+                continue;
+            }
+        }
+
         execute_task_action(
             event.worker,
             task_action,
@@ -189,11 +218,16 @@ pub fn handle_sequence_task_arrivals(
             &mut transfer_requests,
         );
 
-        if let TaskAction::Dropoff(Some(items)) = task_action {
-            delivery_completed_events.send(super::components::LogisticsDeliveryCompletedEvent {
-                building: task_target.0,
-                items: items.clone(),
-            });
+        if let TaskAction::Dropoff(Some(_)) = task_action {
+            let cargo_items = worker_cargo.get_all_items();
+            if !cargo_items.is_empty() {
+                delivery_completed_events.send(
+                    super::components::LogisticsDeliveryCompletedEvent {
+                        building: task_target.0,
+                        items: cargo_items,
+                    },
+                );
+            }
         }
 
         *task_status = TaskStatus::Completed;
@@ -203,6 +237,20 @@ pub fn handle_sequence_task_arrivals(
             sequence_assigned_worker.0 = None;
         }
     }
+}
+
+fn get_available_items(
+    entity: Entity,
+    output_ports: &Query<&OutputPort>,
+    storage_ports: &Query<&StoragePort>,
+) -> HashMap<String, u32> {
+    if let Ok(port) = output_ports.get(entity) {
+        return port.items().iter().map(|(k, &v)| (k.clone(), v)).collect();
+    }
+    if let Ok(port) = storage_ports.get(entity) {
+        return port.items().iter().map(|(k, &v)| (k.clone(), v)).collect();
+    }
+    HashMap::new()
 }
 
 fn validate_arrival_context(
