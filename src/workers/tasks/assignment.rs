@@ -162,10 +162,6 @@ pub fn handle_worker_interrupts(
             continue;
         };
 
-        commands
-            .entity(event.worker)
-            .remove::<PendingEmergencyDropoff>();
-
         if let Some(old_sequence_entity) = worker_assigned_sequence.0 {
             if let Ok(mut old_assigned_worker) = sequences.get_mut(old_sequence_entity) {
                 old_assigned_worker.0 = None;
@@ -323,6 +319,10 @@ pub fn emergency_dropoff_idle_workers(
 
                 println!("Emergency: Created dropoff sequence for worker {worker_entity:?} → storage {storage_entity:?}");
             }
+        } else {
+            commands
+                .entity(worker_entity)
+                .insert(PendingEmergencyDropoff);
         }
     }
 }
@@ -349,4 +349,32 @@ fn find_nearest_available_storage(
     }
 
     nearest_storage
+}
+
+pub fn cleanup_emergency_dropoff_markers(
+    mut commands: Commands,
+    workers: Query<
+        (Entity, &Position, &AssignedSequence, &Cargo),
+        (With<Worker>, With<PendingEmergencyDropoff>),
+    >,
+    storage_buildings: Query<(Entity, &Position, &StoragePort), With<Building>>,
+) {
+    for (worker_entity, worker_pos, assigned_sequence, cargo) in workers.iter() {
+        if !assigned_sequence.is_idle() {
+            continue;
+        }
+
+        if cargo.is_empty() {
+            commands
+                .entity(worker_entity)
+                .remove::<PendingEmergencyDropoff>();
+        } else {
+            let worker_grid_pos = (worker_pos.x, worker_pos.y);
+            if find_nearest_available_storage(worker_grid_pos, &storage_buildings).is_some() {
+                commands
+                    .entity(worker_entity)
+                    .remove::<PendingEmergencyDropoff>();
+            }
+        }
+    }
 }

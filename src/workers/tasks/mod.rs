@@ -80,7 +80,11 @@ impl Plugin for TasksPlugin {
                         clear_all_tasks,
                     )
                         .in_set(TaskSystemSet::Generation),
-                    (clear_completed_tasks, update_in_transit_tracking)
+                    (
+                        clear_completed_tasks,
+                        update_in_transit_tracking,
+                        cleanup_emergency_dropoff_markers,
+                    )
                         .in_set(TaskSystemSet::Cleanup),
                 ),
             );
