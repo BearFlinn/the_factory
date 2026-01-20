@@ -45,7 +45,8 @@ impl Plugin for TasksPlugin {
                         .in_set(TaskSystemSet::Interrupts),
                     emergency_dropoff_idle_workers
                         .in_set(TaskSystemSet::Interrupts)
-                        .after(execute_item_transfer),
+                        .after(execute_item_transfer)
+                        .after(handle_worker_interrupts),
                     assign_available_sequences_to_workers.in_set(TaskSystemSet::Assignment),
                     (process_worker_sequences, derive_worker_state_from_sequences)
                         .chain()

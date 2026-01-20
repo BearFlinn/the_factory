@@ -153,6 +153,9 @@ pub struct WorkerInterruptEvent {
     pub interrupt_type: InterruptType,
 }
 
+#[derive(Component)]
+pub struct PendingEmergencyDropoff;
+
 #[derive(Debug)]
 pub enum InterruptType {
     /// Replace current sequence with an existing sequence entity

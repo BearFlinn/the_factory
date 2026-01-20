@@ -1,6 +1,6 @@
 use super::components::{
-    AssignedWorker, InterruptType, Priority, SequenceMember, Task, TaskAction, TaskBundle,
-    TaskSequence, TaskSequenceBundle, TaskStatus, WorkerInterruptEvent,
+    AssignedWorker, InterruptType, PendingEmergencyDropoff, Priority, SequenceMember, Task,
+    TaskAction, TaskBundle, TaskSequence, TaskSequenceBundle, TaskStatus, WorkerInterruptEvent,
 };
 use crate::{
     grid::Position,
@@ -220,6 +220,10 @@ pub fn handle_worker_interrupts(
             continue;
         };
 
+        commands
+            .entity(event.worker)
+            .remove::<PendingEmergencyDropoff>();
+
         if let Some(old_sequence_entity) = worker_assigned_sequence.0 {
             if let Ok(mut old_assigned_worker) = sequences.get_mut(old_sequence_entity) {
                 old_assigned_worker.0 = None;
@@ -323,15 +327,33 @@ pub fn debug_clear_all_workers(
 
 pub fn emergency_dropoff_idle_workers(
     mut commands: Commands,
-    workers: Query<(Entity, &Position, &WorkerState, &AssignedSequence, &Cargo), With<Worker>>,
+    workers: Query<
+        (
+            Entity,
+            &Position,
+            &WorkerState,
+            &AssignedSequence,
+            &Cargo,
+            Option<&PendingEmergencyDropoff>,
+        ),
+        With<Worker>,
+    >,
     storage_buildings: Query<(Entity, &Position, &StoragePort), With<Building>>,
     mut interrupt_events: EventWriter<WorkerInterruptEvent>,
 ) {
-    for (worker_entity, worker_pos, worker_state, assigned_sequence, worker_cargo) in workers.iter()
+    for (
+        worker_entity,
+        worker_pos,
+        worker_state,
+        assigned_sequence,
+        worker_cargo,
+        pending_dropoff,
+    ) in workers.iter()
     {
         if *worker_state != WorkerState::Idle
             || assigned_sequence.0.is_some()
             || worker_cargo.is_empty()
+            || pending_dropoff.is_some()
         {
             continue;
         }
@@ -360,6 +382,10 @@ pub fn emergency_dropoff_idle_workers(
                         Priority::Medium,
                     ))
                     .id();
+
+                commands
+                    .entity(worker_entity)
+                    .insert(PendingEmergencyDropoff);
 
                 interrupt_events.send(WorkerInterruptEvent {
                     worker: worker_entity,
