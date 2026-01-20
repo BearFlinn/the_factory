@@ -10,7 +10,6 @@ use crate::{
 };
 use bevy::prelude::*;
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn assign_available_sequences_to_workers(
     mut sequences: Query<(Entity, &mut AssignedWorker, &TaskSequence, &Priority)>,
     mut workers: Query<
@@ -85,7 +84,6 @@ pub fn assign_available_sequences_to_workers(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn derive_worker_state_from_sequences(
     mut workers: Query<(&mut AssignedSequence, &mut WorkerState), With<Worker>>,
     mut sequences: Query<&mut TaskSequence>,
@@ -117,7 +115,6 @@ pub fn derive_worker_state_from_sequences(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn clear_all_tasks(
     mut commands: Commands,
     query: Query<Entity, With<Task>>,
@@ -130,7 +127,6 @@ pub fn clear_all_tasks(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn clear_completed_tasks(
     mut commands: Commands,
     query: Query<(Entity, &TaskStatus), With<Task>>,
@@ -316,7 +312,6 @@ pub fn handle_worker_interrupts(
 }
 
 /// Debug system: Clear all worker assignments when spacebar is pressed
-#[allow(clippy::needless_pass_by_value)]
 pub fn debug_clear_all_workers(
     keys: Res<ButtonInput<KeyCode>>,
     workers: Query<Entity, With<Worker>>,
@@ -340,7 +335,6 @@ pub fn debug_clear_all_workers(
 
 /// Temporary system: Create dropoff tasks for idle workers carrying items
 /// This will be replaced by the error handling system later
-#[allow(clippy::needless_pass_by_value)]
 pub fn emergency_dropoff_idle_workers(
     mut commands: Commands,
     workers: Query<(Entity, &Position, &WorkerState, &AssignedSequence, &Cargo), With<Worker>>,

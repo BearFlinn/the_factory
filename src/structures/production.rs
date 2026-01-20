@@ -9,10 +9,6 @@ use crate::{
 };
 use bevy::prelude::*;
 
-// ============================================================================
-// PORT-BASED CRAFTING SYSTEMS
-// ============================================================================
-
 /// Event for requesting logistics operations with port-based buildings.
 /// Emitted when `OutputPort`s have items for pickup or `InputPort`s need delivery.
 #[derive(Event)]
@@ -43,7 +39,6 @@ impl Default for PortLogisticsTimer {
 
 /// Port-based crafting for buildings with both `InputPort` and `OutputPort` (e.g., Smelter, Assembler).
 /// Consumes from `InputPort`, produces to `OutputPort` - cleanly separated materials.
-#[allow(clippy::needless_pass_by_value)]
 pub fn update_port_crafters(
     mut query: Query<(
         &mut InputPort,
@@ -99,7 +94,6 @@ pub fn update_port_crafters(
 
 /// Port-based crafting for Source buildings (`OutputPort` only, e.g., Mining Drill).
 /// These buildings produce items without consuming any inputs.
-#[allow(clippy::needless_pass_by_value)]
 pub fn update_source_port_crafters(
     mut query: Query<(&mut OutputPort, &mut RecipeCrafter, &Operational), Without<InputPort>>,
     recipes: Res<RecipeRegistry>,
@@ -140,7 +134,6 @@ pub fn update_source_port_crafters(
 
 /// Port-based crafting for Sink buildings (`InputPort` only, e.g., Generator).
 /// These buildings consume items but produce non-item outputs (like power).
-#[allow(clippy::needless_pass_by_value)]
 pub fn update_sink_port_crafters(
     mut query: Query<(&mut InputPort, &mut RecipeCrafter, &Operational), Without<OutputPort>>,
     recipes: Res<RecipeRegistry>,
@@ -184,11 +177,6 @@ pub fn update_sink_port_crafters(
 
 /// Polls port states and emits logistics requests.
 /// Runs on a timer to evaluate the system state holistically.
-#[allow(
-    clippy::needless_pass_by_value,
-    clippy::type_complexity,
-    clippy::too_many_arguments
-)]
 pub fn poll_port_logistics(
     time: Res<Time>,
     mut timer: ResMut<PortLogisticsTimer>,

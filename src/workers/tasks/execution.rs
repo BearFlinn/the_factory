@@ -12,7 +12,6 @@ use crate::{
 };
 use bevy::prelude::*;
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn process_worker_sequences(
     mut workers: Query<
         (
@@ -169,7 +168,6 @@ fn initiate_pathfinding_or_complete_task(
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn handle_sequence_task_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
     mut workers: Query<(&mut AssignedSequence, &Cargo, &mut WorkerState), With<Worker>>,

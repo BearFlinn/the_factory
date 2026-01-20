@@ -198,7 +198,6 @@ pub fn occupy_area(
 #[derive(Component)]
 pub struct Hub;
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn place_hub(
     mut commands: Commands,
     grid: Res<Grid>,
@@ -243,7 +242,6 @@ pub fn place_hub(
     occupy_area(&mut grid_cells, center_x, center_y, 3, 3, building_entity);
 }
 
-#[allow(clippy::type_complexity, clippy::needless_pass_by_value)]
 pub fn monitor_construction_completion(
     mut commands: Commands,
     construction_sites: Query<
@@ -363,7 +361,6 @@ impl ConstructionMonitor {
     }
 }
 
-#[allow(clippy::type_complexity, clippy::needless_pass_by_value)]
 pub fn monitor_construction_progress(
     mut commands: Commands,
     mut construction_sites: Query<
@@ -455,7 +452,6 @@ pub fn monitor_construction_progress(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn assign_drill_recipes(
     mut commands: Commands,
     mut drills: Query<(Entity, &mut RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
@@ -486,14 +482,12 @@ pub fn assign_drill_recipes(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn drill_awaiting_assignment(
     drills: Query<(&RecipeCrafter, &PendingDrillRecipeAssignment), With<Building>>,
 ) -> bool {
     !drills.is_empty()
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn handle_building_view_range_expansion(
     buildings_with_view_range: Query<(&ViewRange, &Position), Added<Building>>,
     mut expand_events: EventWriter<ExpandGridEvent>,

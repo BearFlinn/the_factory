@@ -67,10 +67,6 @@ fn chunk_contribution_by_capacity(
     chunks
 }
 
-// ============================================================================
-// Port-Based Logistics Task Creation (Phase 3.3)
-// ============================================================================
-
 /// Creates logistics tasks from `PortLogisticsRequest` events.
 /// Handles both offers (items to pick up from `OutputPort`s) and requests
 /// (items needed by `InputPort`s).
@@ -80,11 +76,6 @@ fn chunk_contribution_by_capacity(
 /// - `item`: The item type being offered or requested
 /// - `quantity`: How much of the item
 /// - `is_output`: If true, building is offering items for pickup; if false, needs delivery
-#[allow(
-    clippy::needless_pass_by_value,
-    clippy::type_complexity,
-    clippy::too_many_arguments
-)]
 pub fn create_port_logistics_tasks(
     mut commands: Commands,
     mut events: EventReader<PortLogisticsRequest>,
@@ -165,7 +156,6 @@ pub fn create_port_logistics_tasks(
 
 /// Finds a receiver for items being offered (`InputPort` or `StoragePort` that can accept items).
 /// For `InputPort` buildings with recipes, only considers those whose recipe needs the offered items.
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn find_port_receiver(
     items: &HashMap<ItemName, u32>,
     source_pos: Position,
@@ -244,7 +234,6 @@ fn find_port_receiver(
 }
 
 /// Finds suppliers for items being requested (`OutputPort` or `StoragePort` that have items).
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn find_port_suppliers(
     needed_items: &HashMap<ItemName, u32>,
     requester_pos: Position,
@@ -387,11 +376,6 @@ fn calculate_port_supplier_contribution<T: InventoryAccess>(
 }
 
 /// Creates proactive tasks to move items from `OutputPort`s to `StoragePort`s when no immediate need.
-#[allow(
-    clippy::needless_pass_by_value,
-    clippy::type_complexity,
-    clippy::too_many_arguments
-)]
 pub fn create_proactive_port_tasks(
     mut commands: Commands,
     time: Res<Time>,
@@ -602,7 +586,6 @@ pub fn create_port_construction_logistics_tasks(
 }
 
 /// Calculate supply plan from `StoragePort` buildings for construction materials.
-#[allow(clippy::type_complexity)]
 fn calculate_port_supply_plan(
     requester_pos: (i32, i32),
     needed_items: &HashMap<ItemName, u32>,
@@ -748,10 +731,6 @@ fn create_pickup_dropoff_sequence(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
-    // ============================================
-    // chunk_contribution_by_capacity tests
-    // ============================================
 
     #[test]
     fn chunk_contribution_under_capacity_single_chunk() {

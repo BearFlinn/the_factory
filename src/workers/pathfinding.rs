@@ -18,7 +18,6 @@ pub struct WorkerArrivedEvent {
     pub position: (i32, i32),
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn move_workers(
     mut workers: Query<
         (
@@ -141,7 +140,6 @@ pub fn calculate_path(
     None
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn validate_and_displace_stranded_workers(
     mut workers: Query<
         (
@@ -251,8 +249,6 @@ mod tests {
 
     use super::*;
 
-    // Tests for manhattan_distance_coords
-
     #[test]
     fn manhattan_distance_same_point_returns_zero() {
         let result = manhattan_distance_coords((5, 10), (5, 10));
@@ -313,8 +309,6 @@ mod tests {
 
         assert_eq!(result, 0);
     }
-
-    // Tests for calculate_path - testing the pure path calculation logic
 
     #[test]
     fn calculate_path_same_start_and_end_returns_empty_path() {
