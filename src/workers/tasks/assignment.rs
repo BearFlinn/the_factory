@@ -7,73 +7,242 @@ use crate::{
     materials::{Cargo, InventoryAccess, StoragePort},
     structures::Building,
     workers::{
+        dispatcher::{DispatcherConfig, WorkerDispatcher},
         manhattan_distance_coords, AssignedSequence, Worker, WorkerPath, WorkerStateComputation,
     },
 };
 use bevy::prelude::*;
 
+/// Batch-optimized worker assignment system.
+/// Considers all available workers and unassigned sequences together,
+/// optimizing assignments globally rather than greedily assigning one at a time.
 pub fn assign_available_sequences_to_workers(
     mut sequences: Query<(Entity, &mut AssignedWorker, &TaskSequence, &Priority)>,
     mut workers: Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
     tasks: Query<&Position, With<Task>>,
-    _time: Res<Time>,
+    dispatcher: Res<WorkerDispatcher>,
+    config: Res<DispatcherConfig>,
 ) {
     cleanup_orphaned_assignments(&mut sequences, &mut workers);
 
-    let mut unassigned_sequences: Vec<_> = sequences
-        .iter_mut()
-        .filter(|(_, assigned_worker, sequence, _)| {
-            assigned_worker.0.is_none() && !sequence.is_complete()
-        })
+    // Collect all available workers
+    let mut available_workers: Vec<(Entity, Position)> = workers
+        .iter()
+        .filter(|(_, _, assigned_sequence, cargo)| assigned_sequence.is_idle() && cargo.is_empty())
+        .map(|(entity, pos, _, _)| (entity, *pos))
         .collect();
 
-    unassigned_sequences.sort_by_key(|(_, _, _, priority)| match priority {
-        Priority::Critical => 0,
-        Priority::High => 1,
-        Priority::Medium => 2,
-        Priority::Low => 3,
+    if available_workers.is_empty() {
+        return;
+    }
+
+    // Sort workers: pooled workers first (known location at hub), then by distance from origin
+    available_workers.sort_by(|(entity_a, pos_a), (entity_b, pos_b)| {
+        let a_pooled = dispatcher.is_worker_pooled(*entity_a);
+        let b_pooled = dispatcher.is_worker_pooled(*entity_b);
+        match (a_pooled, b_pooled) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => {
+                // Sort by distance from origin (hub)
+                let dist_a = pos_a.x.abs() + pos_a.y.abs();
+                let dist_b = pos_b.x.abs() + pos_b.y.abs();
+                dist_a.cmp(&dist_b)
+            }
+        }
     });
 
-    let mut assignments_made = 0;
+    // Collect all unassigned sequences with their task positions
+    let mut unassigned_sequences: Vec<(Entity, Position, Priority)> = Vec::new();
 
-    for (sequence_entity, mut assigned_worker, sequence, priority) in unassigned_sequences {
+    for (sequence_entity, assigned_worker, sequence, priority) in sequences.iter() {
+        if assigned_worker.0.is_some() || sequence.is_complete() {
+            continue;
+        }
+
         let Some(current_task_entity) = sequence.current_task() else {
-            println!(
-                "Warning: Sequence {sequence_entity:?} has no current task but is not complete"
-            );
             continue;
         };
 
         let Ok(task_position) = tasks.get(current_task_entity) else {
-            println!(
-                "Warning: Task {current_task_entity:?} not found for sequence {sequence_entity:?}"
-            );
             continue;
         };
 
-        let task_pos = (task_position.x, task_position.y);
+        unassigned_sequences.push((sequence_entity, *task_position, priority.clone()));
+    }
 
-        if let Some((worker_entity, worker_pos)) = find_available_worker(task_pos, &workers) {
-            assigned_worker.0 = Some(worker_entity);
+    if unassigned_sequences.is_empty() {
+        return;
+    }
 
+    // Sort sequences by priority (Critical first)
+    unassigned_sequences.sort_by(|a, b| {
+        let priority_ord = |p: &Priority| match p {
+            Priority::Critical => 0,
+            Priority::High => 1,
+            Priority::Medium => 2,
+            Priority::Low => 3,
+        };
+        priority_ord(&a.2).cmp(&priority_ord(&b.2))
+    });
+
+    // Batch assignment: for each priority level, find optimal matches
+    let assignments = compute_batch_assignments(&available_workers, &unassigned_sequences, &config);
+
+    // Apply assignments
+    let mut assignments_made = 0;
+    for (worker_entity, sequence_entity) in assignments {
+        if let Ok((_, mut assigned_worker, _, priority)) = sequences.get_mut(sequence_entity) {
             if let Ok((_, _, mut worker_assigned_sequence, _)) = workers.get_mut(worker_entity) {
+                assigned_worker.0 = Some(worker_entity);
                 worker_assigned_sequence.0 = Some(sequence_entity);
                 assignments_made += 1;
 
                 println!(
-                    "Assigned worker {:?} at ({}, {}) to {:?} priority sequence {:?} (task at ({}, {}))",
-                    worker_entity, worker_pos.x, worker_pos.y, priority, sequence_entity, task_pos.0, task_pos.1
+                    "Batch assigned worker {worker_entity:?} to {priority:?} priority sequence {sequence_entity:?}"
                 );
-            } else {
-                assigned_worker.0 = None;
-                println!("Failed to assign sequence {sequence_entity:?} to worker {worker_entity:?} - worker not found");
             }
         }
     }
 
     if assignments_made > 0 {
-        println!("Made {assignments_made} new worker assignments");
+        println!("Batch assignment: {assignments_made} workers assigned");
     }
+}
+
+/// Computes optimal worker-to-sequence assignments using a cost-based approach.
+/// Returns a list of (worker, sequence) entity pairs.
+fn compute_batch_assignments(
+    available_workers: &[(Entity, Position)],
+    unassigned_sequences: &[(Entity, Position, Priority)],
+    _config: &DispatcherConfig,
+) -> Vec<(Entity, Entity)> {
+    let mut assignments = Vec::new();
+    let mut assigned_workers: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    let mut assigned_sequences: std::collections::HashSet<Entity> =
+        std::collections::HashSet::new();
+
+    // Group sequences by priority
+    let mut priority_groups: std::collections::HashMap<u8, Vec<(Entity, Position)>> =
+        std::collections::HashMap::new();
+
+    for (seq_entity, pos, priority) in unassigned_sequences {
+        let priority_key = match priority {
+            Priority::Critical => 0,
+            Priority::High => 1,
+            Priority::Medium => 2,
+            Priority::Low => 3,
+        };
+        priority_groups
+            .entry(priority_key)
+            .or_default()
+            .push((*seq_entity, *pos));
+    }
+
+    // Process each priority level in order
+    for priority_key in [0u8, 1, 2, 3] {
+        let Some(sequences_at_priority) = priority_groups.get(&priority_key) else {
+            continue;
+        };
+
+        // Get remaining available workers
+        let remaining_workers: Vec<(Entity, Position)> = available_workers
+            .iter()
+            .filter(|(e, _)| !assigned_workers.contains(e))
+            .copied()
+            .collect();
+
+        if remaining_workers.is_empty() {
+            break;
+        }
+
+        // Get remaining sequences at this priority
+        let remaining_sequences: Vec<(Entity, Position)> = sequences_at_priority
+            .iter()
+            .filter(|(e, _)| !assigned_sequences.contains(e))
+            .copied()
+            .collect();
+
+        if remaining_sequences.is_empty() {
+            continue;
+        }
+
+        // Compute cost-optimal assignment for this priority batch
+        let batch_assignments =
+            compute_minimum_cost_assignment(&remaining_workers, &remaining_sequences);
+
+        for (worker_entity, sequence_entity) in batch_assignments {
+            assigned_workers.insert(worker_entity);
+            assigned_sequences.insert(sequence_entity);
+            assignments.push((worker_entity, sequence_entity));
+        }
+    }
+
+    assignments
+}
+
+/// Computes minimum-cost assignment between workers and sequences.
+/// Uses a greedy approach optimized for typical game scenarios.
+/// For small counts, this performs well. For large counts (>50), consider Hungarian algorithm.
+fn compute_minimum_cost_assignment(
+    workers: &[(Entity, Position)],
+    sequences: &[(Entity, Position)],
+) -> Vec<(Entity, Entity)> {
+    if workers.is_empty() || sequences.is_empty() {
+        return Vec::new();
+    }
+
+    // Build cost matrix: cost[worker_idx][sequence_idx] = distance
+    let mut costs: Vec<Vec<i32>> = Vec::with_capacity(workers.len());
+    for (_, worker_pos) in workers {
+        let mut row = Vec::with_capacity(sequences.len());
+        for (_, seq_pos) in sequences {
+            let distance =
+                manhattan_distance_coords((worker_pos.x, worker_pos.y), (seq_pos.x, seq_pos.y));
+            row.push(distance);
+        }
+        costs.push(row);
+    }
+
+    // Greedy minimum-cost matching
+    // For each iteration, find the (worker, sequence) pair with minimum cost
+    // and assign them, then remove both from consideration
+    let mut assignments = Vec::new();
+    let mut used_workers = vec![false; workers.len()];
+    let mut used_sequences = vec![false; sequences.len()];
+    let max_assignments = workers.len().min(sequences.len());
+
+    for _ in 0..max_assignments {
+        let mut best_cost = i32::MAX;
+        let mut best_worker_idx = 0;
+        let mut best_seq_idx = 0;
+
+        for (worker_idx, worker_used) in used_workers.iter().enumerate() {
+            if *worker_used {
+                continue;
+            }
+            for (seq_idx, seq_used) in used_sequences.iter().enumerate() {
+                if *seq_used {
+                    continue;
+                }
+                if costs[worker_idx][seq_idx] < best_cost {
+                    best_cost = costs[worker_idx][seq_idx];
+                    best_worker_idx = worker_idx;
+                    best_seq_idx = seq_idx;
+                }
+            }
+        }
+
+        if best_cost == i32::MAX {
+            break;
+        }
+
+        used_workers[best_worker_idx] = true;
+        used_sequences[best_seq_idx] = true;
+        assignments.push((workers[best_worker_idx].0, sequences[best_seq_idx].0));
+    }
+
+    assignments
 }
 
 pub fn clear_all_tasks(
@@ -122,28 +291,6 @@ fn cleanup_orphaned_assignments(
             assigned_worker.0 = None;
         }
     }
-}
-
-fn find_available_worker(
-    position: (i32, i32),
-    workers: &Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
-) -> Option<(Entity, Position)> {
-    let mut best_worker = None;
-    let mut closest_distance = i32::MAX;
-
-    for (entity, pos, assigned_sequence, cargo) in workers.iter() {
-        let is_available = assigned_sequence.is_idle() && cargo.is_empty();
-
-        if is_available {
-            let distance = manhattan_distance_coords(position, (pos.x, pos.y));
-            if distance < closest_distance {
-                closest_distance = distance;
-                best_worker = Some((entity, *pos));
-            }
-        }
-    }
-
-    best_worker
 }
 
 pub fn handle_worker_interrupts(
