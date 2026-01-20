@@ -1,4 +1,5 @@
 pub mod building_config;
+pub mod commitment;
 pub mod construction;
 pub mod placement;
 pub mod production;
@@ -68,6 +69,10 @@ impl Plugin for BuildingsPlugin {
                         .chain()
                         .in_set(BuildingSystemSet::Placement),
                     ((
+                        // Recipe commitment systems
+                        commitment::evaluate_recipe_commitments
+                            .run_if(commitment::any_needs_evaluation),
+                        commitment::commit_pending_recipes,
                         // Port-based crafting systems
                         update_port_crafters,
                         update_source_port_crafters,

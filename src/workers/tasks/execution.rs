@@ -6,23 +6,12 @@ use crate::{
         request_transfer_specific_items, ItemTransferRequestEvent,
     },
     systems::NetworkConnectivity,
-    workers::{
-        calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath, WorkerState,
-    },
+    workers::{calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath},
 };
 use bevy::prelude::*;
 
 pub fn process_worker_sequences(
-    mut workers: Query<
-        (
-            Entity,
-            &Transform,
-            &mut AssignedSequence,
-            &mut WorkerPath,
-            &mut WorkerState,
-        ),
-        With<Worker>,
-    >,
+    mut workers: Query<(Entity, &Transform, &mut AssignedSequence, &mut WorkerPath), With<Worker>>,
     mut sequences: Query<&mut TaskSequence>,
     mut tasks: Query<(&Position, &mut TaskStatus, &TaskTarget), With<Task>>,
     task_targets: Query<Entity>,
@@ -30,9 +19,7 @@ pub fn process_worker_sequences(
     network: Res<NetworkConnectivity>,
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
-    for (worker_entity, transform, mut assigned_sequence, mut worker_path, mut worker_state) in
-        &mut workers
-    {
+    for (worker_entity, transform, mut assigned_sequence, mut worker_path) in &mut workers {
         let Some(sequence_entity) = assigned_sequence.0 else {
             continue;
         };
@@ -40,7 +27,6 @@ pub fn process_worker_sequences(
         if !validate_and_process_sequence(
             sequence_entity,
             &mut assigned_sequence,
-            &mut worker_state,
             &mut sequences,
             &mut tasks,
             &task_targets,
@@ -72,7 +58,6 @@ pub fn process_worker_sequences(
             *task_position,
             &mut worker_path,
             &mut assigned_sequence,
-            &mut worker_state,
             &mut sequences,
             &grid,
             &network,
@@ -84,33 +69,28 @@ pub fn process_worker_sequences(
 fn validate_and_process_sequence(
     sequence_entity: Entity,
     assigned_sequence: &mut AssignedSequence,
-    worker_state: &mut WorkerState,
     sequences: &mut Query<&mut TaskSequence>,
     tasks: &mut Query<(&Position, &mut TaskStatus, &TaskTarget), With<Task>>,
     task_targets: &Query<Entity>,
 ) -> bool {
     let Ok(mut sequence) = sequences.get_mut(sequence_entity) else {
         assigned_sequence.0 = None;
-        *worker_state = WorkerState::Idle;
         return false;
     };
 
     if sequence.is_complete() {
         assigned_sequence.0 = None;
-        *worker_state = WorkerState::Idle;
         return false;
     }
 
     let Some(current_task_entity) = sequence.current_task() else {
         assigned_sequence.0 = None;
-        *worker_state = WorkerState::Idle;
         return false;
     };
 
     let Ok((_, mut task_status, task_target)) = tasks.get_mut(current_task_entity) else {
         if sequence.advance_to_next().is_none() {
             assigned_sequence.0 = None;
-            *worker_state = WorkerState::Idle;
         }
         return false;
     };
@@ -119,7 +99,6 @@ fn validate_and_process_sequence(
         *task_status = TaskStatus::Completed;
         if sequence.advance_to_next().is_none() {
             assigned_sequence.0 = None;
-            *worker_state = WorkerState::Idle;
         }
         return false;
     }
@@ -134,7 +113,6 @@ fn initiate_pathfinding_or_complete_task(
     task_position: Position,
     worker_path: &mut WorkerPath,
     assigned_sequence: &mut AssignedSequence,
-    worker_state: &mut WorkerState,
     sequences: &mut Query<&mut TaskSequence>,
     grid: &Grid,
     network: &NetworkConnectivity,
@@ -162,7 +140,6 @@ fn initiate_pathfinding_or_complete_task(
         if let Ok(mut sequence) = sequences.get_mut(sequence_entity) {
             if sequence.advance_to_next().is_none() {
                 assigned_sequence.0 = None;
-                *worker_state = WorkerState::Idle;
             }
         }
     }
@@ -170,16 +147,15 @@ fn initiate_pathfinding_or_complete_task(
 
 pub fn handle_sequence_task_arrivals(
     mut arrival_events: EventReader<WorkerArrivedEvent>,
-    mut workers: Query<(&mut AssignedSequence, &Cargo, &mut WorkerState), With<Worker>>,
+    mut workers: Query<(&mut AssignedSequence, &Cargo), With<Worker>>,
     mut sequences: Query<(&mut TaskSequence, &mut AssignedWorker)>,
     mut tasks: Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
     task_targets: Query<Entity>,
     mut transfer_requests: EventWriter<ItemTransferRequestEvent>,
+    mut delivery_completed_events: EventWriter<super::components::LogisticsDeliveryCompletedEvent>,
 ) {
     for event in arrival_events.read() {
-        let Ok((mut worker_assigned_sequence, worker_cargo, mut worker_state)) =
-            workers.get_mut(event.worker)
-        else {
+        let Ok((mut worker_assigned_sequence, worker_cargo)) = workers.get_mut(event.worker) else {
             continue;
         };
 
@@ -191,7 +167,6 @@ pub fn handle_sequence_task_arrivals(
             event,
             sequence_entity,
             &mut worker_assigned_sequence,
-            &mut worker_state,
             &mut sequences,
             &mut tasks,
             &task_targets,
@@ -219,10 +194,16 @@ pub fn handle_sequence_task_arrivals(
             &mut transfer_requests,
         );
 
+        if let TaskAction::Dropoff(Some(items)) = task_action {
+            delivery_completed_events.send(super::components::LogisticsDeliveryCompletedEvent {
+                building: task_target.0,
+                items: items.clone(),
+            });
+        }
+
         *task_status = TaskStatus::Completed;
 
         if sequence.advance_to_next().is_none() {
-            *worker_state = WorkerState::Idle;
             worker_assigned_sequence.0 = None;
             sequence_assigned_worker.0 = None;
         }
@@ -233,7 +214,6 @@ fn validate_arrival_context(
     event: &WorkerArrivedEvent,
     sequence_entity: Entity,
     worker_assigned_sequence: &mut AssignedSequence,
-    worker_state: &mut WorkerState,
     sequences: &mut Query<(&mut TaskSequence, &mut AssignedWorker)>,
     tasks: &mut Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
     task_targets: &Query<Entity>,
@@ -241,13 +221,11 @@ fn validate_arrival_context(
     let Ok((mut sequence, mut sequence_assigned_worker)) = sequences.get_mut(sequence_entity)
     else {
         worker_assigned_sequence.0 = None;
-        *worker_state = WorkerState::Idle;
         return false;
     };
 
     let Some(current_task_entity) = sequence.current_task() else {
         worker_assigned_sequence.0 = None;
-        *worker_state = WorkerState::Idle;
         sequence_assigned_worker.0 = None;
         return false;
     };
@@ -256,7 +234,6 @@ fn validate_arrival_context(
     else {
         if sequence.advance_to_next().is_none() {
             worker_assigned_sequence.0 = None;
-            *worker_state = WorkerState::Idle;
             sequence_assigned_worker.0 = None;
         }
         return false;
@@ -266,7 +243,6 @@ fn validate_arrival_context(
         *task_status = TaskStatus::Completed;
         if sequence.advance_to_next().is_none() {
             worker_assigned_sequence.0 = None;
-            *worker_state = WorkerState::Idle;
             sequence_assigned_worker.0 = None;
         }
         return false;

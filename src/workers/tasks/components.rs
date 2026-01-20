@@ -166,6 +166,18 @@ pub enum InterruptType {
     ClearAssignment,
 }
 
+#[derive(Event)]
+pub struct LogisticsDeliveryStartedEvent {
+    pub building: Entity,
+    pub items: std::collections::HashMap<crate::materials::ItemName, u32>,
+}
+
+#[derive(Event)]
+pub struct LogisticsDeliveryCompletedEvent {
+    pub building: Entity,
+    pub items: std::collections::HashMap<crate::materials::ItemName, u32>,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic, clippy::cast_possible_truncation)]
 mod tests {

@@ -12,14 +12,23 @@ pub struct Speed {
     pub value: f32,
 }
 
-#[derive(Component, PartialEq, Debug)]
-pub enum WorkerState {
-    Idle,
-    Working,
-}
-
 #[derive(Component)]
 pub struct AssignedSequence(pub Option<Entity>);
+
+pub trait WorkerStateComputation {
+    fn is_idle(&self) -> bool;
+    fn is_working(&self) -> bool;
+}
+
+impl WorkerStateComputation for AssignedSequence {
+    fn is_idle(&self) -> bool {
+        self.0.is_none()
+    }
+
+    fn is_working(&self) -> bool {
+        self.0.is_some()
+    }
+}
 
 #[derive(Bundle)]
 pub struct WorkerBundle {
@@ -28,7 +37,6 @@ pub struct WorkerBundle {
     pub position: Position,
     pub path: WorkerPath,
     pub assigned_sequence: AssignedSequence,
-    pub state: WorkerState,
     pub cargo: Cargo,
     pub compute_consumer: ComputeConsumer,
     pub sprite: Sprite,
@@ -50,7 +58,6 @@ impl WorkerBundle {
                 current_target: None,
             },
             assigned_sequence: AssignedSequence(None),
-            state: WorkerState::Idle,
             cargo: Cargo::new(20),
             compute_consumer: ComputeConsumer { amount: 10 },
             sprite: Sprite::from_color(Color::srgb(0.4, 0.2, 0.1), Vec2::new(16.0, 16.0)),
