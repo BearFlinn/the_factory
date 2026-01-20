@@ -10,13 +10,18 @@ Lower priority items to revisit after the inventory/production refactor is compl
 
 **Location**: `src/systems/scanning.rs`
 
-The scanner reveals unexplored tiles in a true clockwise sweep pattern, prioritizing angle over distance. This creates a natural radar-like sweep where the scanner completes a full rotation before moving outward.
+The scanner reveals unexplored tiles by completing each distance band before moving outward, sweeping clockwise within each band. This creates concentric ring exploration where closer tiles are always explored first.
 
 ### Resolved Issues
 
-~~**Not Pure Clockwise Sweep**~~ - Fixed by sorting by angle first, then distance as tiebreaker.
-
 ~~**`dedup()` May Not Work as Intended**~~ - Fixed by using a `HashMap` to deduplicate by `(x, y)` coordinates before sorting.
+
+### Design Notes
+
+The sorting is distance-first, then angle (clockwise). This ensures:
+- Closer tiles are always revealed before farther tiles
+- Within each distance band, tiles are revealed in clockwise order
+- The pattern creates expanding concentric rings of exploration
 
 ---
 

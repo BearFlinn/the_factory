@@ -82,19 +82,18 @@ impl Scanner {
             .map(|((x, y), (dist, angle))| (x, y, dist, angle))
             .collect();
 
-        // Sort by angle first (true clockwise sweep), then by distance as tiebreaker
+        // Sort by distance first, then clockwise by angle within each distance band
         targets.sort_by(|a, b| {
-            let angle_diff_a = self.calculate_angle_diff(a.3);
-            let angle_diff_b = self.calculate_angle_diff(b.3);
-
-            let angle_cmp = angle_diff_a
-                .partial_cmp(&angle_diff_b)
-                .unwrap_or(std::cmp::Ordering::Equal);
-            if angle_cmp != std::cmp::Ordering::Equal {
-                return angle_cmp;
+            let distance_cmp = a.2.cmp(&b.2);
+            if distance_cmp != std::cmp::Ordering::Equal {
+                return distance_cmp;
             }
 
-            a.2.cmp(&b.2)
+            let angle_diff_a = self.calculate_angle_diff(a.3);
+            let angle_diff_b = self.calculate_angle_diff(b.3);
+            angle_diff_a
+                .partial_cmp(&angle_diff_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         targets
@@ -405,78 +404,71 @@ mod tests {
     }
 
     #[test]
-    fn find_exploration_targets_sorts_by_angle_first() {
+    fn find_exploration_targets_sorts_by_distance_then_angle() {
         let mut scanner = create_scanner_at_origin(1.0);
         scanner.last_scan_angle = 0.0; // Start at north
 
-        // Create a small cross pattern centered at origin
-        // This creates targets at various angles and distances
         let grid = create_grid_with_coordinates(&[(0, 0)]);
-
         let targets = scanner.find_exploration_targets(&grid);
 
-        // Verify targets are sorted by angle first
-        // With scanner at origin looking north, the first targets should be
-        // those closest to north (angle 0), regardless of distance
+        // Verify targets are sorted by distance first, then by angle within each distance
         for i in 1..targets.len() {
-            let angle_diff_prev = scanner.calculate_angle_diff(targets[i - 1].3);
-            let angle_diff_curr = scanner.calculate_angle_diff(targets[i].3);
+            let (_, _, dist_prev, angle_prev) = targets[i - 1];
+            let (_, _, dist_curr, angle_curr) = targets[i];
 
-            // If angles are different, current should be >= previous
-            // If angles are equal, distance should be >= previous
-            if (angle_diff_prev - angle_diff_curr).abs() > 0.001 {
+            if dist_prev == dist_curr {
+                let angle_diff_prev = scanner.calculate_angle_diff(angle_prev);
+                let angle_diff_curr = scanner.calculate_angle_diff(angle_curr);
                 assert!(
-                    angle_diff_curr >= angle_diff_prev,
-                    "Targets should be sorted by angle first: angle at {} ({}) should be >= angle at {} ({})",
+                    angle_diff_curr >= angle_diff_prev - 0.001,
+                    "Within same distance, targets should be sorted by angle: angle_diff at {} ({}) should be >= angle_diff at {} ({})",
                     i, angle_diff_curr, i - 1, angle_diff_prev
                 );
             } else {
                 assert!(
-                    targets[i].2 >= targets[i - 1].2,
-                    "When angles are equal, targets should be sorted by distance: distance at {} ({}) should be >= distance at {} ({})",
-                    i, targets[i].2, i - 1, targets[i - 1].2
+                    dist_curr >= dist_prev,
+                    "Targets should be sorted by distance first: distance at {} ({}) should be >= distance at {} ({})",
+                    i, dist_curr, i - 1, dist_prev
                 );
             }
         }
     }
 
     #[test]
-    fn find_exploration_targets_prefers_closer_angle_over_closer_distance() {
+    fn find_exploration_targets_sweeps_clockwise_within_distance_band() {
         let mut scanner = Scanner::new(1.0, Position { x: 0, y: 0 });
         scanner.last_scan_angle = 0.0; // Looking north
 
-        // Create grid where there's a target at distance 1 to the south (angle PI)
-        // and a target at distance 2 to the north (angle 0)
-        // Old behavior: would pick south (distance 1) first
-        // New behavior: should pick north (angle 0) first
+        // Create a ring of explored tiles around the scanner
+        // This creates unexplored targets at distance 2 in all directions
         let grid = create_grid_with_coordinates(&[
-            (0, 0),  // origin
-            (0, -1), // south neighbor (creates target at (0, -2))
-            (0, 1),  // north neighbor (creates target at (0, 2))
+            (0, 0),
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, 1),
+            (1, -1),
+            (-1, -1),
         ]);
 
         let targets = scanner.find_exploration_targets(&grid);
 
-        // Find targets at (0, 2) and (0, -2)
-        let north_target = targets.iter().find(|(x, y, _, _)| *x == 0 && *y == 2);
-        let south_target = targets.iter().find(|(x, y, _, _)| *x == 0 && *y == -2);
-
-        assert!(north_target.is_some(), "Should find north target (0, 2)");
-        assert!(south_target.is_some(), "Should find south target (0, -2)");
-
-        // The north target (angle ~0) should come before south target (angle ~PI)
-        let north_idx = targets
+        // Get all targets at distance 2 (the outer ring)
+        let dist_2_targets: Vec<_> = targets
             .iter()
-            .position(|(x, y, _, _)| *x == 0 && *y == 2)
-            .unwrap();
-        let south_idx = targets
-            .iter()
-            .position(|(x, y, _, _)| *x == 0 && *y == -2)
-            .unwrap();
+            .filter(|(_, _, dist, _)| *dist == 2)
+            .collect();
 
-        assert!(
-            north_idx < south_idx,
-            "North target (angle 0) should come before south target (angle PI), but north_idx={north_idx}, south_idx={south_idx}"
-        );
+        // Verify they're sorted clockwise (by angle from north)
+        for i in 1..dist_2_targets.len() {
+            let angle_diff_prev = scanner.calculate_angle_diff(dist_2_targets[i - 1].3);
+            let angle_diff_curr = scanner.calculate_angle_diff(dist_2_targets[i].3);
+            assert!(
+                angle_diff_curr >= angle_diff_prev - 0.001,
+                "Within distance band, targets should sweep clockwise"
+            );
+        }
     }
 }
