@@ -88,6 +88,38 @@ Buildings are composed of components: `PowerConsumer`, `ComputeGenerator`, `Reci
 - **Construction**: Buildings require materials and time; workers deliver construction materials
 - **Scanning**: Radar buildings progressively reveal the grid in a clockwise pattern
 
+# Workflow Requirements
+
+## Branch Strategy
+
+**Always create a new branch before starting work.** Never commit directly to `main`.
+
+```bash
+git checkout -b <descriptive-branch-name>
+```
+
+Branch names should describe the work: `feature/scanner-range`, `fix/worker-pathfinding`, `refactor/task-system`.
+
+## Task Execution
+
+**Prefer parallel sub-agents over direct implementation.** When a task involves multiple independent operations, launch multiple Task agents in parallel rather than executing sequentially. This applies to both research and implementation work.
+
+Examples:
+- Implementing changes across multiple unrelated modules
+- Writing tests while implementing features (when test structure is clear)
+- Refactoring several independent files
+- Running searches, audits, or exploration in parallel
+- Any work that can be decomposed into independent subtasks
+
+## Completion Requirements
+
+Before providing a completion summary to the user:
+1. All changes must be committed
+2. Branch must be merged to `main` (or PR created if requested)
+3. All changes must be pushed to remote
+
+Never leave work in an uncommitted or unpushed state.
+
 # Commit Requirements, Linting, and Formatting. 
 
 ## Git Hooks
@@ -172,4 +204,3 @@ If you're uncertain about removing old code, **ask first** rather than keeping b
 # Misc Notes
 - Testing is a first class operation, NEVER skip test implementation.
 - Commits should be made frequently, especially for large multi-phase tasks.
-- All changes must be pushed before giving the user a completion summary.
