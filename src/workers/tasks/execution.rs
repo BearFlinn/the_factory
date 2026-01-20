@@ -1,4 +1,7 @@
-use super::components::{AssignedWorker, Task, TaskAction, TaskSequence, TaskStatus, TaskTarget};
+use super::components::{
+    AssignedWorker, SequenceMember, Task, TaskAction, TaskBundle, TaskSequence, TaskSequenceBundle,
+    TaskStatus, TaskTarget,
+};
 use crate::{
     grid::{Grid, Position},
     materials::{
@@ -6,7 +9,12 @@ use crate::{
         request_transfer_specific_items, ItemTransferRequestEvent,
     },
     systems::NetworkConnectivity,
-    workers::{calculate_path, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath},
+    workers::{
+        calculate_path,
+        dispatcher::{DispatcherConfig, WorkerDispatcher},
+        manhattan_distance_coords, AssignedSequence, Worker, WorkerArrivedEvent, WorkerPath,
+        WorkerStateComputation,
+    },
 };
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -356,6 +364,111 @@ fn execute_task_action(
                     );
                 }
             }
+        }
+    }
+}
+
+/// Checks for task chaining opportunities when a worker becomes idle.
+/// If a nearby pending request exists that meets the criteria, assigns it directly
+/// instead of having the worker return to the hub.
+#[allow(clippy::too_many_arguments)]
+pub fn try_chain_nearby_tasks(
+    mut commands: Commands,
+    mut workers: Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
+    mut dispatcher: ResMut<WorkerDispatcher>,
+    config: Res<DispatcherConfig>,
+    mut delivery_started_events: EventWriter<super::components::LogisticsDeliveryStartedEvent>,
+) {
+    // Find workers that just became idle (no assignment, empty cargo)
+    let idle_workers: Vec<(Entity, Position)> = workers
+        .iter()
+        .filter(|(_, _, assigned, cargo)| assigned.is_idle() && cargo.is_empty())
+        .map(|(entity, pos, _, _)| (entity, *pos))
+        .collect();
+
+    for (worker_entity, worker_pos) in idle_workers {
+        // Find the best nearby request to chain
+        let worker_grid_pos = (worker_pos.x, worker_pos.y);
+        let mut best_request_idx = None;
+        let mut best_distance = i32::MAX;
+
+        for (idx, request) in dispatcher.pending_requests.iter().enumerate() {
+            // Must meet urgency threshold
+            if request.urgency < config.chain_urgency_threshold {
+                continue;
+            }
+
+            // Must be within distance threshold
+            let source_pos = (request.source_pos.x, request.source_pos.y);
+            let distance = manhattan_distance_coords(worker_grid_pos, source_pos);
+
+            if distance > config.chain_distance_threshold {
+                continue;
+            }
+
+            // Take the closest qualifying request
+            if distance < best_distance {
+                best_distance = distance;
+                best_request_idx = Some(idx);
+            }
+        }
+
+        // Chain the task if we found one
+        if let Some(idx) = best_request_idx {
+            let request = dispatcher.pending_requests.remove(idx);
+
+            // Create the pickup/dropoff sequence
+            let pickup_task = commands
+                .spawn(TaskBundle::new(
+                    request.source,
+                    request.source_pos,
+                    TaskAction::Pickup(Some(request.items.clone())),
+                    request.priority.clone(),
+                ))
+                .id();
+
+            let dropoff_task = commands
+                .spawn(TaskBundle::new(
+                    request.destination,
+                    request.destination_pos,
+                    TaskAction::Dropoff(Some(request.items.clone())),
+                    request.priority.clone(),
+                ))
+                .id();
+
+            let sequence_entity = commands
+                .spawn(TaskSequenceBundle::new(
+                    vec![pickup_task, dropoff_task],
+                    request.priority.clone(),
+                ))
+                .id();
+
+            commands
+                .entity(pickup_task)
+                .insert(SequenceMember(sequence_entity));
+            commands
+                .entity(dropoff_task)
+                .insert(SequenceMember(sequence_entity));
+
+            // Assign worker to sequence
+            commands
+                .entity(sequence_entity)
+                .insert(AssignedWorker(Some(worker_entity)));
+
+            if let Ok((_, _, mut assigned_sequence, _)) = workers.get_mut(worker_entity) {
+                assigned_sequence.0 = Some(sequence_entity);
+            }
+
+            // Emit delivery started event
+            delivery_started_events.send(super::components::LogisticsDeliveryStartedEvent {
+                building: request.destination,
+                items: request.items.clone(),
+            });
+
+            println!(
+                "Task chain: Worker {worker_entity:?} at ({}, {}) chained to request at ({}, {}) (urgency: {:.2}, distance: {})",
+                worker_pos.x, worker_pos.y, request.source_pos.x, request.source_pos.y, request.urgency, best_distance
+            );
         }
     }
 }

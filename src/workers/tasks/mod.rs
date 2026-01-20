@@ -12,7 +12,10 @@ use crate::{
     materials::execute_item_transfer,
     structures::RecipeCommitment,
     workers::{
-        dispatcher::{clear_dispatcher_on_task_clear, DispatcherConfig, WorkerDispatcher},
+        dispatcher::{
+            clear_dispatcher_on_task_clear, predict_production_outputs, DispatcherConfig,
+            WorkerDispatcher,
+        },
         pooling::{
             clear_returning_on_assignment, register_hub_arrivals, return_idle_workers_to_hub,
         },
@@ -88,9 +91,12 @@ impl Plugin for TasksPlugin {
                         .in_set(TaskSystemSet::Interrupts)
                         .after(execute_item_transfer)
                         .after(handle_worker_interrupts),
+                    predict_production_outputs.in_set(TaskSystemSet::Prediction),
                     assign_available_sequences_to_workers.in_set(TaskSystemSet::Assignment),
                     process_worker_sequences.in_set(TaskSystemSet::Processing),
-                    handle_sequence_task_arrivals.in_set(TaskSystemSet::Arrivals),
+                    (handle_sequence_task_arrivals, try_chain_nearby_tasks)
+                        .chain()
+                        .in_set(TaskSystemSet::Arrivals),
                     (
                         create_port_logistics_tasks,
                         create_proactive_port_tasks,

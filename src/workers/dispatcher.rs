@@ -1,7 +1,12 @@
 use crate::{
-    grid::Position,
-    materials::ItemName,
-    workers::tasks::{Priority, TaskTarget},
+    grid::{Grid, Position},
+    materials::{items::OutputPort, InventoryAccess, ItemName, RecipeRegistry},
+    structures::{Building, RecipeCrafter},
+    systems::{NetworkConnectivity, Operational},
+    workers::{
+        manhattan_distance_coords,
+        tasks::{Priority, TaskTarget},
+    },
 };
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -233,6 +238,99 @@ pub fn cleanup_stale_requests(
     let removed = initial_count - dispatcher.pending_requests.len();
     if removed > 0 {
         println!("Dispatcher: Removed {removed} stale requests");
+    }
+}
+
+/// Worker speed constant for travel time estimation.
+const WORKER_SPEED: f32 = 250.0;
+/// Grid cell size for distance to time conversion.
+const CELL_SIZE: f32 = 64.0;
+
+/// Predicts upcoming production outputs and creates predictions for early dispatch.
+/// Workers can be sent before items are ready so they arrive just in time.
+pub fn predict_production_outputs(
+    mut dispatcher: ResMut<WorkerDispatcher>,
+    config: Res<DispatcherConfig>,
+    time: Res<Time>,
+    crafters: Query<(Entity, &RecipeCrafter, &OutputPort, &Position, &Operational), With<Building>>,
+    recipe_registry: Res<RecipeRegistry>,
+    _grid: Res<Grid>,
+    _network: Res<NetworkConnectivity>,
+) {
+    let current_time = time.elapsed_secs();
+
+    // Clean up old predictions
+    dispatcher.cleanup_predictions(current_time);
+
+    // Estimate worker travel time from hub (0,0) to position
+    let estimate_travel_time = |pos: Position| -> f32 {
+        let distance = manhattan_distance_coords((0, 0), (pos.x, pos.y));
+        #[allow(clippy::cast_precision_loss)]
+        let cells_f32 = distance as f32;
+        (cells_f32 * CELL_SIZE) / WORKER_SPEED
+    };
+
+    for (building_entity, crafter, output_port, position, operational) in &crafters {
+        // Skip non-operational buildings
+        if operational.0.is_some() {
+            continue;
+        }
+
+        // Skip if already have a prediction for this building
+        if dispatcher
+            .predicted_pickups
+            .iter()
+            .any(|p| p.building == building_entity)
+        {
+            continue;
+        }
+
+        // Get the active recipe
+        let Some(recipe_name) = crafter.get_active_recipe() else {
+            continue;
+        };
+
+        let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
+            continue;
+        };
+
+        // Check if output would have space (simplified: any output means maybe full)
+        let total_output: u32 = output_port.items().values().sum();
+        if total_output >= output_port.capacity() {
+            continue;
+        }
+
+        // Calculate time until production completes
+        let timer_elapsed = crafter.timer.elapsed_secs();
+        let timer_duration = crafter.timer.duration().as_secs_f32();
+        let time_remaining = timer_duration - timer_elapsed;
+
+        if time_remaining <= 0.0 {
+            continue;
+        }
+
+        // Calculate worker travel time
+        let travel_time = estimate_travel_time(*position);
+
+        // If we should dispatch now (travel_time approaches remaining production time)
+        let dispatch_threshold = config.prediction_buffer_secs;
+        if time_remaining - travel_time <= dispatch_threshold {
+            // Create prediction for this building
+            let ready_at = current_time + time_remaining;
+            let items: HashMap<ItemName, u32> = recipe.outputs.clone();
+
+            dispatcher.add_prediction(PredictedPickup::new(
+                building_entity,
+                *position,
+                ready_at,
+                items,
+            ));
+
+            println!(
+                "Prediction: Building {building_entity:?} at ({}, {}) will produce in {time_remaining:.1}s, travel time {travel_time:.1}s",
+                position.x, position.y
+            );
+        }
     }
 }
 
