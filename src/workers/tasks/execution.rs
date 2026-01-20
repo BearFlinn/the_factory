@@ -192,7 +192,7 @@ pub fn handle_sequence_task_arrivals(
                 .any(|item| available.get(item).copied().unwrap_or(0) > 0);
 
             if !has_any_requested {
-                *task_status = TaskStatus::Completed;
+                cancel_sequence(&mut sequence, &mut tasks);
                 worker_assigned_sequence.0 = None;
                 sequence_assigned_worker.0 = None;
                 continue;
@@ -251,6 +251,18 @@ fn get_available_items(
         return port.items().iter().map(|(k, &v)| (k.clone(), v)).collect();
     }
     HashMap::new()
+}
+
+fn cancel_sequence(
+    sequence: &mut TaskSequence,
+    tasks: &mut Query<(&Position, &TaskAction, &TaskTarget, &mut TaskStatus), With<Task>>,
+) {
+    for task_entity in &sequence.tasks {
+        if let Ok((_, _, _, mut status)) = tasks.get_mut(*task_entity) {
+            *status = TaskStatus::Completed;
+        }
+    }
+    sequence.current_index = sequence.tasks.len();
 }
 
 fn validate_arrival_context(
