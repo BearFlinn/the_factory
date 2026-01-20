@@ -71,9 +71,9 @@ pub struct OreNoiseConfig {
 impl Default for OreNoiseConfig {
     fn default() -> Self {
         Self {
-            presence_scale: 0.12,
-            presence_threshold: 0.45,
-            type_bias_scale: 0.06,
+            presence_scale: 0.22,
+            presence_threshold: 0.52,
+            type_bias_scale: 0.12,
         }
     }
 }
