@@ -1,6 +1,6 @@
 use crate::{
     grid::Position,
-    materials::{InputPort, Inventory, InventoryAccess, OutputPort, RecipeRegistry, StoragePort},
+    materials::{InputPort, InventoryAccess, OutputPort, RecipeRegistry, StoragePort},
     structures::{Building, RecipeCrafter},
     systems::Operational,
     ui::{
@@ -45,7 +45,7 @@ pub struct MenuContent {
 #[derive(PartialEq, Clone)]
 pub enum ContentType {
     Status,
-    Inventory,
+    Storage,
     Crafting,
 }
 
@@ -181,7 +181,7 @@ pub fn spawn_building_menu(
 
             // Content sections
             spawn_content_section(parent, click.building_entity, ContentType::Status);
-            spawn_content_section(parent, click.building_entity, ContentType::Inventory);
+            spawn_content_section(parent, click.building_entity, ContentType::Storage);
             spawn_content_section(parent, click.building_entity, ContentType::Crafting);
         });
     }
@@ -248,7 +248,7 @@ fn spawn_content_section(
 ) {
     let section_title = match content_type {
         ContentType::Status => "Status",
-        ContentType::Inventory => "Inventory",
+        ContentType::Storage => "Storage",
         ContentType::Crafting => "Production",
     };
 
@@ -358,7 +358,6 @@ pub fn update_menu_content(
     children: Query<&Children>,
     // Building data queries
     buildings_operational: Query<&Operational, With<Building>>,
-    buildings_inventory: Query<&Inventory, With<Building>>,
     buildings_input_port: Query<&InputPort, With<Building>>,
     buildings_output_port: Query<&OutputPort, With<Building>>,
     buildings_storage_port: Query<&StoragePort, With<Building>>,
@@ -372,7 +371,7 @@ pub fn update_menu_content(
                 .map(simple_hash)
                 .map(|hash| menu_content.last_updated != Some(hash))
                 .unwrap_or(false),
-            ContentType::Inventory => {
+            ContentType::Storage => {
                 // Check all port types for changes
                 let input_hash = buildings_input_port
                     .get(menu_content.target_building)
@@ -383,16 +382,9 @@ pub fn update_menu_content(
                 let storage_hash = buildings_storage_port
                     .get(menu_content.target_building)
                     .map(simple_hash);
-                let legacy_hash = buildings_inventory
-                    .get(menu_content.target_building)
-                    .map(simple_hash);
 
                 // Combine hashes for combined change detection
-                let combined_hash = input_hash
-                    .ok()
-                    .or(output_hash.ok())
-                    .or(storage_hash.ok())
-                    .or(legacy_hash.ok());
+                let combined_hash = input_hash.ok().or(output_hash.ok()).or(storage_hash.ok());
 
                 combined_hash.is_some_and(|hash| menu_content.last_updated != Some(hash))
             }
@@ -421,8 +413,7 @@ pub fn update_menu_content(
                             menu_content.last_updated = Some(simple_hash(operational));
                         }
                     }
-                    ContentType::Inventory => {
-                        // Try port-based components first, fall back to legacy
+                    ContentType::Storage => {
                         let entity = menu_content.target_building;
                         if let Ok(input_port) = buildings_input_port.get(entity) {
                             let output_port = buildings_output_port.get(entity).ok();
@@ -439,9 +430,6 @@ pub fn update_menu_content(
                         } else if let Ok(storage_port) = buildings_storage_port.get(entity) {
                             spawn_port_inventory_content(parent, None, None, Some(storage_port));
                             menu_content.last_updated = Some(simple_hash(storage_port));
-                        } else if let Ok(inventory) = buildings_inventory.get(entity) {
-                            spawn_inventory_content(parent, inventory);
-                            menu_content.last_updated = Some(simple_hash(inventory));
                         }
                     }
                     ContentType::Crafting => {
@@ -451,7 +439,7 @@ pub fn update_menu_content(
                                 crafter,
                                 &recipe_registry,
                                 menu_content.target_building,
-                            ); // Add building_entity parameter
+                            );
                             menu_content.last_updated = Some(simple_hash(crafter));
                         }
                     }
@@ -511,51 +499,6 @@ fn spawn_status_content(parent: &mut ChildBuilder, operational: &Operational) {
             }
         }
     }
-}
-
-fn spawn_inventory_content(parent: &mut ChildBuilder, inventory: &Inventory) {
-    if inventory.items.is_empty() {
-        parent.spawn((
-            Text::new("Empty"),
-            TextFont {
-                font_size: 12.0,
-                ..default()
-            },
-            TextColor(Color::srgb(0.6, 0.6, 0.6)),
-        ));
-    } else {
-        for (item_name, &quantity) in &inventory.items {
-            parent.spawn((
-                Text::new(format!("{item_name}: {quantity}")),
-                TextFont {
-                    font_size: 12.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.8, 0.8, 0.8)),
-            ));
-        }
-    }
-
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss
-    )]
-    let usage_percent =
-        (inventory.get_total_quantity() as f32 / inventory.capacity as f32 * 100.0) as u32;
-    parent.spawn((
-        Text::new(format!(
-            "Capacity: {}/{} ({}%)",
-            inventory.get_total_quantity(),
-            inventory.capacity,
-            usage_percent
-        )),
-        TextFont {
-            font_size: 10.0,
-            ..default()
-        },
-        TextColor(Color::srgb(0.6, 0.6, 0.6)),
-    ));
 }
 
 fn spawn_port_inventory_content(

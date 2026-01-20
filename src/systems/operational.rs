@@ -24,7 +24,7 @@ impl fmt::Display for OperationalCondition {
             OperationalCondition::Power(false) => write!(f, "Insufficient power"),
             OperationalCondition::Compute(false) => write!(f, "Insufficient compute"),
             OperationalCondition::HasItems(false) => write!(f, "Missing required items"),
-            OperationalCondition::HasInventorySpace(false) => write!(f, "Inventory full"),
+            OperationalCondition::HasInventorySpace(false) => write!(f, "Output full"),
             _ => Ok(()),
         }
     }
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn operational_condition_has_inventory_space_false_displays_correctly() {
         let condition = OperationalCondition::HasInventorySpace(false);
-        assert_eq!(format!("{condition}"), "Inventory full");
+        assert_eq!(format!("{condition}"), "Output full");
     }
 
     #[test]

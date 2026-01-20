@@ -190,10 +190,6 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 let _ = writeln!(content, "  - Consumes {amount} compute");
                 has_capabilities = true;
             }
-            BuildingComponentDef::Inventory { capacity } => {
-                let _ = writeln!(content, "  - Storage capacity: {capacity}");
-                has_capabilities = true;
-            }
             BuildingComponentDef::ViewRange { radius } => {
                 let _ = writeln!(content, "  - View range: {radius} tiles");
                 has_capabilities = true;

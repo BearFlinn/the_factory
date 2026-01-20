@@ -1,7 +1,7 @@
 use crate::{
     grid::Grid,
     materials::{
-        items::{Cargo, InputPort, Inventory, OutputPort, StoragePort},
+        items::{Cargo, InputPort, OutputPort, StoragePort},
         InventoryAccess, ItemRegistry,
     },
     structures::{building_config::BuildingRegistry, Building, PlaceBuildingValidationEvent},
@@ -37,7 +37,6 @@ pub fn update_inventory_display(
             Option<&InputPort>,
             Option<&StoragePort>,
             Option<&Cargo>,
-            Option<&Inventory>,
         ),
         Or<(With<Building>, With<Worker>)>,
     >,
@@ -52,15 +51,12 @@ pub fn update_inventory_display(
                 Changed<InputPort>,
                 Changed<StoragePort>,
                 Changed<Cargo>,
-                Changed<Inventory>,
             )>,
         ),
     >,
     item_registry: Res<ItemRegistry>,
 ) {
-    for (entity, output_port, input_port, storage_port, cargo, inventory) in
-        buildings_and_workers.iter()
-    {
+    for (entity, output_port, input_port, storage_port, cargo) in buildings_and_workers.iter() {
         let should_update = changed_inventories.contains(entity);
 
         let existing_display = children.get(entity).ok().and_then(|children| {
@@ -73,13 +69,12 @@ pub fn update_inventory_display(
             })
         });
 
-        // Get items to display (priority: OutputPort > InputPort > StoragePort > Cargo > Inventory)
+        // Get items to display (priority: OutputPort > InputPort > StoragePort > Cargo)
         let items_to_display: Option<std::collections::HashMap<String, u32>> = output_port
             .map(InventoryAccess::get_all_items)
             .or_else(|| input_port.map(InventoryAccess::get_all_items))
             .or_else(|| storage_port.map(InventoryAccess::get_all_items))
-            .or_else(|| cargo.map(InventoryAccess::get_all_items))
-            .or_else(|| inventory.map(Inventory::get_all_items));
+            .or_else(|| cargo.map(InventoryAccess::get_all_items));
 
         let Some(items) = items_to_display else {
             continue;

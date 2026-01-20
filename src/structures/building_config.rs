@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub use crate::{
     grid::{Layer, Position},
-    materials::items::{InputPort, Inventory, OutputPort, StoragePort},
+    materials::items::{InputPort, OutputPort, StoragePort},
     structures::*,
     systems::Operational,
 };
@@ -72,10 +72,6 @@ pub enum BuildingComponentDef {
     ComputeConsumer {
         amount: i32,
     },
-    // Legacy inventory component (used by Hub)
-    Inventory {
-        capacity: u32,
-    },
     ViewRange {
         radius: i32,
     },
@@ -86,9 +82,8 @@ pub enum BuildingComponentDef {
         interval: f32,
     },
     Scanner {
-        base_scan_interval: f32, // Removed max_radius, simplified to just timing
+        base_scan_interval: f32,
     },
-    // Port-based components
     InputPort {
         capacity: u32,
     },
@@ -201,9 +196,6 @@ impl BuildingRegistry {
                 BuildingComponentDef::ComputeConsumer { amount } => {
                     entity_commands.insert(ComputeConsumer { amount: *amount });
                 }
-                BuildingComponentDef::Inventory { capacity } => {
-                    entity_commands.insert(Inventory::new(*capacity));
-                }
                 BuildingComponentDef::ViewRange { radius } => {
                     entity_commands.insert(ViewRange { radius: *radius });
                 }
@@ -291,7 +283,7 @@ mod tests {
             components: [
                 PowerGenerator(amount: 100),
                 ComputeGenerator(amount: 50),
-                Inventory(capacity: 500),
+                StoragePort(capacity: 500),
                 ViewRange(radius: 5),
                 NetWorkComponent,
             ],
@@ -313,7 +305,7 @@ mod tests {
             ),
             components: [
                 PowerConsumer(amount: 10),
-                Inventory(capacity: 20),
+                OutputPort(capacity: 20),
                 RecipeCrafter(
                     recipe_name: Some("mine_iron"),
                     available_recipes: None,
@@ -361,7 +353,7 @@ mod tests {
             components: [
                 PowerConsumer(amount: 50),
                 ComputeConsumer(amount: 25),
-                Inventory(capacity: 100),
+                StoragePort(capacity: 100),
             ],
         ),
     ]"#;
@@ -504,7 +496,7 @@ mod tests {
             .contains(&BuildingComponentDef::ComputeGenerator { amount: 50 }));
         assert!(hub
             .components
-            .contains(&BuildingComponentDef::Inventory { capacity: 500 }));
+            .contains(&BuildingComponentDef::StoragePort { capacity: 500 }));
         assert!(hub
             .components
             .contains(&BuildingComponentDef::ViewRange { radius: 5 }));
