@@ -13,7 +13,7 @@ use crate::{
     materials::{ItemName, RecipeDef, RecipeName},
     resources::{ResourceNode, ResourceNodeRecipe},
     systems::NetworkChangedEvent,
-    workers::{Priority, TaskSequence},
+    workers::{Priority, Task, TaskSequence, TaskTarget},
 };
 
 #[derive(Component)]
@@ -356,7 +356,8 @@ pub fn monitor_construction_progress(
         ),
         With<ConstructionSite>,
     >,
-    active_sequences: Query<&TaskSequence>,
+    active_sequences: Query<(&TaskSequence, Entity)>,
+    active_tasks: Query<&TaskTarget, With<Task>>,
     mut construction_requests: EventWriter<ConstructionMaterialRequest>,
     time: Res<Time>,
 ) {
@@ -397,11 +398,15 @@ pub fn monitor_construction_progress(
         }
 
         if !still_needed.is_empty() {
-            // Check if there are any active task sequences targeting this construction site
-            let has_active_tasks = active_sequences.iter().any(|sequence| {
-                // This is a simplified check - you might need to implement a more sophisticated
-                // way to track which sequences are targeting which construction sites
-                !sequence.is_complete()
+            let has_active_tasks = active_sequences.iter().any(|(sequence, _)| {
+                if sequence.is_complete() {
+                    return false;
+                }
+                sequence.tasks.iter().any(|&task_entity| {
+                    active_tasks
+                        .get(task_entity)
+                        .is_ok_and(|target| target.0 == site_entity)
+                })
             });
 
             if !has_active_tasks {
