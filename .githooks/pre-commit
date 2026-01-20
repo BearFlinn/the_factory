@@ -65,6 +65,19 @@ if [ -n "$STAGED_RS_FILES" ]; then
     if git diff --cached --diff-filter=ACM -- '*.rs' | grep -E '^\+.*(FIXME|XXX)' > /dev/null 2>&1; then
         echo -e "${YELLOW}NOTE: Found FIXME/XXX comments in staged changes.${NC}"
     fi
+
+    # Check for legacy/fallback code patterns (indicates incomplete refactor)
+    # This blocks comments suggesting old code is being kept "just in case"
+    LEGACY_PATTERNS='(legacy|fallback|backward.?compat|keep.?for.?now|just.?in.?case|old.?(system|code|impl|version|logic)|deprecated.?but|unused.?but|TODO:?.?remove|TODO:?.?delete|TODO:?.?clean|migrate.?later|temporary.?until|preserved.?for|retained.?for)'
+    if git diff --cached --diff-filter=ACM -- '*.rs' | grep -iE "^\+.*//.* $LEGACY_PATTERNS" > /dev/null 2>&1; then
+        echo -e "${RED}ERROR: Found legacy/fallback code comments in staged changes.${NC}"
+        echo "This indicates an incomplete refactor. Complete the refactor instead of keeping old code."
+        echo "Pattern matched: comments containing legacy, fallback, backward compat, 'just in case', etc."
+        echo ""
+        echo "Offending lines:"
+        git diff --cached --diff-filter=ACM -- '*.rs' | grep -iE "^\+.*//.* $LEGACY_PATTERNS" | head -10
+        exit 1
+    fi
 fi
 
 echo -e "\n${GREEN}All pre-commit checks passed!${NC}"

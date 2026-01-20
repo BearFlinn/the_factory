@@ -29,7 +29,7 @@ cargo deny check                         # Dependency security audit
 git config core.hooksPath .githooks
 ```
 
-Pre-commit hooks run fmt, clippy, and tests. Pre-push runs full test suite. Commits block on `dbg!()` macros.
+Pre-commit hooks run fmt, clippy, and tests. Pre-push runs full test suite. Commits block on `dbg!()` macros and legacy/fallback code comments.
 
 ## Architecture
 
@@ -93,7 +93,7 @@ Buildings are composed of components: `PowerConsumer`, `ComputeGenerator`, `Reci
 ## Git Hooks
 
 Pre-commit hooks enforce quality gates:
-- **pre-commit**: `cargo fmt --check`, `cargo clippy`, `cargo test`
+- **pre-commit**: `cargo fmt --check`, `cargo clippy`, `cargo test`, blocks `dbg!()`, blocks legacy/fallback comments
 - **commit-msg**: validates message format
 - **pre-push**: full test suite
 
@@ -150,6 +150,24 @@ Test modules have `#[allow(clippy::unwrap_used)]` for readability.
 - **debug**: internal details, state transitions
 - **trace**: verbose diagnostics (full payloads, timing)
 - Use structured fields: `info!(tool = %name, "executing tool")` not string interpolation
+
+# Refactoring Policy
+
+**Complete refactors fully. No hybrid states.**
+
+When refactoring or replacing a system:
+- **Remove the old code entirely** — don't leave it commented out or behind a flag
+- **No fallback logic** — if the new code breaks, it should break loudly
+- **No "just in case" preservation** — this codebase is small enough to revert via git if needed
+- **No migration scaffolding** — replace in place, don't layer new on old
+
+Comments like these are **FORBIDDEN** and will be blocked by pre-commit hooks:
+- `// legacy`, `// old system`, `// fallback`
+- `// keep for now`, `// just in case`
+- `// TODO: remove`, `// deprecated but kept`
+- `// backward compat`, `// preserved for`
+
+If you're uncertain about removing old code, **ask first** rather than keeping both systems. Hybrid states make the refactor impossible to test and validate.
 
 # Misc Notes
 - Testing is a first class operation, NEVER skip test implementation.
