@@ -8,6 +8,7 @@ use crate::{
 };
 use bevy::prelude::*;
 use noise::{NoiseFn, Perlin};
+use rand::{thread_rng, Rng};
 
 #[derive(Component)]
 pub struct ResourceNode;
@@ -127,7 +128,9 @@ impl OreNoise {
 
 impl Default for OreNoise {
     fn default() -> Self {
-        Self::new(42, OreNoiseConfig::default())
+        // TODO: Replace with WorldSeed resource when game saves are implemented
+        let seed = thread_rng().gen();
+        Self::new(seed, OreNoiseConfig::default())
     }
 }
 
