@@ -531,3 +531,151 @@ pub fn handle_building_view_range_expansion(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recipe_commitment_new_committed_with_recipe() {
+        let commitment = RecipeCommitment::new_committed(Some("iron_ingot".to_string()));
+
+        assert_eq!(commitment.committed_recipe, Some("iron_ingot".to_string()));
+        assert_eq!(commitment.pending_recipe, None);
+        assert!(commitment.in_transit_items.is_empty());
+    }
+
+    #[test]
+    fn recipe_commitment_new_committed_without_recipe() {
+        let commitment = RecipeCommitment::new_committed(None);
+
+        assert_eq!(commitment.committed_recipe, None);
+        assert_eq!(commitment.pending_recipe, None);
+        assert!(commitment.in_transit_items.is_empty());
+    }
+
+    #[test]
+    fn recipe_commitment_has_pending_items_true_when_items_present() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 10);
+
+        assert!(commitment.has_pending_items());
+    }
+
+    #[test]
+    fn recipe_commitment_has_pending_items_false_when_empty() {
+        let commitment = RecipeCommitment::default();
+
+        assert!(!commitment.has_pending_items());
+    }
+
+    #[test]
+    fn recipe_commitment_can_commit_new_recipe_true_when_empty() {
+        let commitment = RecipeCommitment::default();
+
+        assert!(commitment.can_commit_new_recipe());
+    }
+
+    #[test]
+    fn recipe_commitment_can_commit_new_recipe_false_when_items_in_transit() {
+        let mut commitment = RecipeCommitment::default();
+        commitment.in_transit_items.insert("coal".to_string(), 5);
+
+        assert!(!commitment.can_commit_new_recipe());
+    }
+
+    #[test]
+    fn recipe_commitment_add_in_transit_accumulates_items() {
+        let mut commitment = RecipeCommitment::default();
+        let mut items = HashMap::new();
+        items.insert("iron_ore".to_string(), 10);
+        items.insert("coal".to_string(), 5);
+
+        commitment.add_in_transit(&items);
+
+        assert_eq!(commitment.in_transit_items.get("iron_ore"), Some(&10));
+        assert_eq!(commitment.in_transit_items.get("coal"), Some(&5));
+    }
+
+    #[test]
+    fn recipe_commitment_add_in_transit_accumulates_to_existing() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 5);
+
+        let mut items = HashMap::new();
+        items.insert("iron_ore".to_string(), 10);
+
+        commitment.add_in_transit(&items);
+
+        assert_eq!(commitment.in_transit_items.get("iron_ore"), Some(&15));
+    }
+
+    #[test]
+    fn recipe_commitment_remove_in_transit_decrements_items() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 20);
+        commitment.in_transit_items.insert("coal".to_string(), 10);
+
+        let mut items = HashMap::new();
+        items.insert("iron_ore".to_string(), 5);
+        items.insert("coal".to_string(), 3);
+
+        commitment.remove_in_transit(&items);
+
+        assert_eq!(commitment.in_transit_items.get("iron_ore"), Some(&15));
+        assert_eq!(commitment.in_transit_items.get("coal"), Some(&7));
+    }
+
+    #[test]
+    fn recipe_commitment_remove_in_transit_removes_when_zero() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 10);
+
+        let mut items = HashMap::new();
+        items.insert("iron_ore".to_string(), 10);
+
+        commitment.remove_in_transit(&items);
+
+        assert!(!commitment.in_transit_items.contains_key("iron_ore"));
+    }
+
+    #[test]
+    fn recipe_commitment_remove_in_transit_saturating_sub_prevents_underflow() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 5);
+
+        let mut items = HashMap::new();
+        items.insert("iron_ore".to_string(), 20);
+
+        commitment.remove_in_transit(&items);
+
+        assert!(!commitment.in_transit_items.contains_key("iron_ore"));
+    }
+
+    #[test]
+    fn recipe_commitment_remove_in_transit_ignores_unknown_items() {
+        let mut commitment = RecipeCommitment::default();
+        commitment
+            .in_transit_items
+            .insert("iron_ore".to_string(), 10);
+
+        let mut items = HashMap::new();
+        items.insert("copper_ore".to_string(), 5);
+
+        commitment.remove_in_transit(&items);
+
+        assert_eq!(commitment.in_transit_items.get("iron_ore"), Some(&10));
+        assert!(!commitment.in_transit_items.contains_key("copper_ore"));
+    }
+}

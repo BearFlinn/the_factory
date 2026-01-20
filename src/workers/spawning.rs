@@ -65,3 +65,45 @@ impl WorkerBundle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assigned_sequence_is_idle_returns_true_when_none() {
+        let sequence = AssignedSequence(None);
+
+        assert!(sequence.is_idle());
+    }
+
+    #[test]
+    fn assigned_sequence_is_idle_returns_false_when_some() {
+        let sequence = AssignedSequence(Some(Entity::from_raw(1)));
+
+        assert!(!sequence.is_idle());
+    }
+
+    #[test]
+    fn assigned_sequence_is_working_returns_true_when_some() {
+        let sequence = AssignedSequence(Some(Entity::from_raw(42)));
+
+        assert!(sequence.is_working());
+    }
+
+    #[test]
+    fn assigned_sequence_is_working_returns_false_when_none() {
+        let sequence = AssignedSequence(None);
+
+        assert!(!sequence.is_working());
+    }
+
+    #[test]
+    fn is_idle_and_is_working_are_mutually_exclusive() {
+        let idle_sequence = AssignedSequence(None);
+        let working_sequence = AssignedSequence(Some(Entity::from_raw(1)));
+
+        assert!(idle_sequence.is_idle() && !idle_sequence.is_working());
+        assert!(!working_sequence.is_idle() && working_sequence.is_working());
+    }
+}
