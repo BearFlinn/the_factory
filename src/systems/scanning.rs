@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use bevy::prelude::*;
 
@@ -9,11 +9,13 @@ use crate::{
 
 #[derive(Component)]
 pub struct Scanner {
-    pub base_scan_interval: f32, // Base time to scan adjacent tiles
+    pub base_scan_interval: f32,
     pub scan_timer: Timer,
     pub position: Position,
-    pub last_scan_angle: f32,         // Track progress around perimeter
-    pub current_target_distance: i32, // Distance to current scan target
+    pub last_scan_angle: f32,
+    pub current_target_distance: i32,
+    pub sector_size: i32,   // Grid spacing for sector centers (e.g., 5)
+    pub reveal_radius: i32, // Tiles to reveal around sector center (1 = 3x3, 2 = 5x5)
 }
 
 impl Scanner {
@@ -22,8 +24,10 @@ impl Scanner {
             base_scan_interval,
             scan_timer: Timer::from_seconds(base_scan_interval, TimerMode::Once),
             position,
-            last_scan_angle: 0.0,       // Start from north
-            current_target_distance: 1, // Start with adjacent tiles
+            last_scan_angle: 0.0,
+            current_target_distance: 1,
+            sector_size: 5,
+            reveal_radius: 1, // 3x3 reveal
         }
     }
 
@@ -52,37 +56,68 @@ impl Scanner {
         }
     }
 
+    /// Convert a world coordinate to its sector center
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    fn to_sector_center(&self, x: i32, y: i32) -> (i32, i32) {
+        let sector_x = ((x as f32 / self.sector_size as f32).round() as i32) * self.sector_size;
+        let sector_y = ((y as f32 / self.sector_size as f32).round() as i32) * self.sector_size;
+        (sector_x, sector_y)
+    }
+
+    /// Check if a sector has any explored tiles
+    fn is_sector_explored(&self, sector_x: i32, sector_y: i32, grid: &Grid) -> bool {
+        let half = self.sector_size / 2;
+        for dy in -half..=half {
+            for dx in -half..=half {
+                if grid
+                    .valid_coordinates
+                    .contains(&(sector_x + dx, sector_y + dy))
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn find_exploration_targets(&self, grid: &Grid) -> Vec<(i32, i32, i32, f32)> {
-        // Use HashMap to deduplicate by (x, y) - keeping the entry with minimum distance
-        let mut target_map: HashMap<(i32, i32), (i32, f32)> = HashMap::new();
-
+        // Find all explored sectors
+        let mut explored_sectors: HashSet<(i32, i32)> = HashSet::new();
         for &(x, y) in &grid.valid_coordinates {
-            let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
-            for (nx, ny) in neighbors {
-                let neighbor_distance = (nx - self.position.x)
-                    .abs()
-                    .max((ny - self.position.y).abs());
+            explored_sectors.insert(self.to_sector_center(x, y));
+        }
 
-                if !grid.valid_coordinates.contains(&(nx, ny)) {
-                    let angle = self.calculate_angle(nx, ny);
-                    target_map
-                        .entry((nx, ny))
-                        .and_modify(|(existing_dist, _)| {
-                            if neighbor_distance < *existing_dist {
-                                *existing_dist = neighbor_distance;
-                            }
-                        })
-                        .or_insert((neighbor_distance, angle));
+        // Find unexplored sectors adjacent to explored ones
+        let mut candidate_sectors: HashSet<(i32, i32)> = HashSet::new();
+        for &(sx, sy) in &explored_sectors {
+            let neighbors = [
+                (sx + self.sector_size, sy),
+                (sx - self.sector_size, sy),
+                (sx, sy + self.sector_size),
+                (sx, sy - self.sector_size),
+                (sx + self.sector_size, sy + self.sector_size),
+                (sx - self.sector_size, sy + self.sector_size),
+                (sx + self.sector_size, sy - self.sector_size),
+                (sx - self.sector_size, sy - self.sector_size),
+            ];
+            for (nx, ny) in neighbors {
+                if !self.is_sector_explored(nx, ny, grid) {
+                    candidate_sectors.insert((nx, ny));
                 }
             }
         }
 
-        let mut targets: Vec<(i32, i32, i32, f32)> = target_map
+        // Convert to target format with distance and angle
+        let mut targets: Vec<(i32, i32, i32, f32)> = candidate_sectors
             .into_iter()
-            .map(|((x, y), (dist, angle))| (x, y, dist, angle))
+            .map(|(x, y)| {
+                let distance = (x - self.position.x).abs().max((y - self.position.y).abs());
+                let angle = self.calculate_angle(x, y);
+                (x, y, distance, angle)
+            })
             .collect();
 
-        // Sort by distance first, then clockwise by angle within each distance band
+        // Sort by distance first, then clockwise by angle
         targets.sort_by(|a, b| {
             let distance_cmp = a.2.cmp(&b.2);
             if distance_cmp != std::cmp::Ordering::Equal {
@@ -125,12 +160,10 @@ impl Scanner {
         self.last_scan_angle = angle;
 
         let mut cluster = Vec::new();
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                let cluster_x = target_x + dx;
-                let cluster_y = target_y + dy;
-
-                cluster.push((cluster_x, cluster_y));
+        let r = self.reveal_radius;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                cluster.push((target_x + dx, target_y + dy));
             }
         }
 
@@ -375,43 +408,87 @@ mod tests {
     }
 
     #[test]
-    fn find_exploration_targets_deduplicates_by_coordinates() {
+    fn to_sector_center_rounds_to_nearest_sector() {
         let scanner = create_scanner_at_origin(1.0);
-        // Create an L-shaped explored area where (1, 0) is adjacent to multiple explored tiles
-        // Both (0, 0) and (1, 1) have (1, 0) as a neighbor
-        let grid = create_grid_with_coordinates(&[(0, 0), (0, 1), (1, 1)]);
+
+        // With sector_size=5, coordinates round to nearest multiple of 5
+        assert_eq!(scanner.to_sector_center(0, 0), (0, 0));
+        assert_eq!(scanner.to_sector_center(2, 2), (0, 0));
+        assert_eq!(scanner.to_sector_center(3, 3), (5, 5));
+        assert_eq!(scanner.to_sector_center(-2, -2), (0, 0));
+        assert_eq!(scanner.to_sector_center(-3, -3), (-5, -5));
+        assert_eq!(scanner.to_sector_center(7, 8), (5, 10));
+    }
+
+    #[test]
+    fn find_exploration_targets_returns_sector_centers() {
+        let scanner = create_scanner_at_origin(1.0);
+        // Explore the origin sector
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
 
         let targets = scanner.find_exploration_targets(&grid);
 
-        // Count how many times (1, 0) appears - should be exactly once
-        let count_1_0 = targets
-            .iter()
-            .filter(|(x, y, _, _)| *x == 1 && *y == 0)
-            .count();
+        // All targets should be on the sector grid (multiples of 5)
+        for (x, y, _, _) in &targets {
+            assert_eq!(
+                x % scanner.sector_size,
+                0,
+                "Target x={x} should be multiple of sector_size"
+            );
+            assert_eq!(
+                y % scanner.sector_size,
+                0,
+                "Target y={y} should be multiple of sector_size"
+            );
+        }
+    }
+
+    #[test]
+    fn find_exploration_targets_finds_adjacent_unexplored_sectors() {
+        let scanner = create_scanner_at_origin(1.0);
+        // Explore the origin sector
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
+
+        let targets = scanner.find_exploration_targets(&grid);
+
+        // Should find 8 adjacent sectors (including diagonals)
         assert_eq!(
-            count_1_0, 1,
-            "(1, 0) should appear exactly once, found {count_1_0}"
+            targets.len(),
+            8,
+            "Should find 8 adjacent unexplored sectors"
         );
 
-        // All coordinates should be unique
-        let unique_coords: std::collections::HashSet<(i32, i32)> =
+        // Check that the expected sectors are present
+        let target_coords: std::collections::HashSet<(i32, i32)> =
             targets.iter().map(|(x, y, _, _)| (*x, *y)).collect();
-        assert_eq!(
-            unique_coords.len(),
-            targets.len(),
-            "All coordinates should be unique"
-        );
+
+        let expected = [
+            (5, 0),
+            (-5, 0),
+            (0, 5),
+            (0, -5),
+            (5, 5),
+            (-5, 5),
+            (5, -5),
+            (-5, -5),
+        ];
+        for (ex, ey) in expected {
+            assert!(
+                target_coords.contains(&(ex, ey)),
+                "Should contain sector ({ex}, {ey})"
+            );
+        }
     }
 
     #[test]
     fn find_exploration_targets_sorts_by_distance_then_angle() {
         let mut scanner = create_scanner_at_origin(1.0);
-        scanner.last_scan_angle = 0.0; // Start at north
+        scanner.last_scan_angle = 0.0;
 
         let grid = create_grid_with_coordinates(&[(0, 0)]);
         let targets = scanner.find_exploration_targets(&grid);
 
-        // Verify targets are sorted by distance first, then by angle within each distance
+        // Verify sorting: distance first, then angle
         for i in 1..targets.len() {
             let (_, _, dist_prev, angle_prev) = targets[i - 1];
             let (_, _, dist_curr, angle_curr) = targets[i];
@@ -421,54 +498,65 @@ mod tests {
                 let angle_diff_curr = scanner.calculate_angle_diff(angle_curr);
                 assert!(
                     angle_diff_curr >= angle_diff_prev - 0.001,
-                    "Within same distance, targets should be sorted by angle: angle_diff at {} ({}) should be >= angle_diff at {} ({})",
-                    i, angle_diff_curr, i - 1, angle_diff_prev
+                    "Within same distance, sectors should be sorted by angle"
                 );
             } else {
                 assert!(
                     dist_curr >= dist_prev,
-                    "Targets should be sorted by distance first: distance at {} ({}) should be >= distance at {} ({})",
-                    i, dist_curr, i - 1, dist_prev
+                    "Sectors should be sorted by distance first"
                 );
             }
         }
     }
 
     #[test]
-    fn find_exploration_targets_sweeps_clockwise_within_distance_band() {
-        let mut scanner = Scanner::new(1.0, Position { x: 0, y: 0 });
-        scanner.last_scan_angle = 0.0; // Looking north
+    fn find_next_cluster_reveals_correct_area() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.reveal_radius = 1; // 3x3 reveal
 
-        // Create a ring of explored tiles around the scanner
-        // This creates unexplored targets at distance 2 in all directions
-        let grid = create_grid_with_coordinates(&[
-            (0, 0),
-            (1, 0),
-            (-1, 0),
-            (0, 1),
-            (0, -1),
-            (1, 1),
-            (-1, 1),
-            (1, -1),
-            (-1, -1),
-        ]);
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
 
-        let targets = scanner.find_exploration_targets(&grid);
+        let (cluster, _) = scanner.find_next_cluster(&grid).unwrap();
 
-        // Get all targets at distance 2 (the outer ring)
-        let dist_2_targets: Vec<_> = targets
-            .iter()
-            .filter(|(_, _, dist, _)| *dist == 2)
-            .collect();
+        // Should reveal 3x3 = 9 tiles
+        assert_eq!(cluster.len(), 9, "Should reveal 3x3 area");
+    }
 
-        // Verify they're sorted clockwise (by angle from north)
-        for i in 1..dist_2_targets.len() {
-            let angle_diff_prev = scanner.calculate_angle_diff(dist_2_targets[i - 1].3);
-            let angle_diff_curr = scanner.calculate_angle_diff(dist_2_targets[i].3);
-            assert!(
-                angle_diff_curr >= angle_diff_prev - 0.001,
-                "Within distance band, targets should sweep clockwise"
-            );
+    #[test]
+    fn find_next_cluster_respects_reveal_radius() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.reveal_radius = 2; // 5x5 reveal
+
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
+
+        let (cluster, _) = scanner.find_next_cluster(&grid).unwrap();
+
+        // Should reveal 5x5 = 25 tiles
+        assert_eq!(cluster.len(), 25, "Should reveal 5x5 area with radius=2");
+    }
+
+    #[test]
+    fn sector_exploration_reduces_overlap() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        let mut grid = create_grid_with_coordinates(&[(0, 0)]);
+
+        // Simulate two consecutive scans
+        let (cluster1, _) = scanner.find_next_cluster(&grid).unwrap();
+        for (x, y) in &cluster1 {
+            grid.add_coordinate(*x, *y);
         }
+
+        let (cluster2, _) = scanner.find_next_cluster(&grid).unwrap();
+
+        // With sector_size=5 and reveal_radius=1, clusters should not overlap
+        let set1: std::collections::HashSet<_> = cluster1.into_iter().collect();
+        let set2: std::collections::HashSet<_> = cluster2.into_iter().collect();
+        let overlap: Vec<_> = set1.intersection(&set2).collect();
+
+        assert!(
+            overlap.is_empty(),
+            "Consecutive sector scans should not overlap, but found {} overlapping tiles",
+            overlap.len()
+        );
     }
 }
