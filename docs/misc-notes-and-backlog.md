@@ -10,37 +10,13 @@ Lower priority items to revisit after the inventory/production refactor is compl
 
 **Location**: `src/systems/scanning.rs`
 
-The scanner reveals unexplored tiles in a clockwise pattern, prioritizing closer tiles.
+The scanner reveals unexplored tiles in a true clockwise sweep pattern, prioritizing angle over distance. This creates a natural radar-like sweep where the scanner completes a full rotation before moving outward.
 
-### Issues Identified
+### Resolved Issues
 
-**Not Pure Clockwise Sweep**
+~~**Not Pure Clockwise Sweep**~~ - Fixed by sorting by angle first, then distance as tiebreaker.
 
-`find_exploration_targets` sorts by distance first, THEN by angle:
-```rust
-targets.sort_by(|a, b| {
-    let distance_cmp = a.2.cmp(&b.2);  // Primary: distance
-    if distance_cmp != std::cmp::Ordering::Equal {
-        return distance_cmp;
-    }
-    // Secondary: angle progression
-    ...
-});
-```
-
-This means it always finishes ALL tiles at distance N before moving to distance N+1. Within a distance band, clockwise ordering works. But with irregular explored areas, it jumps around rather than completing a consistent sweep at each distance.
-
-**Potential Desired Behavior**: True clockwise sweep that completes a full rotation before moving outward, regardless of exact distance to each tile.
-
-**`dedup()` May Not Work as Intended**
-
-The code calls `targets.dedup()` after sorting, but `dedup()` only removes *adjacent* duplicates. The same `(x, y)` coordinate could appear multiple times with different angles (because it's adjacent to multiple explored tiles). If these aren't adjacent after sorting, duplicates survive.
-
-**Fix**: Deduplicate by `(x, y)` before sorting, or use a HashSet.
-
-### Priority
-
-**Low** - The scanning system is functional enough to be playable. These are polish issues that don't block the core gameplay loop.
+~~**`dedup()` May Not Work as Intended**~~ - Fixed by using a `HashMap` to deduplicate by `(x, y)` coordinates before sorting.
 
 ---
 

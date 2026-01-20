@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use crate::{
@@ -51,7 +53,8 @@ impl Scanner {
     }
 
     fn find_exploration_targets(&self, grid: &Grid) -> Vec<(i32, i32, i32, f32)> {
-        let mut targets = Vec::new();
+        // Use HashMap to deduplicate by (x, y) - keeping the entry with minimum distance
+        let mut target_map: HashMap<(i32, i32), (i32, f32)> = HashMap::new();
 
         for &(x, y) in &grid.valid_coordinates {
             let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
@@ -62,24 +65,37 @@ impl Scanner {
 
                 if !grid.valid_coordinates.contains(&(nx, ny)) {
                     let angle = self.calculate_angle(nx, ny);
-                    targets.push((nx, ny, neighbor_distance, angle));
+                    target_map
+                        .entry((nx, ny))
+                        .and_modify(|(existing_dist, _)| {
+                            if neighbor_distance < *existing_dist {
+                                *existing_dist = neighbor_distance;
+                            }
+                        })
+                        .or_insert((neighbor_distance, angle));
                 }
             }
         }
 
-        targets.sort_by(|a, b| {
-            let distance_cmp = a.2.cmp(&b.2);
-            if distance_cmp != std::cmp::Ordering::Equal {
-                return distance_cmp;
-            }
+        let mut targets: Vec<(i32, i32, i32, f32)> = target_map
+            .into_iter()
+            .map(|((x, y), (dist, angle))| (x, y, dist, angle))
+            .collect();
 
+        // Sort by angle first (true clockwise sweep), then by distance as tiebreaker
+        targets.sort_by(|a, b| {
             let angle_diff_a = self.calculate_angle_diff(a.3);
             let angle_diff_b = self.calculate_angle_diff(b.3);
-            angle_diff_a
+
+            let angle_cmp = angle_diff_a
                 .partial_cmp(&angle_diff_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .unwrap_or(std::cmp::Ordering::Equal);
+            if angle_cmp != std::cmp::Ordering::Equal {
+                return angle_cmp;
+            }
+
+            a.2.cmp(&b.2)
         });
-        targets.dedup();
 
         targets
     }
@@ -348,6 +364,119 @@ mod tests {
         assert!(
             (scanner.scan_timer.duration().as_secs_f32() - 10.0).abs() < 0.01,
             "Timer duration should be 10.0"
+        );
+    }
+
+    fn create_grid_with_coordinates(coords: &[(i32, i32)]) -> Grid {
+        let mut grid = Grid::new(1.0);
+        for &(x, y) in coords {
+            grid.add_coordinate(x, y);
+        }
+        grid
+    }
+
+    #[test]
+    fn find_exploration_targets_deduplicates_by_coordinates() {
+        let scanner = create_scanner_at_origin(1.0);
+        // Create an L-shaped explored area where (1, 0) is adjacent to multiple explored tiles
+        // Both (0, 0) and (1, 1) have (1, 0) as a neighbor
+        let grid = create_grid_with_coordinates(&[(0, 0), (0, 1), (1, 1)]);
+
+        let targets = scanner.find_exploration_targets(&grid);
+
+        // Count how many times (1, 0) appears - should be exactly once
+        let count_1_0 = targets
+            .iter()
+            .filter(|(x, y, _, _)| *x == 1 && *y == 0)
+            .count();
+        assert_eq!(
+            count_1_0, 1,
+            "(1, 0) should appear exactly once, found {count_1_0}"
+        );
+
+        // All coordinates should be unique
+        let unique_coords: std::collections::HashSet<(i32, i32)> =
+            targets.iter().map(|(x, y, _, _)| (*x, *y)).collect();
+        assert_eq!(
+            unique_coords.len(),
+            targets.len(),
+            "All coordinates should be unique"
+        );
+    }
+
+    #[test]
+    fn find_exploration_targets_sorts_by_angle_first() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.last_scan_angle = 0.0; // Start at north
+
+        // Create a small cross pattern centered at origin
+        // This creates targets at various angles and distances
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
+
+        let targets = scanner.find_exploration_targets(&grid);
+
+        // Verify targets are sorted by angle first
+        // With scanner at origin looking north, the first targets should be
+        // those closest to north (angle 0), regardless of distance
+        for i in 1..targets.len() {
+            let angle_diff_prev = scanner.calculate_angle_diff(targets[i - 1].3);
+            let angle_diff_curr = scanner.calculate_angle_diff(targets[i].3);
+
+            // If angles are different, current should be >= previous
+            // If angles are equal, distance should be >= previous
+            if (angle_diff_prev - angle_diff_curr).abs() > 0.001 {
+                assert!(
+                    angle_diff_curr >= angle_diff_prev,
+                    "Targets should be sorted by angle first: angle at {} ({}) should be >= angle at {} ({})",
+                    i, angle_diff_curr, i - 1, angle_diff_prev
+                );
+            } else {
+                assert!(
+                    targets[i].2 >= targets[i - 1].2,
+                    "When angles are equal, targets should be sorted by distance: distance at {} ({}) should be >= distance at {} ({})",
+                    i, targets[i].2, i - 1, targets[i - 1].2
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn find_exploration_targets_prefers_closer_angle_over_closer_distance() {
+        let mut scanner = Scanner::new(1.0, Position { x: 0, y: 0 });
+        scanner.last_scan_angle = 0.0; // Looking north
+
+        // Create grid where there's a target at distance 1 to the south (angle PI)
+        // and a target at distance 2 to the north (angle 0)
+        // Old behavior: would pick south (distance 1) first
+        // New behavior: should pick north (angle 0) first
+        let grid = create_grid_with_coordinates(&[
+            (0, 0),  // origin
+            (0, -1), // south neighbor (creates target at (0, -2))
+            (0, 1),  // north neighbor (creates target at (0, 2))
+        ]);
+
+        let targets = scanner.find_exploration_targets(&grid);
+
+        // Find targets at (0, 2) and (0, -2)
+        let north_target = targets.iter().find(|(x, y, _, _)| *x == 0 && *y == 2);
+        let south_target = targets.iter().find(|(x, y, _, _)| *x == 0 && *y == -2);
+
+        assert!(north_target.is_some(), "Should find north target (0, 2)");
+        assert!(south_target.is_some(), "Should find south target (0, -2)");
+
+        // The north target (angle ~0) should come before south target (angle ~PI)
+        let north_idx = targets
+            .iter()
+            .position(|(x, y, _, _)| *x == 0 && *y == 2)
+            .unwrap();
+        let south_idx = targets
+            .iter()
+            .position(|(x, y, _, _)| *x == 0 && *y == -2)
+            .unwrap();
+
+        assert!(
+            north_idx < south_idx,
+            "North target (angle 0) should come before south target (angle PI), but north_idx={north_idx}, south_idx={south_idx}"
         );
     }
 }
