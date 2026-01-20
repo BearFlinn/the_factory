@@ -40,7 +40,7 @@ pub trait InventoryAccess {
     }
 
     fn is_full(&self) -> bool {
-        self.get_total_quantity() == self.capacity()
+        self.get_total_quantity() >= self.capacity()
     }
 
     fn is_empty(&self) -> bool {
@@ -584,5 +584,26 @@ mod tests {
     fn test_transfer_error_display_destination_full() {
         let error = TransferError::DestinationFull;
         assert_eq!(format!("{error}"), "Destination storage full!");
+    }
+
+    #[test]
+    fn test_is_full_under_capacity() {
+        let mut storage = StoragePort::new(100);
+        storage.add_item("iron", 50);
+        assert!(!storage.is_full());
+    }
+
+    #[test]
+    fn test_is_full_at_capacity() {
+        let mut storage = StoragePort::new(100);
+        storage.add_item("iron", 100);
+        assert!(storage.is_full());
+    }
+
+    #[test]
+    fn test_is_full_over_capacity() {
+        let mut storage = StoragePort::new(100);
+        storage.add_item("iron", 101);
+        assert!(storage.is_full());
     }
 }
