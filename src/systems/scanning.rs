@@ -62,48 +62,42 @@ impl Scanner {
         (sector_x, sector_y)
     }
 
-    /// Check if a sector has any explored tiles
-    fn is_sector_explored(&self, sector_x: i32, sector_y: i32, grid: &Grid) -> bool {
+    /// Check if a sector is fully explored (all tiles revealed)
+    fn is_sector_fully_explored(&self, sector_x: i32, sector_y: i32, grid: &Grid) -> bool {
         let half = self.sector_size / 2;
         for dy in -half..=half {
             for dx in -half..=half {
-                if grid
+                if !grid
                     .valid_coordinates
                     .contains(&(sector_x + dx, sector_y + dy))
                 {
-                    return true;
+                    return false;
                 }
             }
         }
-        false
+        true
     }
 
     fn find_exploration_targets(&self, grid: &Grid) -> Vec<(i32, i32, i32, f32)> {
-        // Find all explored sectors
-        let mut explored_sectors: HashSet<(i32, i32)> = HashSet::new();
-        for &(x, y) in &grid.valid_coordinates {
-            explored_sectors.insert(self.to_sector_center(x, y));
-        }
-
-        // Find unexplored sectors adjacent to explored ones
+        // Find sectors containing unexplored tiles adjacent to explored tiles
         let mut candidate_sectors: HashSet<(i32, i32)> = HashSet::new();
-        for &(sx, sy) in &explored_sectors {
-            let neighbors = [
-                (sx + self.sector_size, sy),
-                (sx - self.sector_size, sy),
-                (sx, sy + self.sector_size),
-                (sx, sy - self.sector_size),
-                (sx + self.sector_size, sy + self.sector_size),
-                (sx - self.sector_size, sy + self.sector_size),
-                (sx + self.sector_size, sy - self.sector_size),
-                (sx - self.sector_size, sy - self.sector_size),
-            ];
+
+        for &(x, y) in &grid.valid_coordinates {
+            let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
             for (nx, ny) in neighbors {
-                if !self.is_sector_explored(nx, ny, grid) {
-                    candidate_sectors.insert((nx, ny));
+                if !grid.valid_coordinates.contains(&(nx, ny)) {
+                    // Found an unexplored tile adjacent to explored area
+                    // Add its sector as a candidate
+                    candidate_sectors.insert(self.to_sector_center(nx, ny));
                 }
             }
         }
+
+        // Filter out fully explored sectors
+        let candidate_sectors: HashSet<_> = candidate_sectors
+            .into_iter()
+            .filter(|&(sx, sy)| !self.is_sector_fully_explored(sx, sy, grid))
+            .collect();
 
         // Convert to target format with distance and angle
         let mut targets: Vec<(i32, i32, i32, f32)> = candidate_sectors
@@ -442,40 +436,52 @@ mod tests {
     }
 
     #[test]
-    fn find_exploration_targets_finds_adjacent_unexplored_sectors() {
+    fn find_exploration_targets_finds_sectors_with_unexplored_tiles() {
         let scanner = create_scanner_at_origin(1.0);
-        // Explore the origin sector
+        // Explore just one tile - its neighbors are unexplored
         let grid = create_grid_with_coordinates(&[(0, 0)]);
 
         let targets = scanner.find_exploration_targets(&grid);
 
-        // Should find 8 adjacent sectors (including diagonals)
-        assert_eq!(
-            targets.len(),
-            8,
-            "Should find 8 adjacent unexplored sectors"
+        // With just (0,0) explored, unexplored neighbors (1,0), (-1,0), etc.
+        // all belong to sector (0,0), so we find that sector
+        assert!(
+            !targets.is_empty(),
+            "Should find at least one sector with unexplored tiles"
         );
 
-        // Check that the expected sectors are present
+        // The sector containing unexplored neighbors should be (0,0)
+        let target_coords: std::collections::HashSet<(i32, i32)> =
+            targets.iter().map(|(x, y, _, _)| (*x, *y)).collect();
+        assert!(
+            target_coords.contains(&(0, 0)),
+            "Should find sector (0, 0) which has unexplored tiles"
+        );
+    }
+
+    #[test]
+    fn find_exploration_targets_finds_adjacent_sectors_when_current_full() {
+        let scanner = create_scanner_at_origin(1.0);
+        // Fully explore the origin sector (5x5 area centered at 0,0)
+        let mut coords = Vec::new();
+        for y in -2..=2 {
+            for x in -2..=2 {
+                coords.push((x, y));
+            }
+        }
+        let grid = create_grid_with_coordinates(&coords);
+
+        let targets = scanner.find_exploration_targets(&grid);
+
+        // Now adjacent sectors should be found
         let target_coords: std::collections::HashSet<(i32, i32)> =
             targets.iter().map(|(x, y, _, _)| (*x, *y)).collect();
 
-        let expected = [
-            (5, 0),
-            (-5, 0),
-            (0, 5),
-            (0, -5),
-            (5, 5),
-            (-5, 5),
-            (5, -5),
-            (-5, -5),
-        ];
-        for (ex, ey) in expected {
-            assert!(
-                target_coords.contains(&(ex, ey)),
-                "Should contain sector ({ex}, {ey})"
-            );
-        }
+        // Should find sectors at distance 5 (adjacent to the filled sector)
+        assert!(
+            target_coords.contains(&(5, 0)) || target_coords.contains(&(0, 5)),
+            "Should find adjacent sectors when current sector is full"
+        );
     }
 
     #[test]
