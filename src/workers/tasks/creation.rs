@@ -627,7 +627,7 @@ pub struct ProactiveTaskTimer {
 impl Default for ProactiveTaskTimer {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(2.0, TimerMode::Repeating),
+            timer: Timer::from_seconds(0.5, TimerMode::Repeating),
         }
     }
 }
