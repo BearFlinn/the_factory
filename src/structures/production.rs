@@ -3,7 +3,7 @@ use crate::{
         items::{InputPort, InventoryAccess, OutputPort, StoragePort},
         ItemName, RecipeRegistry,
     },
-    structures::RecipeCrafter,
+    structures::{RecipeCommitment, RecipeCrafter},
     systems::Operational,
     workers::tasks::{Task, TaskTarget},
 };
@@ -175,9 +175,23 @@ pub fn poll_port_logistics(
     // Buildings with only OutputPort (sources)
     source_ports: Query<(Entity, &OutputPort), Without<InputPort>>,
     // Buildings with only InputPort (sinks)
-    sink_ports: Query<(Entity, &InputPort, Option<&RecipeCrafter>), Without<OutputPort>>,
+    sink_ports: Query<
+        (
+            Entity,
+            &InputPort,
+            Option<&RecipeCrafter>,
+            Option<&RecipeCommitment>,
+        ),
+        Without<OutputPort>,
+    >,
     // Buildings with both ports (processors)
-    processor_ports: Query<(Entity, &InputPort, &OutputPort, Option<&RecipeCrafter>)>,
+    processor_ports: Query<(
+        Entity,
+        &InputPort,
+        &OutputPort,
+        Option<&RecipeCrafter>,
+        Option<&RecipeCommitment>,
+    )>,
     // Storage buildings
     storage_ports: Query<(Entity, &StoragePort)>,
     // Check existing tasks to avoid duplicates
@@ -208,7 +222,7 @@ pub fn poll_port_logistics(
         }
     }
 
-    for (entity, _, output_port, _) in &processor_ports {
+    for (entity, _, output_port, _, _) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
@@ -224,7 +238,7 @@ pub fn poll_port_logistics(
         }
     }
 
-    for (entity, input_port, maybe_crafter) in &sink_ports {
+    for (entity, input_port, maybe_crafter, maybe_commitment) in &sink_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
@@ -232,12 +246,13 @@ pub fn poll_port_logistics(
             entity,
             input_port,
             maybe_crafter,
+            maybe_commitment,
             &recipe_registry,
             &mut events,
         );
     }
 
-    for (entity, input_port, _, maybe_crafter) in &processor_ports {
+    for (entity, input_port, _, maybe_crafter, maybe_commitment) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
@@ -245,6 +260,7 @@ pub fn poll_port_logistics(
             entity,
             input_port,
             maybe_crafter,
+            maybe_commitment,
             &recipe_registry,
             &mut events,
         );
@@ -272,15 +288,26 @@ fn emit_input_port_requests(
     entity: Entity,
     input_port: &InputPort,
     maybe_crafter: Option<&RecipeCrafter>,
+    maybe_commitment: Option<&RecipeCommitment>,
     recipe_registry: &RecipeRegistry,
     events: &mut EventWriter<PortLogisticsRequest>,
 ) {
     let Some(crafter) = maybe_crafter else {
         return;
     };
-    let Some(recipe_name) = crafter.get_active_recipe() else {
-        return;
+
+    let recipe_name = if let Some(commitment) = maybe_commitment {
+        match &commitment.committed_recipe {
+            Some(recipe) => recipe,
+            None => return,
+        }
+    } else {
+        match crafter.get_active_recipe() {
+            Some(recipe) => recipe,
+            None => return,
+        }
     };
+
     let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
         return;
     };
@@ -296,10 +323,14 @@ fn emit_input_port_requests(
 
     for (item_name, &recipe_quantity) in &recipe.inputs {
         let current = input_port.get_item_quantity(item_name);
-        let target = recipe_quantity * 10; // Buffer 10x recipe amount
+        let in_transit = maybe_commitment
+            .and_then(|c| c.in_transit_items.get(item_name).copied())
+            .unwrap_or(0);
+        let target = recipe_quantity * 10;
 
-        if current < target {
-            let deficit = target - current;
+        let effective_amount = current.saturating_add(in_transit);
+        if effective_amount < target {
+            let deficit = target.saturating_sub(effective_amount);
             let feasible = deficit.min(available_space.saturating_sub(total_requested));
 
             if feasible > 0 {

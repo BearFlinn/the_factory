@@ -27,8 +27,53 @@ pub struct ViewRange {
 #[derive(Component, Debug)]
 pub struct RecipeCrafter {
     pub timer: Timer,
-    pub current_recipe: Option<RecipeName>, // Currently selected recipe
-    pub available_recipes: Vec<RecipeName>, // Available recipes (empty for single-recipe buildings)
+    pub current_recipe: Option<RecipeName>,
+    pub available_recipes: Vec<RecipeName>,
+}
+
+#[derive(Component, Debug, Default, Clone)]
+pub struct RecipeCommitment {
+    pub committed_recipe: Option<RecipeName>,
+    pub pending_recipe: Option<RecipeName>,
+    pub in_transit_items: HashMap<ItemName, u32>,
+}
+
+#[derive(Component)]
+pub struct NeedsRecipeCommitmentEvaluation;
+
+impl RecipeCommitment {
+    pub fn new_committed(recipe: Option<RecipeName>) -> Self {
+        Self {
+            committed_recipe: recipe,
+            pending_recipe: None,
+            in_transit_items: HashMap::new(),
+        }
+    }
+
+    pub fn has_pending_items(&self) -> bool {
+        !self.in_transit_items.is_empty()
+    }
+
+    pub fn can_commit_new_recipe(&self) -> bool {
+        self.in_transit_items.is_empty()
+    }
+
+    pub fn add_in_transit(&mut self, items: &HashMap<ItemName, u32>) {
+        for (item_name, &amount) in items {
+            *self.in_transit_items.entry(item_name.clone()).or_insert(0) += amount;
+        }
+    }
+
+    pub fn remove_in_transit(&mut self, items: &HashMap<ItemName, u32>) {
+        for (item_name, &amount) in items {
+            if let Some(current) = self.in_transit_items.get_mut(item_name) {
+                *current = current.saturating_sub(amount);
+                if *current == 0 {
+                    self.in_transit_items.remove(item_name);
+                }
+            }
+        }
+    }
 }
 
 impl RecipeCrafter {

@@ -9,7 +9,7 @@ use crate::{
     },
     structures::{Building, ConstructionMaterialRequest, PortLogisticsRequest, RecipeCrafter},
     systems::NetworkConnectivity,
-    workers::{manhattan_distance_coords, Worker, WorkerState},
+    workers::{manhattan_distance_coords, Worker},
 };
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -71,6 +71,7 @@ pub fn create_port_logistics_tasks(
     existing_tasks: Query<&TaskTarget, With<Task>>,
     network: Res<NetworkConnectivity>,
     recipe_registry: Res<RecipeRegistry>,
+    mut delivery_started_events: EventWriter<super::components::LogisticsDeliveryStartedEvent>,
 ) {
     let existing_targets: HashSet<Entity> = existing_tasks.iter().map(|target| target.0).collect();
 
@@ -127,9 +128,14 @@ pub fn create_port_logistics_tasks(
                     supplier_pos,
                     event.building,
                     *building_pos,
-                    Some(items_to_pickup),
+                    Some(items_to_pickup.clone()),
                     Priority::Medium,
                 );
+
+                delivery_started_events.send(super::components::LogisticsDeliveryStartedEvent {
+                    building: event.building,
+                    items: items_to_pickup,
+                });
             }
         }
     }
@@ -343,7 +349,7 @@ pub fn create_proactive_port_tasks(
     mut commands: Commands,
     time: Res<Time>,
     mut timer: ResMut<ProactiveTaskTimer>,
-    idle_workers: Query<Entity, (With<Worker>, With<WorkerState>)>,
+    idle_workers: Query<Entity, With<Worker>>,
     output_ports: Query<(Entity, &OutputPort, &Position), With<Building>>,
     storage_ports: Query<(Entity, &StoragePort, &Position), With<Building>>,
     existing_tasks: Query<&TaskTarget, With<Task>>,

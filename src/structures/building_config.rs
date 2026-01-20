@@ -218,10 +218,17 @@ impl BuildingRegistry {
                         };
 
                     entity_commands.insert(RecipeCrafter {
-                        current_recipe,
-                        available_recipes: available_recipes_vec,
+                        current_recipe: current_recipe.clone(),
+                        available_recipes: available_recipes_vec.clone(),
                         timer: Timer::from_seconds(*interval, TimerMode::Repeating),
                     });
+
+                    let is_single_recipe = available_recipes_vec.is_empty();
+                    if is_single_recipe {
+                        entity_commands.insert(RecipeCommitment::new_committed(current_recipe));
+                    } else {
+                        entity_commands.insert(RecipeCommitment::default());
+                    }
                 }
                 BuildingComponentDef::Scanner { base_scan_interval } => {
                     entity_commands.insert(Scanner::new(

@@ -1,7 +1,7 @@
 use crate::{
     grid::{Grid, Position},
     systems::NetworkConnectivity,
-    workers::{AssignedSequence, Speed, Worker, WorkerState},
+    workers::{AssignedSequence, Speed, Worker},
 };
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
@@ -141,7 +141,6 @@ pub fn validate_and_displace_stranded_workers(
             &mut Transform,
             &mut Position,
             &mut WorkerPath,
-            &mut WorkerState,
             &mut AssignedSequence,
         ),
         With<Worker>,
@@ -156,7 +155,6 @@ pub fn validate_and_displace_stranded_workers(
         mut transform,
         mut worker_position,
         mut worker_path,
-        mut worker_state,
         mut assigned_sequence,
     ) in &mut workers
     {
@@ -180,7 +178,6 @@ pub fn validate_and_displace_stranded_workers(
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
 
-                *worker_state = WorkerState::Idle;
                 assigned_sequence.0 = None;
 
                 displaced_count += 1;
@@ -191,7 +188,6 @@ pub fn validate_and_displace_stranded_workers(
 
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
-                *worker_state = WorkerState::Idle;
                 assigned_sequence.0 = None;
             }
         }

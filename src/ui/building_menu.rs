@@ -1,7 +1,7 @@
 use crate::{
     grid::Position,
     materials::{InputPort, InventoryAccess, OutputPort, RecipeRegistry, StoragePort},
-    structures::{Building, RecipeCrafter},
+    structures::{Building, NeedsRecipeCommitmentEvaluation, RecipeCrafter},
     systems::Operational,
     ui::{
         interaction_handler::{DynamicStyles, InteractiveUI, Selectable},
@@ -758,6 +758,7 @@ pub fn handle_recipe_selection(
 }
 
 pub fn apply_recipe_changes(
+    mut commands: Commands,
     mut recipe_events: EventReader<RecipeChangeEvent>,
     mut buildings: Query<&mut RecipeCrafter, With<Building>>,
 ) {
@@ -765,14 +766,17 @@ pub fn apply_recipe_changes(
         if let Ok(mut crafter) = buildings.get_mut(event.building_entity) {
             if let Err(error) = crafter.set_recipe(event.recipe_name.clone()) {
                 warn!(
-                    "Failed to set recipe '{}' on building: {}",
+                    "failed to set recipe '{}' on building: {}",
                     event.recipe_name, error
                 );
             } else {
                 info!(
-                    "Recipe changed to '{}' for building {:?}",
+                    "recipe changed to '{}' for building {:?}",
                     event.recipe_name, event.building_entity
                 );
+                commands
+                    .entity(event.building_entity)
+                    .insert(NeedsRecipeCommitmentEvaluation);
             }
         }
     }

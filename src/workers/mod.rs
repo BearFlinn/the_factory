@@ -36,7 +36,7 @@ impl Plugin for WorkersPlugin {
             .add_systems(
                 Update,
                 (
-                    validate_and_displace_stranded_workers,
+                    validate_and_displace_stranded_workers.in_set(WorkersSystemSet::Lifecycle),
                     move_workers.in_set(WorkersSystemSet::Movement),
                 ),
             );

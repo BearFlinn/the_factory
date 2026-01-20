@@ -6,22 +6,15 @@ use crate::{
     grid::Position,
     materials::{Cargo, InventoryAccess, StoragePort},
     structures::Building,
-    workers::{manhattan_distance_coords, AssignedSequence, Worker, WorkerPath, WorkerState},
+    workers::{
+        manhattan_distance_coords, AssignedSequence, Worker, WorkerPath, WorkerStateComputation,
+    },
 };
 use bevy::prelude::*;
 
 pub fn assign_available_sequences_to_workers(
     mut sequences: Query<(Entity, &mut AssignedWorker, &TaskSequence, &Priority)>,
-    mut workers: Query<
-        (
-            Entity,
-            &Position,
-            &WorkerState,
-            &mut AssignedSequence,
-            &Cargo,
-        ),
-        With<Worker>,
-    >,
+    mut workers: Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
     tasks: Query<&Position, With<Task>>,
     _time: Res<Time>,
 ) {
@@ -63,7 +56,7 @@ pub fn assign_available_sequences_to_workers(
         if let Some((worker_entity, worker_pos)) = find_available_worker(task_pos, &workers) {
             assigned_worker.0 = Some(worker_entity);
 
-            if let Ok((_, _, _, mut worker_assigned_sequence, _)) = workers.get_mut(worker_entity) {
+            if let Ok((_, _, mut worker_assigned_sequence, _)) = workers.get_mut(worker_entity) {
                 worker_assigned_sequence.0 = Some(sequence_entity);
                 assignments_made += 1;
 
@@ -80,37 +73,6 @@ pub fn assign_available_sequences_to_workers(
 
     if assignments_made > 0 {
         println!("Made {assignments_made} new worker assignments");
-    }
-}
-
-pub fn derive_worker_state_from_sequences(
-    mut workers: Query<(&mut AssignedSequence, &mut WorkerState), With<Worker>>,
-    mut sequences: Query<&mut TaskSequence>,
-    tasks: Query<Entity, With<Task>>,
-) {
-    for (mut assigned_sequence, mut worker_state) in &mut workers {
-        let new_state = match assigned_sequence.0 {
-            None => WorkerState::Idle,
-            Some(sequence_entity) => {
-                if let Ok(mut sequence) = sequences.get_mut(sequence_entity) {
-                    sequence.validate_and_advance(&tasks);
-
-                    if sequence.is_complete_with_validation(&tasks) {
-                        assigned_sequence.0 = None;
-                        WorkerState::Idle
-                    } else {
-                        WorkerState::Working
-                    }
-                } else {
-                    assigned_sequence.0 = None;
-                    WorkerState::Idle
-                }
-            }
-        };
-
-        if *worker_state != new_state {
-            *worker_state = new_state;
-        }
     }
 }
 
@@ -139,22 +101,13 @@ pub fn clear_completed_tasks(
 
 fn cleanup_orphaned_assignments(
     sequences: &mut Query<(Entity, &mut AssignedWorker, &TaskSequence, &Priority)>,
-    workers: &mut Query<
-        (
-            Entity,
-            &Position,
-            &WorkerState,
-            &mut AssignedSequence,
-            &Cargo,
-        ),
-        With<Worker>,
-    >,
+    workers: &mut Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
 ) {
     let mut orphaned_sequences = Vec::new();
 
     for (sequence_entity, assigned_worker, _, _) in sequences.iter() {
         if let Some(worker_entity) = assigned_worker.0 {
-            if let Ok((_, _, _, worker_assigned_sequence, _)) = workers.get(worker_entity) {
+            if let Ok((_, _, worker_assigned_sequence, _)) = workers.get(worker_entity) {
                 if worker_assigned_sequence.0 != Some(sequence_entity) {
                     orphaned_sequences.push(sequence_entity);
                 }
@@ -173,23 +126,13 @@ fn cleanup_orphaned_assignments(
 
 fn find_available_worker(
     position: (i32, i32),
-    workers: &Query<
-        (
-            Entity,
-            &Position,
-            &WorkerState,
-            &mut AssignedSequence,
-            &Cargo,
-        ),
-        With<Worker>,
-    >,
+    workers: &Query<(Entity, &Position, &mut AssignedSequence, &Cargo), With<Worker>>,
 ) -> Option<(Entity, Position)> {
     let mut best_worker = None;
     let mut closest_distance = i32::MAX;
 
-    for (entity, pos, worker_state, assigned_sequence, cargo) in workers.iter() {
-        let is_available =
-            assigned_sequence.0.is_none() && *worker_state == WorkerState::Idle && cargo.is_empty();
+    for (entity, pos, assigned_sequence, cargo) in workers.iter() {
+        let is_available = assigned_sequence.is_idle() && cargo.is_empty();
 
         if is_available {
             let distance = manhattan_distance_coords(position, (pos.x, pos.y));
@@ -206,12 +149,11 @@ fn find_available_worker(
 pub fn handle_worker_interrupts(
     mut commands: Commands,
     mut interrupt_events: EventReader<WorkerInterruptEvent>,
-    mut workers: Query<(&mut AssignedSequence, &mut WorkerState, &mut WorkerPath), With<Worker>>,
+    mut workers: Query<(&mut AssignedSequence, &mut WorkerPath), With<Worker>>,
     mut sequences: Query<&mut AssignedWorker>,
 ) {
     for event in interrupt_events.read() {
-        let Ok((mut worker_assigned_sequence, mut worker_state, mut worker_path)) =
-            workers.get_mut(event.worker)
+        let Ok((mut worker_assigned_sequence, mut worker_path)) = workers.get_mut(event.worker)
         else {
             println!(
                 "WorkerInterrupt: Worker entity {:?} not found",
@@ -238,7 +180,6 @@ pub fn handle_worker_interrupts(
                 if let Ok(mut new_assigned_worker) = sequences.get_mut(*new_sequence_entity) {
                     worker_assigned_sequence.0 = Some(*new_sequence_entity);
                     new_assigned_worker.0 = Some(event.worker);
-                    *worker_state = WorkerState::Working;
 
                     println!(
                         "WorkerInterrupt: Worker {:?} assigned to sequence {:?}",
@@ -246,7 +187,6 @@ pub fn handle_worker_interrupts(
                     );
                 } else {
                     worker_assigned_sequence.0 = None;
-                    *worker_state = WorkerState::Idle;
 
                     println!(
                         "WorkerInterrupt: New sequence {:?} not found, worker {:?} set to idle",
@@ -258,7 +198,6 @@ pub fn handle_worker_interrupts(
             InterruptType::ReplaceTasks(new_tasks, priority) => {
                 if new_tasks.is_empty() {
                     worker_assigned_sequence.0 = None;
-                    *worker_state = WorkerState::Idle;
 
                     println!(
                         "WorkerInterrupt: Empty task list, worker {:?} set to idle",
@@ -270,7 +209,6 @@ pub fn handle_worker_interrupts(
                         .id();
 
                     worker_assigned_sequence.0 = Some(new_sequence_entity);
-                    *worker_state = WorkerState::Working;
 
                     commands
                         .entity(new_sequence_entity)
@@ -293,7 +231,6 @@ pub fn handle_worker_interrupts(
 
             InterruptType::ClearAssignment => {
                 worker_assigned_sequence.0 = None;
-                *worker_state = WorkerState::Idle;
 
                 println!(
                     "WorkerInterrupt: Worker {:?} assignment cleared",
@@ -331,7 +268,6 @@ pub fn emergency_dropoff_idle_workers(
         (
             Entity,
             &Position,
-            &WorkerState,
             &AssignedSequence,
             &Cargo,
             Option<&PendingEmergencyDropoff>,
@@ -341,20 +277,10 @@ pub fn emergency_dropoff_idle_workers(
     storage_buildings: Query<(Entity, &Position, &StoragePort), With<Building>>,
     mut interrupt_events: EventWriter<WorkerInterruptEvent>,
 ) {
-    for (
-        worker_entity,
-        worker_pos,
-        worker_state,
-        assigned_sequence,
-        worker_cargo,
-        pending_dropoff,
-    ) in workers.iter()
+    for (worker_entity, worker_pos, assigned_sequence, worker_cargo, pending_dropoff) in
+        workers.iter()
     {
-        if *worker_state != WorkerState::Idle
-            || assigned_sequence.0.is_some()
-            || worker_cargo.is_empty()
-            || pending_dropoff.is_some()
-        {
+        if !assigned_sequence.is_idle() || worker_cargo.is_empty() || pending_dropoff.is_some() {
             continue;
         }
 

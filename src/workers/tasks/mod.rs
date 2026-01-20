@@ -8,7 +8,9 @@ pub use components::*;
 pub use creation::*;
 pub use execution::*;
 
-use crate::{materials::execute_item_transfer, workers::WorkersSystemSet};
+use crate::{
+    materials::execute_item_transfer, structures::RecipeCommitment, workers::WorkersSystemSet,
+};
 use bevy::prelude::*;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -16,15 +18,35 @@ pub enum TaskSystemSet {
     Interrupts,
     Assignment,
     Processing,
+    Arrivals,
     Generation,
     Cleanup,
 }
 
 pub struct TasksPlugin;
 
+fn update_in_transit_tracking(
+    mut started_events: EventReader<LogisticsDeliveryStartedEvent>,
+    mut completed_events: EventReader<LogisticsDeliveryCompletedEvent>,
+    mut commitments: Query<&mut RecipeCommitment>,
+) {
+    for event in started_events.read() {
+        if let Ok(mut commitment) = commitments.get_mut(event.building) {
+            commitment.add_in_transit(&event.items);
+        }
+    }
+    for event in completed_events.read() {
+        if let Ok(mut commitment) = commitments.get_mut(event.building) {
+            commitment.remove_in_transit(&event.items);
+        }
+    }
+}
+
 impl Plugin for TasksPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<WorkerInterruptEvent>()
+            .add_event::<LogisticsDeliveryStartedEvent>()
+            .add_event::<LogisticsDeliveryCompletedEvent>()
             .init_resource::<ProactiveTaskTimer>()
             .configure_sets(
                 Update,
@@ -32,6 +54,7 @@ impl Plugin for TasksPlugin {
                     TaskSystemSet::Interrupts,
                     TaskSystemSet::Assignment,
                     TaskSystemSet::Processing,
+                    TaskSystemSet::Arrivals,
                     TaskSystemSet::Generation,
                     TaskSystemSet::Cleanup,
                 )
@@ -48,9 +71,8 @@ impl Plugin for TasksPlugin {
                         .after(execute_item_transfer)
                         .after(handle_worker_interrupts),
                     assign_available_sequences_to_workers.in_set(TaskSystemSet::Assignment),
-                    (process_worker_sequences, derive_worker_state_from_sequences)
-                        .chain()
-                        .in_set(TaskSystemSet::Processing),
+                    process_worker_sequences.in_set(TaskSystemSet::Processing),
+                    handle_sequence_task_arrivals.in_set(TaskSystemSet::Arrivals),
                     (
                         create_port_logistics_tasks,
                         create_proactive_port_tasks,
@@ -58,7 +80,7 @@ impl Plugin for TasksPlugin {
                         clear_all_tasks,
                     )
                         .in_set(TaskSystemSet::Generation),
-                    (handle_sequence_task_arrivals, clear_completed_tasks)
+                    (clear_completed_tasks, update_in_transit_tracking)
                         .in_set(TaskSystemSet::Cleanup),
                 ),
             );
