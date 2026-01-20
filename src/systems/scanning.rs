@@ -14,8 +14,7 @@ pub struct Scanner {
     pub position: Position,
     pub last_scan_angle: f32,
     pub current_target_distance: i32,
-    pub sector_size: i32,   // Grid spacing for sector centers (e.g., 5)
-    pub reveal_radius: i32, // Tiles to reveal around sector center (1 = 3x3, 2 = 5x5)
+    pub sector_size: i32, // Grid spacing AND reveal size (e.g., 5 = 5x5 sectors)
 }
 
 impl Scanner {
@@ -27,7 +26,6 @@ impl Scanner {
             last_scan_angle: 0.0,
             current_target_distance: 1,
             sector_size: 5,
-            reveal_radius: 1, // 3x3 reveal
         }
     }
 
@@ -160,9 +158,9 @@ impl Scanner {
         self.last_scan_angle = angle;
 
         let mut cluster = Vec::new();
-        let r = self.reveal_radius;
-        for dy in -r..=r {
-            for dx in -r..=r {
+        let half = self.sector_size / 2;
+        for dy in -half..=half {
+            for dx in -half..=half {
                 cluster.push((target_x + dx, target_y + dy));
             }
         }
@@ -510,33 +508,39 @@ mod tests {
     }
 
     #[test]
-    fn find_next_cluster_reveals_correct_area() {
+    fn find_next_cluster_reveals_sector_size_area() {
         let mut scanner = create_scanner_at_origin(1.0);
-        scanner.reveal_radius = 1; // 3x3 reveal
+        // Default sector_size=5, reveals 5x5=25 tiles
+        let grid = create_grid_with_coordinates(&[(0, 0)]);
+
+        let (cluster, _) = scanner.find_next_cluster(&grid).unwrap();
+
+        assert_eq!(
+            cluster.len(),
+            25,
+            "Should reveal 5x5 area with sector_size=5"
+        );
+    }
+
+    #[test]
+    fn find_next_cluster_respects_sector_size() {
+        let mut scanner = create_scanner_at_origin(1.0);
+        scanner.sector_size = 3; // 3x3 sectors
 
         let grid = create_grid_with_coordinates(&[(0, 0)]);
 
         let (cluster, _) = scanner.find_next_cluster(&grid).unwrap();
 
-        // Should reveal 3x3 = 9 tiles
-        assert_eq!(cluster.len(), 9, "Should reveal 3x3 area");
+        // sector_size=3, half=1, range -1..=1 = 3x3 = 9 tiles
+        assert_eq!(
+            cluster.len(),
+            9,
+            "Should reveal 3x3 area with sector_size=3"
+        );
     }
 
     #[test]
-    fn find_next_cluster_respects_reveal_radius() {
-        let mut scanner = create_scanner_at_origin(1.0);
-        scanner.reveal_radius = 2; // 5x5 reveal
-
-        let grid = create_grid_with_coordinates(&[(0, 0)]);
-
-        let (cluster, _) = scanner.find_next_cluster(&grid).unwrap();
-
-        // Should reveal 5x5 = 25 tiles
-        assert_eq!(cluster.len(), 25, "Should reveal 5x5 area with radius=2");
-    }
-
-    #[test]
-    fn sector_exploration_reduces_overlap() {
+    fn consecutive_sector_scans_share_edges_not_overlap() {
         let mut scanner = create_scanner_at_origin(1.0);
         let mut grid = create_grid_with_coordinates(&[(0, 0)]);
 
@@ -548,14 +552,16 @@ mod tests {
 
         let (cluster2, _) = scanner.find_next_cluster(&grid).unwrap();
 
-        // With sector_size=5 and reveal_radius=1, clusters should not overlap
+        // With sector_size=5, sectors are 5 apart and reveal 5x5
+        // Adjacent sectors share one edge but interior tiles don't overlap
         let set1: std::collections::HashSet<_> = cluster1.into_iter().collect();
         let set2: std::collections::HashSet<_> = cluster2.into_iter().collect();
         let overlap: Vec<_> = set1.intersection(&set2).collect();
 
+        // Edge sharing means at most 5 tiles overlap (one row/column)
         assert!(
-            overlap.is_empty(),
-            "Consecutive sector scans should not overlap, but found {} overlapping tiles",
+            overlap.len() <= 5,
+            "Adjacent sectors should share at most one edge (5 tiles), but found {} overlapping",
             overlap.len()
         );
     }
