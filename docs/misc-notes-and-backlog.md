@@ -10,18 +10,26 @@ Lower priority items to revisit after the inventory/production refactor is compl
 
 **Location**: `src/systems/scanning.rs`
 
-The scanner reveals unexplored tiles by completing each distance band before moving outward, sweeping clockwise within each band. This creates concentric ring exploration where closer tiles are always explored first.
+The scanner uses **sector-based scanning** inspired by Factorio's radar:
+- World is divided into sectors on a grid (default: 5x5 spacing)
+- Scanner picks unexplored sectors adjacent to explored ones
+- Each scan reveals a smaller area (default: 3x3) centered on the sector
+- Sectors are prioritized by distance from scanner, then clockwise angle
 
-### Resolved Issues
+This approach minimizes overlap between consecutive scans compared to tile-by-tile scanning.
 
-~~**`dedup()` May Not Work as Intended**~~ - Fixed by using a `HashMap` to deduplicate by `(x, y)` coordinates before sorting.
+### Configuration
+
+Scanner component has two configurable fields:
+- `sector_size: i32` - Grid spacing for sector centers (default: 5)
+- `reveal_radius: i32` - Tiles revealed around center (1 = 3x3, 2 = 5x5)
 
 ### Design Notes
 
-The sorting is distance-first, then angle (clockwise). This ensures:
-- Closer tiles are always revealed before farther tiles
-- Within each distance band, tiles are revealed in clockwise order
-- The pattern creates expanding concentric rings of exploration
+The sector approach means:
+- Consecutive scans don't overlap (sector_size > reveal_radius * 2)
+- Scanning covers area efficiently in a predictable pattern
+- Distance-first sorting ensures closer sectors are scanned before farther ones
 
 ---
 
