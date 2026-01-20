@@ -8,6 +8,8 @@ pub use tasks::*;
 
 use bevy::prelude::*;
 
+use crate::structures::BuildingSystemSet;
+
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum WorkersSystemSet {
     Lifecycle,
@@ -31,7 +33,8 @@ impl Plugin for WorkersPlugin {
                     WorkersSystemSet::Interaction,
                 )
                     .chain()
-                    .in_set(crate::GameplaySet::DomainOperations),
+                    .in_set(crate::GameplaySet::DomainOperations)
+                    .after(BuildingSystemSet::Placement),
             )
             .add_systems(
                 Update,

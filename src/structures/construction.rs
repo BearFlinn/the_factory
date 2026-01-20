@@ -351,7 +351,7 @@ impl ConstructionMonitor {
             last_inventory_snapshot: current_inventory.clone(),
             last_progress_time: current_time,
             retry_count: 0,
-            next_retry_time: current_time + 10.0, // Initial 10 second check
+            next_retry_time: current_time + 2.0, // Initial 2 second check
         }
     }
 
@@ -361,16 +361,16 @@ impl ConstructionMonitor {
 
     pub fn schedule_next_retry(&mut self, current_time: f32) {
         self.retry_count += 1;
-        self.next_retry_time = current_time + 10.0;
+        self.next_retry_time = current_time + 2.0;
 
-        println!("Construction retry #{} scheduled in 10s", self.retry_count);
+        println!("Construction retry #{} scheduled in 2s", self.retry_count);
     }
 
     pub fn reset_progress(&mut self, new_inventory: &HashMap<ItemName, u32>, current_time: f32) {
         self.last_inventory_snapshot.clone_from(new_inventory);
         self.last_progress_time = current_time;
         self.retry_count = 0;
-        self.next_retry_time = current_time + 10.0;
+        self.next_retry_time = current_time + 2.0;
     }
 
     pub fn has_made_progress(&self, current_inventory: &HashMap<ItemName, u32>) -> bool {
