@@ -62,7 +62,6 @@ impl NetworkConnectivity {
 }
 
 #[must_use]
-#[allow(clippy::type_complexity)]
 pub fn calculate_network_connectivity(
     building_layers: &Query<
         (&Position, &Layer, Option<&NetWorkComponent>),
@@ -135,7 +134,6 @@ pub fn calculate_network_connectivity(
     (core_network_cells, connected_cells)
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_network_connectivity(
     mut network_connectivity: ResMut<NetworkConnectivity>,
     mut network_events: EventReader<NetworkChangedEvent>,
@@ -160,7 +158,6 @@ pub fn update_network_connectivity(
     network_connectivity.connected_cells = extended_network;
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn update_visual_network_connections(
     mut commands: Commands,
     mut network_events: EventReader<NetworkChangedEvent>,

@@ -27,7 +27,6 @@ pub struct PlacementErrorMessage {
     pub timer: Timer,
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_inventory_display(
     mut commands: Commands,
     buildings_and_workers: Query<
@@ -121,7 +120,6 @@ pub fn update_inventory_display(
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_operational_indicators(
     mut commands: Commands,
     mut buildings: Query<(Entity, &Operational), (With<Building>, Changed<Operational>)>,
@@ -159,7 +157,6 @@ pub fn update_operational_indicators(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn update_placement_ghost(
     mut commands: Commands,
     selected_building: Res<SelectedBuilding>,
@@ -222,7 +219,6 @@ pub fn update_placement_ghost(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn display_placement_error(
     mut commands: Commands,
     mut validation_events: EventReader<PlaceBuildingValidationEvent>,
@@ -257,8 +253,6 @@ pub fn display_placement_error(
     }
 }
 
-// Add to display.rs - cleanup expired error messages
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn cleanup_placement_errors(
     mut commands: Commands,
     time: Res<Time>,

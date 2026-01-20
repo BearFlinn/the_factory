@@ -121,8 +121,10 @@ Test modules have `#[allow(clippy::unwrap_used)]` for readability.
 - Lowercase, no trailing period (Unix style, chains well with `anyhow` context)
 
 ## Comments
-- Explain **why**, never **what** — the code shows what, comments explain non-obvious reasoning
-- Doc comments: one-line `///` summary for public items; expand only for complex behavior
+- Comments should be minimally used. Over-commented code reads as bloated.
+- Assume contributors are intelligent and can reason through basic logic without comments.
+- Function over form. Pretty comments waste everyone's time. 
+- **DO NOT** leave comments like "Validates data" on a function called `validate_data`, or "Implements Car" on `impl Car`.
 
 ## Module Organization
 - Group related types in one file (e.g., `Message`, `Role`, `ToolCall` together in `llm/mod.rs`)

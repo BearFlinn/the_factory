@@ -161,12 +161,9 @@ pub struct ConstructionMaterialRequest {
 }
 
 impl BuildingRegistry {
-    /// # Panics
-    /// Panics if the buildings.ron asset file is malformed or cannot be parsed.
-    #[allow(clippy::expect_used)]
-    pub fn load_from_assets() -> Self {
+    pub fn load_from_assets() -> Result<Self, Box<dyn std::error::Error>> {
         let ron_content = include_str!("../assets/buildings.ron");
-        Self::from_ron(ron_content).expect("Failed to load building definitions")
+        Self::from_ron(ron_content)
     }
 }
 

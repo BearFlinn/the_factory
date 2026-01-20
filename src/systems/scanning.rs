@@ -144,7 +144,6 @@ impl Scanner {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters
 pub fn handle_progressive_scanning(
     mut scanners: Query<&mut Scanner, With<Building>>,
     mut expand_events: EventWriter<ExpandGridCellsEvent>,

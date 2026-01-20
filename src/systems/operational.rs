@@ -54,7 +54,6 @@ impl Operational {
     }
 }
 
-#[allow(clippy::type_complexity)] // Bevy query with many optional components
 pub fn populate_operational_conditions(
     mut operational_query: Query<(
         &mut Operational,
@@ -118,7 +117,6 @@ pub fn populate_operational_conditions(
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)] // Bevy system parameters
 pub fn update_operational_status(
     mut operational_query: Query<(
         &mut Operational,

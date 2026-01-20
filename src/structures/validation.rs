@@ -43,7 +43,6 @@ impl fmt::Display for PlacementError {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn validate_placement(
     mut place_request: EventReader<PlaceBuildingRequestEvent>,
     mut validation_events: EventWriter<PlaceBuildingValidationEvent>,
@@ -65,7 +64,6 @@ pub fn validate_placement(
             continue 'event_loop;
         };
 
-        // Check if cell is occupied
         for &entity in &cell_children.0 {
             if let Ok(layer) = building_layers.get(entity) {
                 if layer.0 == BUILDING_LAYER {
@@ -79,9 +77,6 @@ pub fn validate_placement(
         }
 
         if let Some(definition) = registry.get_definition(&event.building_name) {
-            // Note: Removed resource availability check - construction sites will handle material delivery
-
-            // Validate placement rules
             for rule in &definition.placement.rules {
                 match rule {
                     PlacementRule::RequiresResource => {
@@ -112,7 +107,6 @@ pub fn validate_placement(
             }
         }
 
-        // All validations passed
         validation_events.send(PlaceBuildingValidationEvent {
             result: Ok(()),
             request: event.clone(),

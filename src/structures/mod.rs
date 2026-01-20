@@ -34,7 +34,9 @@ fn configure_building_system_sets(app: &mut App) {
 }
 
 pub fn setup(mut commands: Commands) {
-    commands.insert_resource(BuildingRegistry::load_from_assets());
+    if let Ok(registry) = BuildingRegistry::load_from_assets() {
+        commands.insert_resource(registry);
+    }
 }
 
 pub struct BuildingsPlugin;

@@ -11,7 +11,6 @@ pub struct PowerGrid {
     pub available: i32,
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters must be passed by value
 pub fn update_power_grid(
     mut power_grid: ResMut<PowerGrid>,
     generators: Query<(&PowerGenerator, &Operational)>,

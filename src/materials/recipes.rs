@@ -67,8 +67,6 @@ mod tests {
 
     use super::*;
 
-    // ==================== RecipeRegistry::from_ron() tests ====================
-
     #[test]
     fn test_recipe_registry_from_ron_valid() {
         let ron_content = r#"[
@@ -132,8 +130,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ==================== get_definition() tests ====================
-
     #[test]
     fn test_get_definition_existing() {
         let ron_content = r#"[
@@ -161,8 +157,6 @@ mod tests {
         let def = registry.get_definition("Nonexistent");
         assert!(def.is_none());
     }
-
-    // ==================== get_inputs() tests ====================
 
     #[test]
     fn test_get_inputs_existing() {
@@ -208,8 +202,6 @@ mod tests {
         assert!(inputs.is_none());
     }
 
-    // ==================== get_outputs() tests ====================
-
     #[test]
     fn test_get_outputs_existing() {
         let ron_content = r#"[
@@ -254,8 +246,6 @@ mod tests {
         assert!(outputs.is_none());
     }
 
-    // ==================== Recipe structure integrity tests ====================
-
     #[test]
     fn test_recipe_structure_integrity() {
         let ron_content = r#"[
@@ -269,13 +259,10 @@ mod tests {
         let registry = RecipeRegistry::from_ron(ron_content).unwrap();
         let def = registry.get_definition("Full Recipe").unwrap();
 
-        // Verify all fields are correctly parsed
         assert_eq!(def.name, "Full Recipe");
         assert_eq!(def.inputs.len(), 1);
         assert_eq!(def.outputs.len(), 1);
         assert!((def.crafting_time - 4.5).abs() < f32::EPSILON);
-
-        // Verify input/output consistency
         assert!(def.inputs.contains_key("Raw Material"));
         assert!(def.outputs.contains_key("Product"));
     }

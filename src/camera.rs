@@ -28,7 +28,6 @@ pub fn setup_camera(mut commands: Commands) {
     commands.spawn((Camera2d, GameCamera::default()));
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn handle_camera_keyboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -63,30 +62,24 @@ pub fn handle_camera_keyboard_input(
         target_velocity = target_velocity.normalize();
     }
 
-    // Scale movement speed by zoom level (move faster when zoomed out)
     let zoom_scale = projection.scale;
     target_velocity *= game_camera.base_speed * zoom_scale;
 
-    // Apply acceleration/deceleration
     let delta_time = time.delta_secs();
 
     if target_velocity.length() > 0.0 {
-        // Accelerate toward target velocity
         game_camera.velocity = game_camera
             .velocity
             .lerp(target_velocity, game_camera.acceleration * delta_time);
     } else {
-        // Decelerate to zero
         game_camera.velocity = game_camera
             .velocity
             .lerp(Vec2::ZERO, game_camera.deceleration * delta_time);
     }
 
-    // Apply velocity to camera position
     camera_transform.translation += game_camera.velocity.extend(0.0) * delta_time;
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn handle_camera_zoom(
     mut mouse_wheel: EventReader<MouseWheel>,
     windows: Query<&Window>,
@@ -116,7 +109,6 @@ pub fn handle_camera_zoom(
     };
 
     for scroll in mouse_wheel.read() {
-        // Get cursor position in world coordinates before zoom
         let cursor_world_pos = window
             .cursor_position()
             .and_then(|cursor_pos| {
@@ -127,16 +119,13 @@ pub fn handle_camera_zoom(
             .map(|ray| ray.origin.truncate());
 
         if let Some(cursor_world_before) = cursor_world_pos {
-            // Calculate zoom factor
-            let zoom_factor = 1.0 + scroll.y * -0.1; // Negative because scroll up should zoom in
+            let zoom_factor = 1.0 + scroll.y * -0.1;
             let new_scale =
                 (projection.scale * zoom_factor).clamp(game_camera.min_zoom, game_camera.max_zoom);
 
-            // Only apply zoom if it's within bounds
             if (new_scale - projection.scale).abs() > f32::EPSILON {
                 projection.scale = new_scale;
 
-                // Get cursor position in world coordinates after zoom
                 let cursor_world_after = window
                     .cursor_position()
                     .and_then(|cursor_pos| {
@@ -147,7 +136,6 @@ pub fn handle_camera_zoom(
                     .map(|ray| ray.origin.truncate());
 
                 if let Some(cursor_world_after) = cursor_world_after {
-                    // Adjust camera position to keep cursor at same world position
                     let world_delta = cursor_world_before - cursor_world_after;
                     camera_transform.translation += world_delta.extend(0.0);
                 }

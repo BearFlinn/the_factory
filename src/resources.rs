@@ -54,7 +54,6 @@ fn select_random_ore() -> (RecipeName, Color) {
 }
 
 // TODO: Add clustering
-#[allow(clippy::needless_pass_by_value)]
 pub fn spawn_resource_node(
     mut commands: Commands,
     grid: Res<Grid>,

@@ -1,5 +1,3 @@
-// systems/mod.rs
-// Re-exports for public API - some may only be used by external crates
 #![allow(unused_imports)]
 
 pub mod compute;

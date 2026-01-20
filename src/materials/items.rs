@@ -5,10 +5,6 @@ use std::collections::HashMap;
 
 pub type ItemName = String;
 
-// ============================================================================
-// Inventory Access Trait
-// ============================================================================
-
 /// Shared behavior for all inventory-like components.
 /// Enables uniform operations across different port types.
 pub trait InventoryAccess {
@@ -86,10 +82,6 @@ pub trait InventoryAccess {
         self.items().clone()
     }
 }
-
-// ============================================================================
-// Port Components
-// ============================================================================
 
 /// Items can be picked up from here (Mining Drills, Smelter outputs).
 /// Used for buildings that provide items for logistics.
@@ -223,10 +215,6 @@ impl InventoryAccess for Cargo {
     }
 }
 
-// ============================================================================
-// Item Registry
-// ============================================================================
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemDef {
     pub name: String,
@@ -264,12 +252,7 @@ impl ItemRegistry {
     pub fn get_definition(&self, item_name: &str) -> Option<&ItemDef> {
         self.definitions.get(item_name)
     }
-    // TODO: Add methods for accessing individual item fields from definitions
 }
-
-// ============================================================================
-// TRANSFER ERRORS AND EVENTS
-// ============================================================================
 
 #[derive(Debug)]
 pub enum TransferError {
@@ -319,7 +302,6 @@ pub fn print_transferred_items(mut events: EventReader<ItemTransferEvent>) {
 /// Validates item transfer requests using explicit port component queries.
 /// No fallback chains - sender must have `OutputPort`, `StoragePort`, or `Cargo`.
 /// Receiver must have `InputPort`, `StoragePort`, or `Cargo`.
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn validate_item_transfer(
     mut requests: EventReader<ItemTransferRequestEvent>,
     mut validation_events: EventWriter<ItemTransferValidationEvent>,
@@ -454,7 +436,6 @@ fn get_receiver_port_data(
 /// Executes validated item transfers using explicit port component queries.
 /// Removes from sender's `OutputPort`, `StoragePort`, or `Cargo`.
 /// Adds to receiver's `InputPort`, `StoragePort`, or `Cargo`.
-#[allow(clippy::type_complexity)]
 pub fn execute_item_transfer(
     mut validation_events: EventReader<ItemTransferValidationEvent>,
     mut output_ports: Query<&mut OutputPort>,
@@ -567,8 +548,6 @@ mod tests {
 
     use super::*;
 
-    // ==================== ItemRegistry::from_ron() tests ====================
-
     #[test]
     fn test_item_registry_from_ron_valid() {
         let ron_content = r#"[
@@ -635,8 +614,6 @@ mod tests {
         let def = registry.get_definition("Nonexistent");
         assert!(def.is_none());
     }
-
-    // ==================== TransferError Display tests ====================
 
     #[test]
     fn test_transfer_error_display_item_not_found() {

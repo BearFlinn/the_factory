@@ -24,7 +24,6 @@ pub struct RemoveBuildingEvent {
     pub grid_y: i32,
 }
 
-#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 pub fn handle_building_input(
     mouse_button: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
@@ -65,7 +64,6 @@ pub fn handle_building_input(
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn place_building(
     mut commands: Commands,
     mut validation_events: EventReader<PlaceBuildingValidationEvent>,
@@ -133,7 +131,6 @@ pub fn place_building(
     }
 }
 
-#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 pub fn remove_building(
     mut commands: Commands,
     mut remove_events: EventReader<RemoveBuildingEvent>,

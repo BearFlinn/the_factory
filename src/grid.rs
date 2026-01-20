@@ -155,7 +155,6 @@ pub struct ExpandGridEvent {
     pub radius: i32,
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn handle_grid_expansion(
     mut commands: Commands,
     mut expand_events: EventReader<ExpandGridEvent>,
@@ -180,7 +179,6 @@ pub struct ExpandGridCellsEvent {
     pub coordinates: Vec<(i32, i32)>,
 }
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn handle_grid_cells_expansion(
     mut commands: Commands,
     mut expand_events: EventReader<ExpandGridCellsEvent>,

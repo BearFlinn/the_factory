@@ -11,7 +11,6 @@ pub struct ComputeGrid {
     pub available: i32,
 }
 
-#[allow(clippy::needless_pass_by_value)] // Bevy system parameters must be passed by value
 pub fn update_compute(
     mut compute_grid: ResMut<ComputeGrid>,
     generators: Query<(&ComputeGenerator, &Operational)>,

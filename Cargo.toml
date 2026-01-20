@@ -33,3 +33,7 @@ missing_panics_doc = "warn"
 must_use_candidate = "warn"
 module_name_repetitions = "allow"
 unused_async = "allow"
+# Bevy-specific pattern allows
+needless_pass_by_value = "allow"  # Bevy systems require by-value parameters
+type_complexity = "allow"          # Bevy queries naturally have complex types
+too_many_arguments = "allow"       # Bevy systems accumulate dependencies as parameters
