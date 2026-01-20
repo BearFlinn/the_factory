@@ -1,5 +1,6 @@
 pub mod dispatcher;
 pub mod pathfinding;
+pub mod pooling;
 pub mod spawning;
 pub mod tasks;
 

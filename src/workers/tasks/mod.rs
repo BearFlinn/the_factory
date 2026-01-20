@@ -13,6 +13,9 @@ use crate::{
     structures::RecipeCommitment,
     workers::{
         dispatcher::{clear_dispatcher_on_task_clear, DispatcherConfig, WorkerDispatcher},
+        pooling::{
+            clear_returning_on_assignment, register_hub_arrivals, return_idle_workers_to_hub,
+        },
         WorkersSystemSet,
     },
 };
@@ -98,6 +101,12 @@ impl Plugin for TasksPlugin {
                     process_dispatcher_requests
                         .in_set(TaskSystemSet::Generation)
                         .after(create_port_logistics_tasks),
+                    (
+                        return_idle_workers_to_hub,
+                        register_hub_arrivals,
+                        clear_returning_on_assignment,
+                    )
+                        .in_set(TaskSystemSet::Pooling),
                     (
                         clear_completed_tasks,
                         update_in_transit_tracking,
