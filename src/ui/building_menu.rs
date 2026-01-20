@@ -362,7 +362,7 @@ pub fn update_menu_content(
             }
             ContentType::Crafting => buildings_crafting
                 .get(menu_content.target_building)
-                .map(simple_hash)
+                .map(hash_crafter_recipe_state)
                 .is_ok_and(|hash| menu_content.last_updated != Some(hash)),
         };
 
@@ -410,7 +410,7 @@ pub fn update_menu_content(
                                 &recipe_registry,
                                 menu_content.target_building,
                             );
-                            menu_content.last_updated = Some(simple_hash(crafter));
+                            menu_content.last_updated = Some(hash_crafter_recipe_state(crafter));
                         }
                     }
                 }
@@ -427,6 +427,17 @@ fn simple_hash<T: std::fmt::Debug>(value: &T) -> u32 {
     let debug_string = format!("{value:?}");
     let mut hasher = DefaultHasher::new();
     debug_string.hash(&mut hasher);
+    hasher.finish() as u32
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn hash_crafter_recipe_state(crafter: &RecipeCrafter) -> u32 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    crafter.current_recipe.hash(&mut hasher);
+    crafter.available_recipes.hash(&mut hasher);
     hasher.finish() as u32
 }
 
