@@ -75,7 +75,6 @@ pub fn populate_operational_conditions(
         output_port,
     ) in &mut operational_query
     {
-        // Only populate if conditions are None or empty
         if operational
             .0
             .as_ref()
@@ -86,33 +85,26 @@ pub fn populate_operational_conditions(
 
         let mut conditions = Vec::new();
 
-        // Always add Network condition for buildings
         if building.is_some() {
             conditions.push(OperationalCondition::Network(false));
         }
 
-        // Add Power condition if entity consumes power
         if power_consumer.is_some() {
             conditions.push(OperationalCondition::Power(false));
         }
 
-        // Add Compute condition if entity consumes compute
         if compute_consumer.is_some() {
             conditions.push(OperationalCondition::Compute(false));
         }
 
-        // Add HasItems condition if entity has InputPort (consumes items)
-        // Buildings with only OutputPort (Sources) don't consume items
         if recipe_crafter.is_some() && input_port.is_some() {
             conditions.push(OperationalCondition::HasItems(false));
         }
 
-        // Add HasInventorySpace condition if entity has OutputPort (produces items)
         if output_port.is_some() {
             conditions.push(OperationalCondition::HasInventorySpace(false));
         }
 
-        // Set the populated conditions
         operational.0 = Some(conditions);
     }
 }
@@ -131,12 +123,10 @@ pub fn update_operational_status(
     recipe_registry: Res<RecipeRegistry>,
 ) {
     for (mut operational, crafter, input_port, output_port, pos) in &mut operational_query {
-        // Skip entities without operational conditions
         let Some(ref mut conditions) = operational.0 else {
             continue;
         };
 
-        // Iterate through conditions and update each based on type
         for condition in conditions.iter_mut() {
             match condition {
                 OperationalCondition::Network(ref mut status) => {
@@ -162,7 +152,6 @@ pub fn update_operational_status(
                         continue;
                     };
 
-                    // Check InputPort for required inputs
                     let has_inputs = if let Some(input_port) = input_port {
                         recipe.inputs.iter().all(|(item_name, quantity)| {
                             input_port.has_at_least(item_name, *quantity)

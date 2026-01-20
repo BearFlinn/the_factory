@@ -92,7 +92,6 @@ impl Sidebar {
             ))
             .id();
 
-        // Create the close button
         let close_button = commands
             .spawn((
                 Button,

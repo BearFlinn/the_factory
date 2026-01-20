@@ -57,7 +57,6 @@ pub fn handle_camera_keyboard_input(
         target_velocity.x += 1.0;
     }
 
-    // Normalize diagonal movement
     if target_velocity.length() > 0.0 {
         target_velocity = target_velocity.normalize();
     }

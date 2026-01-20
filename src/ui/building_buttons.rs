@@ -50,7 +50,6 @@ impl BuildingButton {
                     .with_border(Color::srgb(0.6, 0.8, 0.4)),
             );
 
-        // Create the main building button
         let building_button = parent
             .spawn((
                 Button,
@@ -183,10 +182,8 @@ pub fn handle_building_button_interactions(
             selected_building.building_name = Some(button.building_name.clone());
         }
 
-        // Update selected state based on selection
         button.is_selected = selectable.is_selected;
 
-        // If this button was deselected, clear the resource if it was this building
         if !selectable.is_selected
             && button.is_selected
             && selected_building.building_name.as_ref() == Some(&button.building_name)
@@ -202,7 +199,6 @@ pub fn handle_building_selection_hotkeys(
     mut selected_building: ResMut<SelectedBuilding>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        // Clear all building selections
         for (mut button, mut selectable) in &mut button_query {
             if button.is_selected {
                 button.set_selected(false);

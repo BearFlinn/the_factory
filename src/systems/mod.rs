@@ -27,9 +27,9 @@ use bevy::prelude::*;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SystemsSet {
-    Infrastructure, // power, compute, network
-    Operational,    // operational status calculation
-    Display,        // visual indicators
+    Infrastructure,
+    Operational,
+    Display,
 }
 
 pub struct SystemsPlugin;

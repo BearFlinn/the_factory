@@ -34,7 +34,6 @@ pub fn move_workers(
     mut arrival_events: EventWriter<WorkerArrivedEvent>,
 ) {
     for (worker_entity, mut transform, mut path, mut worker_pos, speed) in &mut workers {
-        // Move toward current target
         if let Some(target) = path.current_target {
             let direction = (target - transform.translation.truncate()).normalize_or_zero();
             let movement = direction * speed.value * time.delta_secs();
@@ -83,7 +82,6 @@ pub fn calculate_path(
         return Some(VecDeque::new());
     }
 
-    // Validate that start and end are in the extended network (connected to infrastructure)
     if !network.is_cell_connected(start.0, start.1) || !network.is_cell_connected(end.0, end.1) {
         return None;
     }
@@ -97,7 +95,6 @@ pub fn calculate_path(
 
     while let Some(current) = queue.pop_front() {
         if current == end {
-            // Reconstruct path
             let mut path = Vec::new();
             let mut current_pos = end;
 
@@ -108,7 +105,6 @@ pub fn calculate_path(
 
             path.reverse();
 
-            // Convert to world coordinates
             let world_path = path
                 .into_iter()
                 .map(|(x, y)| grid.grid_to_world_coordinates(x, y))
@@ -117,7 +113,6 @@ pub fn calculate_path(
             return Some(world_path);
         }
 
-        // Check adjacent cells
         for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
             let next = (current.0 + dx, current.1 + dy);
 
@@ -125,7 +120,6 @@ pub fn calculate_path(
                 continue;
             }
 
-            // Allow movement to core network cells, or to the end destination if it's in extended network
             let can_move_to_cell = network.is_core_network_cell(next.0, next.1)
                 || (next == end && network.is_cell_connected(next.0, next.1));
 
@@ -169,7 +163,6 @@ pub fn validate_and_displace_stranded_workers(
         let worker_pos = (worker_position.x, worker_position.y);
 
         if !network.is_cell_connected(worker_pos.0, worker_pos.1) {
-            // Worker is stranded on invalid terrain - find nearest valid position
             if let Some(displacement_target) =
                 find_nearest_valid_network_cell(worker_pos, &network, 10)
             {
@@ -177,20 +170,16 @@ pub fn validate_and_displace_stranded_workers(
                     "Emergency displacement: Worker {worker_entity:?} stranded at {worker_pos:?}, moving to {displacement_target:?}"
                 );
 
-                // Update worker's grid position
                 worker_position.x = displacement_target.0;
                 worker_position.y = displacement_target.1;
 
-                // Update worker's world transform
                 let world_pos =
                     grid.grid_to_world_coordinates(displacement_target.0, displacement_target.1);
                 transform.translation = world_pos.extend(transform.translation.z);
 
-                // Clear potentially invalid pathfinding state
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
 
-                // Reset worker state to allow task reassignment
                 *worker_state = WorkerState::Idle;
                 assigned_sequence.0 = None;
 
@@ -200,8 +189,6 @@ pub fn validate_and_displace_stranded_workers(
                     "Critical: Worker {worker_entity:?} stranded at {worker_pos:?} with no reachable valid network cells"
                 );
 
-                // Fallback: Reset worker state even if we can't move them
-                // This prevents permanent deadlock at the cost of potential positioning issues
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
                 *worker_state = WorkerState::Idle;
@@ -215,18 +202,14 @@ pub fn validate_and_displace_stranded_workers(
     }
 }
 
-/// Find the nearest cell that is part of the valid network within search radius
 fn find_nearest_valid_network_cell(
     stranded_pos: (i32, i32),
     network: &NetworkConnectivity,
     max_search_radius: i32,
 ) -> Option<(i32, i32)> {
-    // Use expanding square search pattern for optimal nearest-neighbor finding
     for radius in 1..=max_search_radius {
-        // Search in expanding squares around the stranded position
         for dx in -radius..=radius {
             for dy in -radius..=radius {
-                // Only check the perimeter of the current radius to avoid redundant checks
                 if dx.abs() != radius && dy.abs() != radius {
                     continue;
                 }

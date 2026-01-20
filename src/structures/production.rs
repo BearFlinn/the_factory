@@ -68,21 +68,17 @@ pub fn update_port_crafters(
             continue;
         };
 
-        // Check if we have all required inputs
         let has_inputs = recipe
             .inputs
             .iter()
             .all(|(item, qty)| input_port.get_item_quantity(item) >= *qty);
 
-        // Check if we have space for all outputs
         let has_space = output_port.has_space_for(&recipe.outputs);
 
         if has_inputs && has_space {
-            // Consume from input port
             for (item, qty) in &recipe.inputs {
                 input_port.remove_item(item, *qty);
             }
-            // Produce to output port
             for (item, qty) in &recipe.outputs {
                 output_port.add_item(item, *qty);
             }
@@ -118,11 +114,9 @@ pub fn update_source_port_crafters(
             continue;
         };
 
-        // Sources don't consume - only check output space
         let has_space = output_port.has_space_for(&recipe.outputs);
 
         if has_space {
-            // Produce to output port
             for (item, qty) in &recipe.outputs {
                 output_port.add_item(item, *qty);
             }
@@ -158,14 +152,12 @@ pub fn update_sink_port_crafters(
             continue;
         };
 
-        // Check if we have all required inputs
         let has_inputs = recipe
             .inputs
             .iter()
             .all(|(item, qty)| input_port.get_item_quantity(item) >= *qty);
 
         if has_inputs {
-            // Consume from input port (non-item outputs like power handled elsewhere)
             for (item, qty) in &recipe.inputs {
                 input_port.remove_item(item, *qty);
             }
@@ -200,7 +192,6 @@ pub fn poll_port_logistics(
     let existing_targets: std::collections::HashSet<Entity> =
         tasks.iter().map(|target| target.0).collect();
 
-    // Emit pickup requests from OutputPorts (source buildings)
     for (entity, output_port) in &source_ports {
         if existing_targets.contains(&entity) {
             continue;
@@ -217,7 +208,6 @@ pub fn poll_port_logistics(
         }
     }
 
-    // Emit pickup requests from processor OutputPorts
     for (entity, _, output_port, _) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
@@ -234,7 +224,6 @@ pub fn poll_port_logistics(
         }
     }
 
-    // Emit delivery requests for InputPorts (sink buildings)
     for (entity, input_port, maybe_crafter) in &sink_ports {
         if existing_targets.contains(&entity) {
             continue;
@@ -248,7 +237,6 @@ pub fn poll_port_logistics(
         );
     }
 
-    // Emit delivery requests for processor InputPorts
     for (entity, input_port, _, maybe_crafter) in &processor_ports {
         if existing_targets.contains(&entity) {
             continue;
@@ -262,12 +250,10 @@ pub fn poll_port_logistics(
         );
     }
 
-    // Storage ports can both receive and provide - emit based on contents
     for (entity, storage_port) in &storage_ports {
         if existing_targets.contains(&entity) {
             continue;
         }
-        // Storage offers items for pickup
         for (item_name, &quantity) in storage_port.items() {
             if quantity > 0 {
                 events.send(PortLogisticsRequest {

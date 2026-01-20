@@ -20,13 +20,9 @@ pub use tooltips::*;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum UISystemSet {
-    /// Input detection and event generation
     InputDetection,
-    /// Entity spawning and despawning
     EntityManagement,
-    /// Style and visual updates
     VisualUpdates,
-    /// Position and layout updates
     LayoutUpdates,
 }
 

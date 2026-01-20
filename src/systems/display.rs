@@ -68,7 +68,6 @@ pub fn update_inventory_display(
             })
         });
 
-        // Get items to display (priority: OutputPort > InputPort > StoragePort > Cargo)
         let items_to_display: Option<std::collections::HashMap<String, u32>> = output_port
             .map(InventoryAccess::get_all_items)
             .or_else(|| input_port.map(InventoryAccess::get_all_items))
@@ -79,7 +78,6 @@ pub fn update_inventory_display(
             continue;
         };
 
-        // Format all items for display
         let display_text = if items.is_empty() {
             "Empty".to_string()
         } else {
@@ -107,11 +105,11 @@ pub fn update_inventory_display(
                     InventoryDisplay,
                     Text2d::new(display_text),
                     TextFont {
-                        font_size: 12.0, // Smaller font for multi-line display
+                        font_size: 12.0,
                         ..Default::default()
                     },
                     TextColor(Color::srgb(0.2, 0.2, 0.2)),
-                    Transform::from_xyz(0.0, 30.0, 1.1), // Higher offset for multi-line
+                    Transform::from_xyz(0.0, 30.0, 1.1),
                 ))
                 .id();
 
@@ -170,15 +168,12 @@ pub fn update_placement_ghost(
 
     match (&selected_building.building_name, cursor_coords) {
         (Some(building_name), Some(coords)) => {
-            // Building selected and cursor on valid grid - show/update ghost
             if let Some(def) = building_registry.get_definition(building_name) {
                 if let Ok((_, mut transform, mut sprite, mut ghost)) = ghost_query.get_single_mut()
                 {
-                    // Update existing ghost position
                     let world_pos = grid.grid_to_world_coordinates(coords.grid_x, coords.grid_y);
                     transform.translation = Vec3::new(world_pos.x, world_pos.y, 0.5);
 
-                    // Update sprite if building type changed
                     if ghost.building_name != *building_name {
                         sprite.color = Color::srgba(
                             def.appearance.color.0,
@@ -190,7 +185,6 @@ pub fn update_placement_ghost(
                         ghost.building_name.clone_from(building_name);
                     }
                 } else {
-                    // Create new ghost
                     let world_pos = grid.grid_to_world_coordinates(coords.grid_x, coords.grid_y);
                     commands.spawn((
                         PlacementGhost {
@@ -211,7 +205,6 @@ pub fn update_placement_ghost(
             }
         }
         _ => {
-            // No building selected or cursor not on grid - remove ghost
             for (entity, _, _, _) in ghost_query.iter() {
                 commands.entity(entity).despawn();
             }
@@ -227,7 +220,6 @@ pub fn display_placement_error(
     camera_q: Query<(&Camera, &GlobalTransform)>,
 ) {
     for event in validation_events.read() {
-        // Only handle error cases
         if let Err(error) = &event.result {
             let Some(cursor_coords) = grid.get_cursor_grid_coordinates(&windows, &camera_q) else {
                 continue;
@@ -236,7 +228,6 @@ pub fn display_placement_error(
             let world_pos =
                 grid.grid_to_world_coordinates(cursor_coords.grid_x, cursor_coords.grid_y);
 
-            // Spawn floating error message
             commands.spawn((
                 PlacementErrorMessage {
                     timer: Timer::from_seconds(2.0, TimerMode::Once),
@@ -246,8 +237,8 @@ pub fn display_placement_error(
                     font_size: 18.0,
                     ..Default::default()
                 },
-                TextColor(Color::srgb(1.0, 0.3, 0.3)), // Red error text
-                Transform::from_xyz(world_pos.x, world_pos.y + 40.0, 2.0), // Offset above cursor
+                TextColor(Color::srgb(1.0, 0.3, 0.3)),
+                Transform::from_xyz(world_pos.x, world_pos.y + 40.0, 2.0),
             ));
         }
     }

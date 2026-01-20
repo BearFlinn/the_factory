@@ -50,20 +50,16 @@ impl Scanner {
         }
     }
 
-    /// Find unexplored tiles adjacent to explored areas, sorted by distance then angle
     fn find_exploration_targets(&self, grid: &Grid) -> Vec<(i32, i32, i32, f32)> {
         let mut targets = Vec::new();
 
-        // Check all explored tiles for unexplored neighbors
         for &(x, y) in &grid.valid_coordinates {
-            // Check 4-directional neighbors for unexplored areas
             let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
             for (nx, ny) in neighbors {
                 let neighbor_distance = (nx - self.position.x)
                     .abs()
                     .max((ny - self.position.y).abs());
 
-                // No distance limit - scanner can reach anywhere
                 if !grid.valid_coordinates.contains(&(nx, ny)) {
                     let angle = self.calculate_angle(nx, ny);
                     targets.push((nx, ny, neighbor_distance, angle));
@@ -71,15 +67,12 @@ impl Scanner {
             }
         }
 
-        // Remove duplicates
         targets.sort_by(|a, b| {
-            // Primary sort: distance (closer is better)
             let distance_cmp = a.2.cmp(&b.2);
             if distance_cmp != std::cmp::Ordering::Equal {
                 return distance_cmp;
             }
 
-            // Secondary sort: angle progression from last scan position
             let angle_diff_a = self.calculate_angle_diff(a.3);
             let angle_diff_b = self.calculate_angle_diff(b.3);
             angle_diff_a
@@ -91,7 +84,6 @@ impl Scanner {
         targets
     }
 
-    /// Calculate the angular difference from last scan position, preferring clockwise progression
     fn calculate_angle_diff(&self, target_angle: f32) -> f32 {
         let mut diff = target_angle - self.last_scan_angle;
 
@@ -106,8 +98,6 @@ impl Scanner {
         diff
     }
 
-    /// Find next cluster to reveal, prioritizing systematic exploration
-    /// Returns (cluster, `target_distance`) tuple
     pub fn find_next_cluster(&mut self, grid: &Grid) -> Option<(Vec<(i32, i32)>, i32)> {
         let targets = self.find_exploration_targets(grid);
 
@@ -115,20 +105,16 @@ impl Scanner {
             return None;
         }
 
-        // Take the best target (closest distance, best angle progression)
         let (target_x, target_y, distance, angle) = targets[0];
 
-        // Update our scan progression
         self.last_scan_angle = angle;
 
-        // Create a 3x3 cluster centered on the target
         let mut cluster = Vec::new();
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let cluster_x = target_x + dx;
                 let cluster_y = target_y + dy;
 
-                // No distance limit - include all tiles in cluster
                 cluster.push((cluster_x, cluster_y));
             }
         }
@@ -136,7 +122,6 @@ impl Scanner {
         Some((cluster, distance))
     }
 
-    /// Reset the timer with duration based on target distance
     pub fn reset_timer_for_distance(&mut self, distance: i32) {
         self.current_target_distance = distance;
         let scan_time = self.calculate_scan_time(distance);
@@ -159,7 +144,6 @@ pub fn handle_progressive_scanning(
                     coordinates: cluster,
                 });
 
-                // Reset timer for next scan based on distance
                 scanner.reset_timer_for_distance(target_distance);
 
                 println!(

@@ -4,15 +4,15 @@ use crate::ui::UISystemSet;
 
 #[derive(Clone)]
 pub enum SelectionBehavior {
-    Toggle,            // Click toggles selection on/off
-    Exclusive(String), // Click selects this, deselects others in the group
+    Toggle,
+    Exclusive(String),
 }
 
 #[derive(Component)]
 pub struct Selectable {
     pub is_selected: bool,
     pub selection_behavior: SelectionBehavior,
-    pub selection_group: Option<String>, // Elements in the same group deselect each other
+    pub selection_group: Option<String>,
 }
 
 impl Selectable {
@@ -39,7 +39,6 @@ impl Selectable {
 pub struct DynamicStyles {
     pub background_color: Option<BackgroundColor>,
     pub border_color: Option<BorderColor>,
-    // Add more style properties as needed
 }
 
 impl DynamicStyles {

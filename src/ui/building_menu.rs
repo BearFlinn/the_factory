@@ -331,7 +331,6 @@ pub fn update_menu_content(
     mut content_query: Query<(Entity, &mut MenuContent)>,
     mut commands: Commands,
     children: Query<&Children>,
-    // Building data queries
     buildings_operational: Query<&Operational, With<Building>>,
     buildings_input_port: Query<&InputPort, With<Building>>,
     buildings_output_port: Query<&OutputPort, With<Building>>,
@@ -347,7 +346,6 @@ pub fn update_menu_content(
                 .map(|hash| menu_content.last_updated != Some(hash))
                 .unwrap_or(false),
             ContentType::Storage => {
-                // Check all port types for changes
                 let input_hash = buildings_input_port
                     .get(menu_content.target_building)
                     .map(simple_hash);

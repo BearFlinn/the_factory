@@ -19,9 +19,7 @@ pub struct NetworkConnection {
 
 #[derive(Resource, Default)]
 pub struct NetworkConnectivity {
-    // Core network: only hubs and connectors (for placement validation and pathfinding)
     core_network_cells: HashSet<(i32, i32)>,
-    // Extended network: core + buildings adjacent to core (for operational status)
     connected_cells: HashSet<(i32, i32)>,
 }
 
@@ -72,7 +70,6 @@ pub fn calculate_network_connectivity(
     let mut core_network_cells = HashSet::new();
     let mut queue = VecDeque::new();
 
-    // Add hub positions as starting points
     for (multi_cell, _) in hub.iter() {
         let half_width = multi_cell.width / 2;
         let half_height = multi_cell.height / 2;
@@ -87,14 +84,12 @@ pub fn calculate_network_connectivity(
         }
     }
 
-    // Flood fill to find all positions connected via connectors
     while let Some((x, y)) = queue.pop_front() {
         for (adj_x, adj_y) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
             if core_network_cells.contains(&(adj_x, adj_y)) {
                 continue;
             }
 
-            // Check if this adjacent position has a connector
             let has_connector = building_layers.iter().any(|(position, layer, building)| {
                 layer.0 == BUILDING_LAYER
                     && building == Some(&NetWorkComponent)
@@ -109,18 +104,15 @@ pub fn calculate_network_connectivity(
         }
     }
 
-    // Create extended network: include all buildings adjacent to core network
     let mut connected_cells = core_network_cells.clone();
     for (position, layer, _) in building_layers.iter() {
         if layer.0 == BUILDING_LAYER {
             let building_pos = (position.x, position.y);
 
-            // Skip if already in core network
             if core_network_cells.contains(&building_pos) {
                 continue;
             }
 
-            // Check if this building is adjacent to any cell in the core network
             for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
                 let adjacent = (building_pos.0 + dx, building_pos.1 + dy);
                 if core_network_cells.contains(&adjacent) {
@@ -143,7 +135,6 @@ pub fn update_network_connectivity(
     >,
     hub: Query<(&MultiCellBuilding, &Hub)>,
 ) {
-    // Calculate on first run even without event, or when event received
     let should_update =
         !network_events.is_empty() || network_connectivity.core_network_cells.is_empty();
 
@@ -169,12 +160,10 @@ pub fn update_visual_network_connections(
     }
     network_events.clear();
 
-    // Remove old visual connections
     for entity in existing_connections.iter() {
         commands.entity(entity).despawn();
     }
 
-    // Create selective visual connections
     let extended_positions: Vec<_> = network_connectivity
         .connected_cells
         .iter()
@@ -189,17 +178,13 @@ pub fn update_visual_network_connections(
             let dx = (pos2.0 - pos1.0).abs();
             let dy = (pos2.1 - pos1.1).abs();
 
-            // Only process adjacent cells
             if !((dx == 1 && dy == 0) || (dx == 0 && dy == 1)) {
                 continue;
             }
 
-            // Determine cell types using core network membership
             let pos1_is_core = network_connectivity.is_core_network_cell(pos1.0, pos1.1);
             let pos2_is_core = network_connectivity.is_core_network_cell(pos2.0, pos2.1);
 
-            // Draw connection if at least one endpoint is core network (hub/connector)
-            // This excludes building↔building while including all core↔building connections
             if pos1_is_core || pos2_is_core {
                 spawn_connection_visual(&mut commands, pos1, pos2);
             }

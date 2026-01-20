@@ -31,7 +31,7 @@ pub struct BuildingDef {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AppearanceDef {
     pub size: (f32, f32),
-    pub color: (f32, f32, f32, f32),    // RGBA
+    pub color: (f32, f32, f32, f32),
     pub multi_cell: Option<(i32, i32)>, // (width, height)
 }
 
@@ -209,20 +209,11 @@ impl BuildingRegistry {
                 } => {
                     let (current_recipe, available_recipes_vec) =
                         match (recipe_name, available_recipes) {
-                            // Single-recipe crafter: fixed recipe, empty available list
                             (Some(recipe), None) => (Some(recipe.clone()), Vec::new()),
-
-                            // Multi-recipe crafter: no current recipe, provided available list
                             (None, Some(recipes)) => (None, recipes.clone()),
-
-                            // Invalid configurations - handle gracefully
                             (Some(recipe), Some(recipes)) => {
-                                // If both are provided, treat as multi-recipe with the single recipe pre-selected
-                                // This provides a migration path for existing configurations
                                 (Some(recipe.clone()), recipes.clone())
                             }
-
-                            // Neither provided - create empty crafter (should probably be avoided)
                             (None, None) => (None, Vec::new()),
                         };
 
@@ -241,7 +232,6 @@ impl BuildingRegistry {
                         },
                     ));
                 }
-                // Port-based components
                 BuildingComponentDef::InputPort { capacity } => {
                     entity_commands.insert(InputPort::new(*capacity));
                 }

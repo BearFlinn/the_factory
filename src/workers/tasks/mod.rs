@@ -41,21 +41,15 @@ impl Plugin for TasksPlugin {
             .add_systems(
                 Update,
                 (
-                    // Interrupt handling - highest priority
                     (handle_worker_interrupts, debug_clear_all_workers)
                         .in_set(TaskSystemSet::Interrupts),
-                    // Emergency dropoff must run after item transfers complete to avoid
-                    // creating redundant tasks for workers who just completed a dropoff
                     emergency_dropoff_idle_workers
                         .in_set(TaskSystemSet::Interrupts)
                         .after(execute_item_transfer),
-                    // Worker assignment
                     assign_available_sequences_to_workers.in_set(TaskSystemSet::Assignment),
-                    // Sequence processing and state management
                     (process_worker_sequences, derive_worker_state_from_sequences)
                         .chain()
                         .in_set(TaskSystemSet::Processing),
-                    // Port-based logistics systems
                     (
                         create_port_logistics_tasks,
                         create_proactive_port_tasks,
@@ -63,7 +57,6 @@ impl Plugin for TasksPlugin {
                         clear_all_tasks,
                     )
                         .in_set(TaskSystemSet::Generation),
-                    // Cleanup systems
                     (handle_sequence_task_arrivals, clear_completed_tasks)
                         .in_set(TaskSystemSet::Cleanup),
                 ),

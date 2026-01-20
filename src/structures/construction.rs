@@ -32,37 +32,26 @@ pub struct RecipeCrafter {
 }
 
 impl RecipeCrafter {
-    // Helper method to check if this is a single-recipe crafter
     pub fn is_single_recipe(&self) -> bool {
         self.available_recipes.is_empty()
     }
 
-    // Helper method to check if this is a multi-recipe crafter
     pub fn is_multi_recipe(&self) -> bool {
         !self.available_recipes.is_empty()
     }
 
-    // Helper method to get the active recipe (for compatibility)
     pub fn get_active_recipe(&self) -> Option<&RecipeName> {
         self.current_recipe.as_ref()
     }
 
-    // Helper method to set the current recipe (validates against available recipes)
     pub fn set_recipe(&mut self, recipe_name: RecipeName) -> Result<(), String> {
-        if self.is_single_recipe() {
-            // For single-recipe crafters, just set it directly
+        if self.is_single_recipe() || self.available_recipes.contains(&recipe_name) {
             self.current_recipe = Some(recipe_name);
             Ok(())
         } else {
-            // For multi-recipe crafters, validate against available recipes
-            if self.available_recipes.contains(&recipe_name) {
-                self.current_recipe = Some(recipe_name);
-                Ok(())
-            } else {
-                Err(format!(
-                    "Recipe '{recipe_name}' not available for this crafter"
-                ))
-            }
+            Err(format!(
+                "Recipe '{recipe_name}' not available for this crafter"
+            ))
         }
     }
 }
@@ -117,7 +106,7 @@ pub struct ConstructionSite {
 pub struct ConstructionSiteBundle {
     pub construction_site: ConstructionSite,
     pub building_cost: BuildingCost,
-    pub input_port: InputPort,
+    input_port: InputPort,
     pub position: Position,
     pub layer: Layer,
     pub sprite: Sprite,
@@ -135,19 +124,19 @@ impl ConstructionSiteBundle {
         Self {
             construction_site: ConstructionSite { building_name },
             building_cost,
-            input_port: InputPort::new(1000), // Large capacity for construction materials
+            input_port: InputPort::new(1000),
             position,
             layer: Layer(BUILDING_LAYER),
             sprite: Sprite::from_color(
                 Color::srgba(
-                    appearance.color.0, // Dimmed colors for construction
+                    appearance.color.0,
                     appearance.color.1,
                     appearance.color.2,
-                    0.7, // Semi-transparent
+                    0.7,
                 ),
                 Vec2::new(appearance.size.0, appearance.size.1),
             ),
-            transform: Transform::from_xyz(world_pos.x, world_pos.y, 0.8), // Slightly lower Z than buildings
+            transform: Transform::from_xyz(world_pos.x, world_pos.y, 0.8),
         }
     }
 }
@@ -262,12 +251,9 @@ pub fn monitor_construction_completion(
     for (site_entity, construction_site, input_port, building_cost, position, transform) in
         &construction_sites
     {
-        // Check if construction site has all required materials
         if input_port.has_items_for_recipe(&building_cost.cost.inputs) {
-            // Remove construction site
             commands.entity(site_entity).despawn();
 
-            // Update grid cell children to remove construction site
             if let Some((_, _, mut cell_children)) = grid_cells
                 .iter_mut()
                 .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y)
@@ -275,7 +261,6 @@ pub fn monitor_construction_completion(
                 cell_children.0.retain(|&entity| entity != site_entity);
             }
 
-            // Spawn actual building
             if let Some(building_entity) = registry.spawn_building(
                 &mut commands,
                 &construction_site.building_name,
@@ -283,7 +268,6 @@ pub fn monitor_construction_completion(
                 position.y,
                 transform.translation.truncate(),
             ) {
-                // Set drill recipe
                 if construction_site.building_name == MINING_DRILL {
                     commands
                         .entity(building_entity)
@@ -291,7 +275,6 @@ pub fn monitor_construction_completion(
                             position: *position,
                         });
                 }
-                // Add building to grid cell
                 if let Some((_, _, mut cell_children)) = grid_cells
                     .iter_mut()
                     .find(|(_, pos, _)| pos.x == position.x && pos.y == position.y)
@@ -346,7 +329,6 @@ impl ConstructionMonitor {
     }
 
     pub fn has_made_progress(&self, current_inventory: &HashMap<ItemName, u32>) -> bool {
-        // Check if any required materials have increased
         for (item_name, &current_amount) in current_inventory {
             let previous_amount = self
                 .last_inventory_snapshot
@@ -386,32 +368,26 @@ pub fn monitor_construction_progress(
         let required_materials = &building_cost.cost.inputs;
         let current_materials = input_port.get_all_items();
 
-        // Check if construction is complete
         if input_port.has_items_for_recipe(required_materials) {
-            continue; // Let the completion system handle this
+            continue;
         }
 
-        // Initialize or update monitor
         let Some(mut monitor) = monitor else {
-            // First time seeing this construction site
             commands
                 .entity(site_entity)
                 .insert(ConstructionMonitor::new(&current_materials, current_time));
             continue;
         };
 
-        // Check for progress
         if monitor.has_made_progress(&current_materials) {
             monitor.reset_progress(&current_materials, current_time);
-            continue; // Progress detected, no action needed
+            continue;
         }
 
-        // Check if we should retry supply planning
         if !monitor.should_retry(current_time) {
             continue;
         }
 
-        // Calculate what materials are still needed
         let mut still_needed = HashMap::new();
         for (item_name, &required_amount) in required_materials {
             let current_amount = current_materials.get(item_name).copied().unwrap_or(0);
@@ -458,12 +434,10 @@ pub fn assign_drill_recipes(
     resource_nodes: Query<(&ResourceNodeRecipe, &Position), With<ResourceNode>>,
 ) {
     for (drill_entity, mut recipe_crafter, pending) in &mut drills {
-        // Find the resource node at this position
         if let Some((resource_recipe, _)) = resource_nodes
             .iter()
             .find(|(_, pos)| pos.x == pending.position.x && pos.y == pending.position.y)
         {
-            // Use the new set_recipe method to assign the recipe
             if let Err(error) = recipe_crafter.set_recipe(resource_recipe.recipe_name.clone()) {
                 println!(
                     "Failed to assign recipe to drill at ({}, {}): {}",

@@ -297,9 +297,6 @@ fn execute_task_action(
                     transfer_requests,
                 );
             } else {
-                // If no specific items requested, this is a special case
-                // The transfer system will handle finding items from the source's port
-                // For now, we create a transfer request with empty items which will be validated
                 let empty_items = std::collections::HashMap::new();
                 request_transfer_specific_items(
                     task_target.0,
@@ -318,7 +315,6 @@ fn execute_task_action(
                     transfer_requests,
                 );
             } else {
-                // Transfer all items from worker cargo
                 let cargo_items = worker_cargo.get_all_items();
                 if !cargo_items.is_empty() {
                     request_transfer_specific_items(

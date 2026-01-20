@@ -99,34 +99,29 @@ impl TaskSequence {
     }
 
     pub fn is_complete_with_validation(&self, task_query: &Query<Entity, With<Task>>) -> bool {
-        // First check the basic completion condition
         if self.current_index >= self.tasks.len() {
             return true;
         }
 
-        // Check if current task entity still exists
         if let Some(current_task) = self.current_task() {
             if task_query.get(current_task).is_err() {
-                return true; // Current task was despawned, consider sequence complete
+                return true;
             }
         }
 
         false
     }
 
-    // Add method to validate and clean invalid tasks
     pub fn validate_and_advance(&mut self, task_query: &Query<Entity, With<Task>>) -> bool {
         let mut advanced = false;
 
-        // Skip invalid tasks until we find a valid one or reach the end
         while self.current_index < self.tasks.len() {
             if let Some(current_task) = self.current_task() {
                 if task_query.get(current_task).is_ok() {
-                    break; // Found valid task
+                    break;
                 }
             }
 
-            // Current task is invalid, advance
             self.current_index += 1;
             advanced = true;
         }

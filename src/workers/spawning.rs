@@ -29,7 +29,6 @@ pub struct WorkerBundle {
     pub path: WorkerPath,
     pub assigned_sequence: AssignedSequence,
     pub state: WorkerState,
-    /// Cargo component for carrying items.
     pub cargo: Cargo,
     pub compute_consumer: ComputeConsumer,
     pub sprite: Sprite,
