@@ -93,6 +93,7 @@ pub enum BuildingComponentDef {
     StoragePort {
         capacity: u32,
     },
+    Launchpad,
 }
 
 #[derive(Resource)]
@@ -248,11 +249,10 @@ impl BuildingRegistry {
                 BuildingComponentDef::StoragePort { capacity } => {
                     entity_commands.insert(StoragePort::new(*capacity));
                 }
+                BuildingComponentDef::Launchpad => {
+                    entity_commands.insert(Launchpad);
+                }
             }
-        }
-
-        if building_name == "Launchpad" {
-            entity_commands.insert(Launchpad);
         }
 
         let entity = entity_commands.id();

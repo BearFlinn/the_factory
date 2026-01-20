@@ -215,6 +215,10 @@ fn generate_tooltip_content(definition: &crate::structures::BuildingDef) -> Stri
                 );
                 has_capabilities = true;
             }
+            BuildingComponentDef::Launchpad => {
+                content.push_str("  - Launches items for score\n");
+                has_capabilities = true;
+            }
         }
     }
 
