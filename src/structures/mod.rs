@@ -1,6 +1,7 @@
 pub mod building_config;
 pub mod commitment;
 pub mod construction;
+pub mod construction_auto_pull;
 pub mod placement;
 pub mod production;
 pub mod validation;
@@ -49,9 +50,7 @@ impl Plugin for BuildingsPlugin {
         app.add_event::<PlaceBuildingRequestEvent>()
             .add_event::<PlaceBuildingValidationEvent>()
             .add_event::<RemoveBuildingEvent>()
-            .add_event::<PortLogisticsRequest>()
-            .add_event::<ConstructionMaterialRequest>()
-            .init_resource::<PortLogisticsTimer>()
+            .init_resource::<construction_auto_pull::ConstructionAutoPullTimer>()
             .add_systems(Startup, (setup, place_hub).chain())
             .add_systems(
                 Update,
@@ -60,7 +59,6 @@ impl Plugin for BuildingsPlugin {
                     validate_placement.in_set(BuildingSystemSet::Validation),
                     (
                         place_building,
-                        monitor_construction_progress,
                         monitor_construction_completion,
                         handle_building_view_range_expansion,
                         assign_drill_recipes.run_if(drill_awaiting_assignment),
@@ -69,15 +67,13 @@ impl Plugin for BuildingsPlugin {
                         .chain()
                         .in_set(BuildingSystemSet::Placement),
                     ((
-                        // Recipe commitment systems
                         commitment::evaluate_recipe_commitments
                             .run_if(commitment::any_needs_evaluation),
                         commitment::commit_pending_recipes,
-                        // Port-based crafting systems
                         update_port_crafters,
                         update_source_port_crafters,
                         update_sink_port_crafters,
-                        poll_port_logistics,
+                        construction_auto_pull::auto_pull_construction_materials,
                     )
                         .chain())
                     .in_set(BuildingSystemSet::Operations),

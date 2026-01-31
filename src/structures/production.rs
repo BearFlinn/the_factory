@@ -1,46 +1,13 @@
 use crate::{
     materials::{
-        items::{InputPort, InventoryAccess, OutputPort, StoragePort},
-        ItemName, ItemRegistry, RecipeRegistry,
+        items::{InputPort, InventoryAccess, OutputPort},
+        ItemRegistry, RecipeRegistry,
     },
-    structures::{Launchpad, RecipeCommitment, RecipeCrafter},
+    structures::{Launchpad, RecipeCrafter},
     systems::{GameScore, Operational},
-    workers::tasks::{Task, TaskTarget},
 };
 use bevy::prelude::*;
 
-/// Event for requesting logistics operations with port-based buildings.
-/// Emitted when `OutputPort`s have items for pickup or `InputPort`s need delivery.
-#[derive(Event)]
-pub struct PortLogisticsRequest {
-    /// The building entity that needs logistics service.
-    pub building: Entity,
-    /// The item type being requested or offered.
-    pub item: ItemName,
-    /// The quantity to transfer.
-    pub quantity: u32,
-    /// If true, this is an output (needs pickup). If false, this is an input (needs delivery).
-    pub is_output: bool,
-    /// Urgency score from 0.0 (low) to 1.0 (critical) based on input buffer state.
-    pub urgency: f32,
-}
-
-/// Timer resource for polling port logistics at regular intervals.
-#[derive(Resource)]
-pub struct PortLogisticsTimer {
-    pub timer: Timer,
-}
-
-impl Default for PortLogisticsTimer {
-    fn default() -> Self {
-        Self {
-            timer: Timer::from_seconds(1.0, TimerMode::Repeating),
-        }
-    }
-}
-
-/// Port-based crafting for buildings with both `InputPort` and `OutputPort` (e.g., Smelter, Assembler).
-/// Consumes from `InputPort`, produces to `OutputPort` - cleanly separated materials.
 pub fn update_port_crafters(
     mut query: Query<(
         &mut InputPort,
@@ -90,8 +57,6 @@ pub fn update_port_crafters(
     }
 }
 
-/// Port-based crafting for Source buildings (`OutputPort` only, e.g., Mining Drill).
-/// These buildings produce items without consuming any inputs.
 pub fn update_source_port_crafters(
     mut query: Query<(&mut OutputPort, &mut RecipeCrafter, &Operational), Without<InputPort>>,
     recipes: Res<RecipeRegistry>,
@@ -128,8 +93,6 @@ pub fn update_source_port_crafters(
     }
 }
 
-/// Port-based crafting for Sink buildings (`InputPort` only, e.g., Generator, Launchpad).
-/// These buildings consume items but produce non-item outputs (like power or score).
 pub fn update_sink_port_crafters(
     mut query: Query<
         (
@@ -191,217 +154,5 @@ pub fn update_sink_port_crafters(
         }
 
         crafter.timer.reset();
-    }
-}
-
-/// Polls port states and emits logistics requests.
-/// Runs on a timer to evaluate the system state holistically.
-pub fn poll_port_logistics(
-    time: Res<Time>,
-    mut timer: ResMut<PortLogisticsTimer>,
-    // Buildings with only OutputPort (sources)
-    source_ports: Query<(Entity, &OutputPort), Without<InputPort>>,
-    // Buildings with only InputPort (sinks)
-    sink_ports: Query<
-        (
-            Entity,
-            &InputPort,
-            Option<&RecipeCrafter>,
-            Option<&RecipeCommitment>,
-        ),
-        Without<OutputPort>,
-    >,
-    // Buildings with both ports (processors)
-    processor_ports: Query<(
-        Entity,
-        &InputPort,
-        &OutputPort,
-        Option<&RecipeCrafter>,
-        Option<&RecipeCommitment>,
-    )>,
-    // Storage buildings
-    storage_ports: Query<(Entity, &StoragePort)>,
-    // Check existing tasks to avoid duplicates
-    tasks: Query<&TaskTarget, With<Task>>,
-    recipe_registry: Res<RecipeRegistry>,
-    mut events: EventWriter<PortLogisticsRequest>,
-) {
-    if !timer.timer.tick(time.delta()).just_finished() {
-        return;
-    }
-
-    let existing_targets: std::collections::HashSet<Entity> =
-        tasks.iter().map(|target| target.0).collect();
-
-    for (entity, output_port) in &source_ports {
-        if existing_targets.contains(&entity) {
-            continue;
-        }
-        for (item_name, &quantity) in output_port.items() {
-            if quantity > 0 {
-                events.send(PortLogisticsRequest {
-                    building: entity,
-                    item: item_name.clone(),
-                    quantity,
-                    is_output: true,
-                    urgency: 0.0,
-                });
-            }
-        }
-    }
-
-    for (entity, _, output_port, _, _) in &processor_ports {
-        if existing_targets.contains(&entity) {
-            continue;
-        }
-        for (item_name, &quantity) in output_port.items() {
-            if quantity > 0 {
-                events.send(PortLogisticsRequest {
-                    building: entity,
-                    item: item_name.clone(),
-                    quantity,
-                    is_output: true,
-                    urgency: 0.0,
-                });
-            }
-        }
-    }
-
-    for (entity, input_port, maybe_crafter, maybe_commitment) in &sink_ports {
-        if existing_targets.contains(&entity) {
-            continue;
-        }
-        emit_input_port_requests(
-            entity,
-            input_port,
-            maybe_crafter,
-            maybe_commitment,
-            &recipe_registry,
-            &mut events,
-        );
-    }
-
-    for (entity, input_port, _, maybe_crafter, maybe_commitment) in &processor_ports {
-        if existing_targets.contains(&entity) {
-            continue;
-        }
-        emit_input_port_requests(
-            entity,
-            input_port,
-            maybe_crafter,
-            maybe_commitment,
-            &recipe_registry,
-            &mut events,
-        );
-    }
-
-    for (entity, storage_port) in &storage_ports {
-        if existing_targets.contains(&entity) {
-            continue;
-        }
-        for (item_name, &quantity) in storage_port.items() {
-            if quantity > 0 {
-                events.send(PortLogisticsRequest {
-                    building: entity,
-                    item: item_name.clone(),
-                    quantity,
-                    is_output: true,
-                    urgency: 0.0,
-                });
-            }
-        }
-    }
-}
-
-/// Helper to emit delivery requests for an `InputPort` based on recipe needs.
-/// Calculates urgency based on how many production cycles the current inputs support.
-fn emit_input_port_requests(
-    entity: Entity,
-    input_port: &InputPort,
-    maybe_crafter: Option<&RecipeCrafter>,
-    maybe_commitment: Option<&RecipeCommitment>,
-    recipe_registry: &RecipeRegistry,
-    events: &mut EventWriter<PortLogisticsRequest>,
-) {
-    let Some(crafter) = maybe_crafter else {
-        return;
-    };
-
-    let recipe_name = if let Some(commitment) = maybe_commitment {
-        match &commitment.committed_recipe {
-            Some(recipe) => recipe,
-            None => return,
-        }
-    } else {
-        match crafter.get_active_recipe() {
-            Some(recipe) => recipe,
-            None => return,
-        }
-    };
-
-    let Some(recipe) = recipe_registry.get_definition(recipe_name) else {
-        return;
-    };
-
-    let available_space = input_port
-        .capacity()
-        .saturating_sub(input_port.get_total_quantity());
-    if available_space == 0 {
-        return;
-    }
-
-    // Calculate urgency based on available production cycles
-    // cycles_available = min(current_qty / recipe_qty) for each input
-    // urgency = 1.0 - (cycles_available / 10.0).clamp(0.0, 1.0)
-    let cycles_available = recipe
-        .inputs
-        .iter()
-        .map(|(item_name, &recipe_qty)| {
-            let current = input_port.get_item_quantity(item_name);
-            let in_transit = maybe_commitment
-                .and_then(|c| c.in_transit_items.get(item_name).copied())
-                .unwrap_or(0);
-            let effective = current.saturating_add(in_transit);
-            if recipe_qty > 0 {
-                effective / recipe_qty
-            } else {
-                u32::MAX
-            }
-        })
-        .min()
-        .unwrap_or(0);
-
-    #[allow(clippy::cast_precision_loss)]
-    let urgency = 1.0 - (cycles_available as f32 / 10.0).clamp(0.0, 1.0);
-
-    let mut total_requested = 0u32;
-
-    for (item_name, &recipe_quantity) in &recipe.inputs {
-        let current = input_port.get_item_quantity(item_name);
-        let in_transit = maybe_commitment
-            .and_then(|c| c.in_transit_items.get(item_name).copied())
-            .unwrap_or(0);
-        let target = recipe_quantity * 10;
-
-        let effective_amount = current.saturating_add(in_transit);
-        if effective_amount < target {
-            let deficit = target.saturating_sub(effective_amount);
-            let feasible = deficit.min(available_space.saturating_sub(total_requested));
-
-            if feasible > 0 {
-                events.send(PortLogisticsRequest {
-                    building: entity,
-                    item: item_name.clone(),
-                    quantity: feasible,
-                    is_output: false,
-                    urgency,
-                });
-                total_requested += feasible;
-            }
-        }
-
-        if total_requested >= available_space {
-            break;
-        }
     }
 }

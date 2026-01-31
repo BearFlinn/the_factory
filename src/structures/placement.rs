@@ -1,13 +1,11 @@
 use crate::{
     grid::{CellChildren, Grid, Layer, Position},
     structures::{
-        Building, BuildingComponentDef, BuildingCost, BuildingRegistry,
-        ConstructionMaterialRequest, ConstructionSite, ConstructionSiteBundle, NetWorkComponent,
-        PlaceBuildingValidationEvent,
+        Building, BuildingComponentDef, BuildingCost, BuildingRegistry, ConstructionSite,
+        ConstructionSiteBundle, NetWorkComponent, PlaceBuildingValidationEvent,
     },
     systems::NetworkChangedEvent,
-    ui::SelectedBuilding,
-    workers::Priority,
+    ui::{workflow_creation::WorkflowCreationState, SelectedBuilding},
 };
 use bevy::prelude::*;
 
@@ -33,7 +31,12 @@ pub fn handle_building_input(
     ui_interactions: Query<&Interaction, With<Button>>,
     mut place_events: EventWriter<PlaceBuildingRequestEvent>,
     mut remove_events: EventWriter<RemoveBuildingEvent>,
+    creation_state: Res<WorkflowCreationState>,
 ) {
+    if creation_state.active {
+        return;
+    }
+
     let ui_active = ui_interactions
         .iter()
         .any(|interaction| matches!(interaction, Interaction::Pressed | Interaction::Hovered));
@@ -71,7 +74,6 @@ pub fn place_building(
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
     mut network_events: EventWriter<NetworkChangedEvent>,
-    mut construction_request_events: EventWriter<ConstructionMaterialRequest>,
 ) {
     for event in validation_events.read() {
         if event.result.is_ok() {
@@ -94,11 +96,10 @@ pub fn place_building(
                     y: event.request.grid_y,
                 };
 
-                // Create construction site instead of building
                 let construction_site_entity = commands
                     .spawn(ConstructionSiteBundle::new(
                         event.request.building_name.clone(),
-                        building_cost.clone(),
+                        building_cost,
                         position,
                         world_pos,
                         &def.appearance,
@@ -116,14 +117,6 @@ pub fn place_building(
                 }
 
                 cell_children.0.push(construction_site_entity);
-
-                // Request materials for construction
-                construction_request_events.send(ConstructionMaterialRequest {
-                    site: construction_site_entity,
-                    position,
-                    needed_materials: building_cost.cost.inputs.clone(),
-                    priority: Priority::Medium,
-                });
 
                 network_events.send(NetworkChangedEvent);
             }

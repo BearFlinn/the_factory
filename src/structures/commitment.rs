@@ -29,17 +29,14 @@ pub fn evaluate_recipe_commitments(
             continue;
         }
 
-        if commitment.can_commit_new_recipe() {
-            commitment.committed_recipe = current_recipe;
-        } else {
-            commitment.pending_recipe = current_recipe;
-        }
+        commitment.committed_recipe = current_recipe;
+        commitment.pending_recipe = None;
     }
 }
 
 pub fn commit_pending_recipes(mut query: Query<&mut RecipeCommitment>) {
     for mut commitment in &mut query {
-        if commitment.pending_recipe.is_some() && commitment.can_commit_new_recipe() {
+        if commitment.pending_recipe.is_some() {
             commitment.committed_recipe = commitment.pending_recipe.clone();
             commitment.pending_recipe = None;
         }
@@ -51,7 +48,6 @@ pub fn commit_pending_recipes(mut query: Query<&mut RecipeCommitment>) {
 mod tests {
     use super::*;
     use crate::materials::RecipeName;
-    use std::collections::HashMap;
 
     #[test]
     fn any_needs_evaluation_returns_true_when_marker_present() {
@@ -158,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_recipe_commitments_different_recipe_empty_transit_commits_immediately() {
+    fn evaluate_recipe_commitments_different_recipe_commits_immediately() {
         let mut app = App::new();
 
         let old_recipe: RecipeName = "Old Recipe".to_string();
@@ -202,52 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_recipe_commitments_different_recipe_with_transit_sets_pending() {
-        let mut app = App::new();
-
-        let old_recipe: RecipeName = "Old Recipe".to_string();
-        let new_recipe: RecipeName = "New Recipe".to_string();
-
-        let crafter = RecipeCrafter {
-            current_recipe: Some(new_recipe.clone()),
-            available_recipes: vec![old_recipe.clone(), new_recipe.clone()],
-            timer: Timer::from_seconds(1.0, TimerMode::Repeating),
-        };
-
-        let mut commitment = RecipeCommitment::new_committed(Some(old_recipe.clone()));
-        let mut in_transit = HashMap::new();
-        in_transit.insert("Iron Ore".to_string(), 10);
-        commitment.add_in_transit(&in_transit);
-
-        let entity = app
-            .world_mut()
-            .spawn((crafter, commitment, NeedsRecipeCommitmentEvaluation))
-            .id();
-
-        let mut system_state: SystemState<(
-            Commands,
-            Query<
-                (Entity, &RecipeCrafter, &mut RecipeCommitment),
-                With<NeedsRecipeCommitmentEvaluation>,
-            >,
-        )> = SystemState::new(app.world_mut());
-
-        let (commands, query) = system_state.get_mut(app.world_mut());
-        evaluate_recipe_commitments(commands, query);
-        system_state.apply(app.world_mut());
-
-        let commitment = app
-            .world()
-            .entity(entity)
-            .get::<RecipeCommitment>()
-            .cloned()
-            .unwrap();
-        assert_eq!(commitment.committed_recipe, Some(old_recipe));
-        assert_eq!(commitment.pending_recipe, Some(new_recipe));
-    }
-
-    #[test]
-    fn commit_pending_recipes_commits_when_transit_empty() {
+    fn commit_pending_recipes_commits_when_pending() {
         let mut app = App::new();
 
         let old_recipe: RecipeName = "Old Recipe".to_string();
@@ -276,17 +227,11 @@ mod tests {
     }
 
     #[test]
-    fn commit_pending_recipes_waits_when_transit_not_empty() {
+    fn commit_pending_recipes_no_op_when_no_pending() {
         let mut app = App::new();
 
-        let old_recipe: RecipeName = "Old Recipe".to_string();
-        let new_recipe: RecipeName = "New Recipe".to_string();
-
-        let mut commitment = RecipeCommitment::new_committed(Some(old_recipe.clone()));
-        commitment.pending_recipe = Some(new_recipe.clone());
-        let mut in_transit = HashMap::new();
-        in_transit.insert("Iron Ore".to_string(), 10);
-        commitment.add_in_transit(&in_transit);
+        let recipe: RecipeName = "Current Recipe".to_string();
+        let commitment = RecipeCommitment::new_committed(Some(recipe.clone()));
 
         let entity = app.world_mut().spawn(commitment).id();
 
@@ -303,7 +248,7 @@ mod tests {
             .get::<RecipeCommitment>()
             .cloned()
             .unwrap();
-        assert_eq!(commitment.committed_recipe, Some(old_recipe));
-        assert_eq!(commitment.pending_recipe, Some(new_recipe));
+        assert_eq!(commitment.committed_recipe, Some(recipe));
+        assert_eq!(commitment.pending_recipe, None);
     }
 }
