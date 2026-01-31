@@ -1,3 +1,4 @@
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
 use crate::{
@@ -107,6 +108,7 @@ fn spawn_panel(commands: &mut Commands) {
             },
             BackgroundColor(PANEL_BG),
             BorderColor(PANEL_BORDER),
+            Interaction::None,
             WorkflowPanel,
         ))
         .with_children(|panel| {
@@ -163,6 +165,7 @@ fn spawn_panel(commands: &mut Commands) {
                     row_gap: Val::Px(6.0),
                     ..default()
                 },
+                ScrollPosition::default(),
                 WorkflowListContainer,
             ));
         });
@@ -463,6 +466,64 @@ fn spawn_panel_button(parent: &mut ChildBuilder, label: &str, bg: Color, marker:
         });
 }
 
+const LINE_HEIGHT: f32 = 21.0;
+const SCROLL_GAP: f32 = 6.0;
+
+fn handle_workflow_scroll(
+    mut mouse_wheel: EventReader<MouseWheel>,
+    windows: Query<&Window>,
+    panel_query: Query<(&GlobalTransform, &ComputedNode), With<WorkflowPanel>>,
+    mut scroll_query: Query<
+        (&mut ScrollPosition, &ComputedNode, &Node, &Children),
+        With<WorkflowListContainer>,
+    >,
+    child_sizes: Query<&ComputedNode, Without<WorkflowListContainer>>,
+) {
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+
+    let cursor_over_panel = panel_query.iter().any(|(transform, node)| {
+        let center = transform.translation().truncate();
+        let half = node.size() / 2.0;
+        cursor_pos.x >= center.x - half.x
+            && cursor_pos.x <= center.x + half.x
+            && cursor_pos.y >= center.y - half.y
+            && cursor_pos.y <= center.y + half.y
+    });
+
+    if !cursor_over_panel {
+        return;
+    }
+
+    for scroll in mouse_wheel.read() {
+        let delta = match scroll.unit {
+            MouseScrollUnit::Line => scroll.y * LINE_HEIGHT,
+            MouseScrollUnit::Pixel => scroll.y,
+        };
+
+        for (mut scroll_pos, container_node, container_style, children) in &mut scroll_query {
+            let content_height: f32 = children
+                .iter()
+                .filter_map(|&child| child_sizes.get(child).ok())
+                .map(|node| node.size().y)
+                .sum();
+            let gap = match container_style.row_gap {
+                Val::Px(px) => px,
+                _ => SCROLL_GAP,
+            };
+            #[allow(clippy::cast_precision_loss)]
+            let gap_total = children.len().saturating_sub(1) as f32 * gap;
+            let total_content = content_height + gap_total;
+            let max_offset = (total_content - container_node.size().y).max(0.0);
+            scroll_pos.offset_y = (scroll_pos.offset_y - delta).clamp(0.0, max_offset);
+        }
+    }
+}
+
 fn update_panel_button_hover_visuals(
     mut buttons: Query<
         (
@@ -506,7 +567,11 @@ impl Plugin for WorkflowPanelPlugin {
         app.init_resource::<WorkflowPanelState>().add_systems(
             Update,
             (
-                toggle_workflow_panel.in_set(UISystemSet::InputDetection),
+                (
+                    toggle_workflow_panel,
+                    handle_workflow_scroll.run_if(|state: Res<WorkflowPanelState>| state.visible),
+                )
+                    .in_set(UISystemSet::InputDetection),
                 handle_workflow_panel_buttons.in_set(UISystemSet::EntityManagement),
                 (
                     update_workflow_panel_content,

@@ -86,7 +86,12 @@ pub fn handle_camera_zoom(
     mut camera_transform_query: Query<&mut Transform, With<Camera2d>>,
     mut projection_query: Query<&mut OrthographicProjection, With<Camera2d>>,
     game_camera_query: Query<&GameCamera, With<Camera2d>>,
+    ui_interactions: Query<&Interaction>,
 ) {
+    let over_ui = ui_interactions
+        .iter()
+        .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered));
+
     let Ok(window) = windows.get_single() else {
         return;
     };
@@ -108,6 +113,9 @@ pub fn handle_camera_zoom(
     };
 
     for scroll in mouse_wheel.read() {
+        if over_ui {
+            continue;
+        }
         let cursor_world_pos = window
             .cursor_position()
             .and_then(|cursor_pos| {
