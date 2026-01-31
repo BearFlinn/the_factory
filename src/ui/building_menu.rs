@@ -113,7 +113,12 @@ pub fn spawn_building_menu(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
     buildings: Query<&Name, With<Building>>,
+    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
+    if creation_state.active {
+        return;
+    }
+
     for click in click_events.read() {
         if existing_menus
             .iter()
@@ -729,7 +734,12 @@ pub fn handle_escape_close_menus(
     keyboard: Res<ButtonInput<KeyCode>>,
     menu_query: Query<Entity, With<BuildingMenu>>,
     mut close_events: EventWriter<CloseMenuEvent>,
+    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
+    if creation_state.active {
+        return;
+    }
+
     if keyboard.just_pressed(KeyCode::Escape) {
         for menu_entity in &menu_query {
             close_events.send(CloseMenuEvent { menu_entity });

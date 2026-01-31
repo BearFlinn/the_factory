@@ -197,7 +197,12 @@ pub fn handle_building_selection_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut button_query: Query<(&mut BuildingButton, &mut Selectable)>,
     mut selected_building: ResMut<SelectedBuilding>,
+    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
+    if creation_state.active {
+        return;
+    }
+
     if keyboard.just_pressed(KeyCode::Escape) {
         for (mut button, mut selectable) in &mut button_query {
             if button.is_selected {
