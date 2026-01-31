@@ -82,7 +82,7 @@ fn toggle_workflow_creation_mode(
     mut commands: Commands,
     existing_panels: Query<Entity, With<WorkflowCreationPanel>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyW) {
+    if !keyboard.just_pressed(KeyCode::KeyN) {
         return;
     }
 

@@ -213,7 +213,12 @@ fn determine_styles<'a>(
 pub fn handle_escape_clear_selection(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selectables: Query<&mut Selectable>,
+    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
+    if creation_state.active {
+        return;
+    }
+
     if keyboard.just_pressed(KeyCode::Escape) {
         for mut selectable in &mut selectables {
             if selectable.is_selected {

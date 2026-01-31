@@ -97,7 +97,8 @@ fn spawn_panel(commands: &mut Commands) {
                 right: Val::Px(10.0),
                 top: Val::Px(100.0),
                 width: Val::Px(350.0),
-                height: Val::Px(500.0),
+                height: Val::Vh(70.0),
+                min_height: Val::Px(300.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(10.0)),
                 border: UiRect::all(Val::Px(2.0)),
@@ -249,7 +250,7 @@ fn update_workflow_panel_content(
         if registry.workflows.is_empty() {
             commands.entity(container).with_children(|parent| {
                 parent.spawn((
-                    Text::new("No workflows. Press W to create one."),
+                    Text::new("No workflows. Press N to create one."),
                     TextFont {
                         font_size: 12.0,
                         ..default()
