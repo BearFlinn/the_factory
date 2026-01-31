@@ -1,14 +1,10 @@
-pub mod dispatcher;
 pub mod pathfinding;
-pub mod pooling;
 pub mod spawning;
-pub mod tasks;
 pub mod workflows;
 
-pub use dispatcher::*;
 pub use pathfinding::*;
 pub use spawning::*;
-pub use tasks::*;
+pub use workflows::*;
 
 use bevy::prelude::*;
 
@@ -27,7 +23,7 @@ pub struct WorkersPlugin;
 impl Plugin for WorkersPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<WorkerArrivedEvent>()
-            .add_plugins(TasksPlugin)
+            .add_plugins(WorkflowsPlugin)
             .configure_sets(
                 Update,
                 (

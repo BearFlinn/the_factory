@@ -1,7 +1,7 @@
 use crate::{
     grid::{Grid, Position},
     systems::NetworkConnectivity,
-    workers::{AssignedSequence, Speed, Worker},
+    workers::{Speed, Worker, WorkflowAssignment},
 };
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
@@ -135,13 +135,14 @@ pub fn calculate_path(
 }
 
 pub fn validate_and_displace_stranded_workers(
+    mut commands: Commands,
     mut workers: Query<
         (
             Entity,
             &mut Transform,
             &mut Position,
             &mut WorkerPath,
-            &mut AssignedSequence,
+            Option<&WorkflowAssignment>,
         ),
         With<Worker>,
     >,
@@ -150,13 +151,8 @@ pub fn validate_and_displace_stranded_workers(
 ) {
     let mut displaced_count = 0;
 
-    for (
-        worker_entity,
-        mut transform,
-        mut worker_position,
-        mut worker_path,
-        mut assigned_sequence,
-    ) in &mut workers
+    for (worker_entity, mut transform, mut worker_position, mut worker_path, has_assignment) in
+        &mut workers
     {
         let worker_pos = (worker_position.x, worker_position.y);
 
@@ -178,7 +174,11 @@ pub fn validate_and_displace_stranded_workers(
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
 
-                assigned_sequence.0 = None;
+                if has_assignment.is_some() {
+                    commands
+                        .entity(worker_entity)
+                        .remove::<WorkflowAssignment>();
+                }
 
                 displaced_count += 1;
             } else {
@@ -188,7 +188,11 @@ pub fn validate_and_displace_stranded_workers(
 
                 worker_path.waypoints.clear();
                 worker_path.current_target = None;
-                assigned_sequence.0 = None;
+                if has_assignment.is_some() {
+                    commands
+                        .entity(worker_entity)
+                        .remove::<WorkflowAssignment>();
+                }
             }
         }
     }
