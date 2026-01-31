@@ -1,6 +1,7 @@
 pub mod building_config;
 pub mod commitment;
 pub mod construction;
+pub mod construction_auto_pull;
 pub mod placement;
 pub mod production;
 pub mod validation;

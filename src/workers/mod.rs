@@ -3,6 +3,7 @@ pub mod pathfinding;
 pub mod pooling;
 pub mod spawning;
 pub mod tasks;
+pub mod workflows;
 
 pub use dispatcher::*;
 pub use pathfinding::*;
