@@ -9,6 +9,8 @@ pub mod sidebar;
 pub mod sidebar_tabs;
 pub mod spawn_worker_button;
 pub mod tooltips;
+pub mod workflow_creation;
+pub mod workflow_panel;
 
 pub use building_buttons::*;
 pub use building_menu::*;
@@ -57,6 +59,8 @@ impl Plugin for UIPlugin {
             TooltipsPlugin,
             BuildingMenuPlugin,
             ScoreDisplayPlugin,
+            workflow_creation::WorkflowCreationPlugin,
+            workflow_panel::WorkflowPanelPlugin,
         ));
     }
 }
