@@ -56,7 +56,7 @@ pub fn handle_tooltip_hover_detection(
                 }
 
                 for tooltip_entity in existing_tooltips.iter() {
-                    commands.entity(tooltip_entity).despawn_recursive();
+                    commands.entity(tooltip_entity).despawn();
                 }
             }
             Interaction::Pressed => {}
@@ -79,7 +79,7 @@ pub fn update_tooltip_timers(
             commands.entity(timer_entity).despawn();
 
             for tooltip_entity in existing_tooltips.iter() {
-                commands.entity(tooltip_entity).despawn_recursive();
+                commands.entity(tooltip_entity).despawn();
             }
 
             if let Ok((building_button, button_transform)) =

@@ -259,7 +259,7 @@ pub fn update_building_buttons_on_tab_change(
 
     let active_tab_type = get_active_tab_type(&all_tabs_query);
 
-    if let Ok(content_entity) = content_query.get_single() {
+    if let Ok(content_entity) = content_query.single() {
         update_building_buttons_for_active_tab(
             &mut commands,
             active_tab_type,

@@ -180,7 +180,7 @@ pub fn handle_progressive_scanning(
 
         if scanner.scan_timer.just_finished() {
             if let Some((cluster, target_distance)) = scanner.find_next_cluster(&grid) {
-                expand_events.send(ExpandGridCellsEvent {
+                expand_events.write(ExpandGridCellsEvent {
                     coordinates: cluster,
                 });
 

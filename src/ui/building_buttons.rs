@@ -27,7 +27,7 @@ impl BuildingButton {
         self.is_selected = selected;
     }
 
-    pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
+    pub fn spawn(&self, parent: &mut ChildSpawnerCommands, registry: &BuildingRegistry) -> Entity {
         let Some(definition) = registry.get_definition(&self.building_name) else {
             warn!("Building definition not found: {}", self.building_name);
             return parent.spawn(Node::default()).id();
@@ -158,7 +158,7 @@ fn format_cost_display(inputs: &std::collections::HashMap<String, u32>) -> Strin
 }
 
 pub fn spawn_building_buttons_for_category(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     building_category: BuildingCategory,
     registry: &BuildingRegistry,
 ) {
@@ -222,7 +222,7 @@ pub fn update_building_buttons_for_active_tab(
     existing_buttons: Query<Entity, With<BuildingButton>>,
 ) {
     for entity in existing_buttons.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     if let Some(building_category) = active_building_type {

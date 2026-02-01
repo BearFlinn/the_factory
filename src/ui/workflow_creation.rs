@@ -98,7 +98,7 @@ fn toggle_workflow_creation_mode(
     state.pending_building = None;
 
     for entity in &existing_panels {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     spawn_creation_panel(&mut commands, &state);
@@ -165,7 +165,7 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
         });
 }
 
-fn spawn_worker_count_row(parent: &mut ChildBuilder, count: u32) {
+fn spawn_worker_count_row(parent: &mut ChildSpawnerCommands, count: u32) {
     parent
         .spawn(Node {
             width: Val::Percent(100.0),
@@ -243,7 +243,7 @@ fn spawn_worker_count_row(parent: &mut ChildBuilder, count: u32) {
         });
 }
 
-fn spawn_bottom_buttons(parent: &mut ChildBuilder) {
+fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn(Node {
             width: Val::Percent(100.0),
@@ -323,15 +323,15 @@ fn handle_building_click_in_creation_mode(
 
     for click in click_events.read() {
         for popup in &existing_popups {
-            commands.entity(popup).despawn_recursive();
+            commands.entity(popup).despawn();
         }
 
         state.pending_building = Some(click.building_entity);
 
-        let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        let Ok((camera, camera_transform)) = camera_q.single() else {
             continue;
         };
-        let Ok(window) = windows.get_single() else {
+        let Ok(window) = windows.single() else {
             continue;
         };
         let Some(screen_pos) = camera
@@ -377,7 +377,11 @@ fn handle_building_click_in_creation_mode(
     }
 }
 
-fn spawn_action_button(parent: &mut ChildBuilder, label: &str, action_type: WorkflowActionType) {
+fn spawn_action_button(
+    parent: &mut ChildSpawnerCommands,
+    label: &str,
+    action_type: WorkflowActionType,
+) {
     parent
         .spawn((
             Button,
@@ -434,7 +438,7 @@ fn handle_action_selection(
         });
 
         for popup in &popups {
-            commands.entity(popup).despawn_recursive();
+            commands.entity(popup).despawn();
         }
 
         rebuild_step_list(&mut commands, &step_lists, &state.steps);
@@ -448,7 +452,7 @@ fn rebuild_step_list(
 ) {
     for (list_entity, children) in step_lists {
         for &child in children {
-            commands.entity(child).despawn_recursive();
+            commands.entity(child).despawn();
         }
 
         commands.entity(list_entity).with_children(|parent| {
@@ -585,7 +589,7 @@ fn handle_creation_controls(
     }
 
     if should_confirm && !state.steps.is_empty() {
-        create_events.send(CreateWorkflowEvent {
+        create_events.write(CreateWorkflowEvent {
             name: state.name.clone(),
             steps: state.steps.clone(),
             desired_worker_count: state.desired_worker_count,
@@ -628,10 +632,10 @@ fn cleanup_creation_mode(
     state.pending_building = None;
 
     for entity in panels {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     for entity in popups {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 

@@ -62,7 +62,7 @@ pub fn update_compute_grid_text(
     mut text_query: Query<&mut Text, With<ComputeGridText>>,
 ) {
     if compute_grid.is_changed() {
-        if let Ok(mut text) = text_query.get_single_mut() {
+        if let Ok(mut text) = text_query.single_mut() {
             **text = format!("Available Compute: {}", compute_grid.available);
         }
     }
@@ -73,7 +73,7 @@ pub fn update_power_grid_text(
     mut text_query: Query<&mut Text, With<PowerGridText>>,
 ) {
     if power_grid.is_changed() {
-        if let Ok(mut text) = text_query.get_single_mut() {
+        if let Ok(mut text) = text_query.single_mut() {
             **text = format!("Available Power: {}", power_grid.available);
         }
     }
@@ -84,13 +84,13 @@ pub fn update_production_text(
     mut text_query: Query<&mut Text, With<ProductionText>>,
     item_registry: Res<ItemRegistry>,
 ) {
-    let Ok(storage_port) = central_storage_port.get_single() else {
+    let Ok(storage_port) = central_storage_port.single() else {
         return;
     };
 
     let items = storage_port.items();
 
-    if let Ok(mut text) = text_query.get_single_mut() {
+    if let Ok(mut text) = text_query.single_mut() {
         if items.is_empty() {
             **text = "Central Storage: Empty".to_string();
         } else {

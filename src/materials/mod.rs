@@ -1,4 +1,4 @@
-use bevy::prelude::{App, Commands, IntoSystemConfigs, Plugin, Startup, Update};
+use bevy::prelude::{App, Commands, IntoScheduleConfigs, Plugin, Startup, Update};
 
 pub mod items;
 pub mod recipes;

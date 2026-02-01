@@ -32,7 +32,7 @@ pub fn setup_score_ui(mut commands: Commands) {
 
 pub fn update_score_text(score: Res<GameScore>, mut text_query: Query<&mut Text, With<ScoreText>>) {
     if score.is_changed() {
-        if let Ok(mut text) = text_query.get_single_mut() {
+        if let Ok(mut text) = text_query.single_mut() {
             **text = format!("Score: {}", score.total_score);
         }
     }

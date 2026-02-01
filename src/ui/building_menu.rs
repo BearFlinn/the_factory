@@ -81,10 +81,10 @@ pub fn detect_building_clicks(
         return;
     }
 
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+    let Ok((camera, camera_transform)) = camera_q.single() else {
         return;
     };
     let Some(cursor_pos) = window.cursor_position() else {
@@ -101,7 +101,7 @@ pub fn detect_building_clicks(
     for (entity, _position, transform) in buildings.iter() {
         let building_world_pos = transform.translation.truncate();
         if world_pos.distance(building_world_pos) < 32.0 {
-            click_events.send(BuildingClickEvent {
+            click_events.write(BuildingClickEvent {
                 building_entity: entity,
                 world_position: building_world_pos,
             });
@@ -131,10 +131,10 @@ pub fn spawn_building_menu(
             continue;
         }
 
-        let Ok((camera, camera_transform)) = camera_q.get_single() else {
+        let Ok((camera, camera_transform)) = camera_q.single() else {
             continue;
         };
-        let Ok(window) = windows.get_single() else {
+        let Ok(window) = windows.single() else {
             continue;
         };
         let Some(screen_pos) = camera
@@ -203,7 +203,7 @@ pub fn spawn_building_menu(
     }
 }
 
-fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity) {
+fn spawn_menu_header(parent: &mut ChildSpawnerCommands, title: &str, menu_entity: Entity) {
     parent
         .spawn(Node {
             width: Val::Percent(100.0),
@@ -256,7 +256,7 @@ fn spawn_menu_header(parent: &mut ChildBuilder, title: &str, menu_entity: Entity
 }
 
 fn spawn_content_section(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     building_entity: Entity,
     content_type: ContentType,
 ) {
@@ -311,7 +311,7 @@ pub fn handle_menu_close_buttons_interaction(
 ) {
     for (close_button, interaction) in &close_buttons {
         if *interaction == Interaction::Pressed {
-            close_events.send(CloseMenuEvent {
+            close_events.write(CloseMenuEvent {
                 menu_entity: close_button.menu_entity,
             });
         }
@@ -325,7 +325,7 @@ pub fn process_menu_close_events(
 ) {
     for close_event in close_events.read() {
         if menu_query.contains(close_event.menu_entity) {
-            commands.entity(close_event.menu_entity).despawn_recursive();
+            commands.entity(close_event.menu_entity).despawn();
         }
     }
 }
@@ -335,10 +335,10 @@ pub fn update_menu_positions(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
 ) {
-    let Ok((camera, camera_transform)) = camera_q.get_single() else {
+    let Ok((camera, camera_transform)) = camera_q.single() else {
         return;
     };
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
 
@@ -397,8 +397,8 @@ pub fn update_menu_content(
 
         if should_update {
             if let Ok(content_children) = children.get(content_entity) {
-                for &child in content_children.iter().skip(1) {
-                    commands.entity(child).despawn_recursive();
+                for child in content_children.iter().skip(1) {
+                    commands.entity(child).despawn();
                 }
             }
 
@@ -470,7 +470,7 @@ fn hash_crafter_recipe_state(crafter: &RecipeCrafter) -> u32 {
     hasher.finish() as u32
 }
 
-fn spawn_status_content(parent: &mut ChildBuilder, operational: &Operational) {
+fn spawn_status_content(parent: &mut ChildSpawnerCommands, operational: &Operational) {
     let is_operational = operational.get_status();
     let status_color = if is_operational {
         Color::srgb(0.2, 0.8, 0.2)
@@ -511,69 +511,71 @@ fn spawn_status_content(parent: &mut ChildBuilder, operational: &Operational) {
 }
 
 fn spawn_port_inventory_content(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     input_port: Option<&InputPort>,
     output_port: Option<&OutputPort>,
     storage_port: Option<&StoragePort>,
 ) {
-    let spawn_port_items =
-        |parent: &mut ChildBuilder, label: &str, access: &dyn InventoryAccess, color: Color| {
-            parent.spawn((
-                Text::new(format!("{label}:")),
-                TextFont {
-                    font_size: 11.0,
-                    ..default()
-                },
-                TextColor(color),
-                Node {
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                },
-            ));
+    let spawn_port_items = |parent: &mut ChildSpawnerCommands,
+                            label: &str,
+                            access: &dyn InventoryAccess,
+                            color: Color| {
+        parent.spawn((
+            Text::new(format!("{label}:")),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(color),
+            Node {
+                margin: UiRect::top(Val::Px(4.0)),
+                ..default()
+            },
+        ));
 
-            if access.is_empty() {
+        if access.is_empty() {
+            parent.spawn((
+                Text::new("  Empty"),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.6, 0.6, 0.6)),
+            ));
+        } else {
+            for (item_name, &quantity) in access.items() {
                 parent.spawn((
-                    Text::new("  Empty"),
+                    Text::new(format!("  {item_name}: {quantity}")),
                     TextFont {
                         font_size: 12.0,
                         ..default()
                     },
-                    TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                    TextColor(Color::srgb(0.8, 0.8, 0.8)),
                 ));
-            } else {
-                for (item_name, &quantity) in access.items() {
-                    parent.spawn((
-                        Text::new(format!("  {item_name}: {quantity}")),
-                        TextFont {
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
-                    ));
-                }
             }
+        }
 
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss
-            )]
-            let usage_percent =
-                (access.get_total_quantity() as f32 / access.capacity() as f32 * 100.0) as u32;
-            parent.spawn((
-                Text::new(format!(
-                    "  {}/{} ({}%)",
-                    access.get_total_quantity(),
-                    access.capacity(),
-                    usage_percent
-                )),
-                TextFont {
-                    font_size: 10.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(0.5, 0.5, 0.5)),
-            ));
-        };
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let usage_percent =
+            (access.get_total_quantity() as f32 / access.capacity() as f32 * 100.0) as u32;
+        parent.spawn((
+            Text::new(format!(
+                "  {}/{} ({}%)",
+                access.get_total_quantity(),
+                access.capacity(),
+                usage_percent
+            )),
+            TextFont {
+                font_size: 10.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.5, 0.5, 0.5)),
+        ));
+    };
 
     if let Some(storage) = storage_port {
         spawn_port_items(parent, "Storage", storage, Color::srgb(0.6, 0.8, 0.6));
@@ -590,7 +592,7 @@ fn spawn_port_inventory_content(
 }
 
 fn spawn_crafting_content(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     crafter: &RecipeCrafter,
     recipe_registry: &RecipeRegistry,
     building_entity: Entity,
@@ -678,7 +680,7 @@ fn spawn_crafting_content(
 }
 
 fn spawn_recipe_selector(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     crafter: &RecipeCrafter,
     building_entity: Entity,
 ) {
@@ -766,7 +768,7 @@ pub fn handle_escape_close_menus(
 
     if keyboard.just_pressed(KeyCode::Escape) {
         for menu_entity in &menu_query {
-            close_events.send(CloseMenuEvent { menu_entity });
+            close_events.write(CloseMenuEvent { menu_entity });
         }
     }
 }
@@ -781,7 +783,7 @@ pub fn handle_recipe_selection(
         let is_selected = selectable.is_selected;
 
         if !was_selected && is_selected {
-            recipe_change_events.send(RecipeChangeEvent {
+            recipe_change_events.write(RecipeChangeEvent {
                 building_entity: selector.target_building,
                 recipe_name: selector.recipe_name.clone(),
             });
@@ -828,7 +830,7 @@ fn handle_building_menu_scroll(
     >,
     child_sizes: Query<&ComputedNode, Without<BuildingMenuScrollArea>>,
 ) {
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let Some(cursor_pos) = window.cursor_position() else {
@@ -857,7 +859,7 @@ fn handle_building_menu_scroll(
         for (mut scroll_pos, container_node, children) in &mut scroll_query {
             let content_height: f32 = children
                 .iter()
-                .filter_map(|&child| child_sizes.get(child).ok())
+                .filter_map(|child| child_sizes.get(child).ok())
                 .map(|node| node.size().y)
                 .sum();
             let max_offset = (content_height - container_node.size().y).max(0.0);

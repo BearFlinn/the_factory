@@ -59,13 +59,9 @@ pub fn update_inventory_display(
         let should_update = changed_inventories.contains(entity);
 
         let existing_display = children.get(entity).ok().and_then(|children| {
-            children.iter().find_map(|&child| {
-                if inventory_displays.contains(child) {
-                    Some(child)
-                } else {
-                    None
-                }
-            })
+            children
+                .iter()
+                .find(|&child| inventory_displays.contains(child))
         });
 
         let items_to_display: Option<std::collections::HashMap<String, u32>> = output_port
@@ -128,7 +124,7 @@ pub fn update_operational_indicators(
         let existing_indicator = children
             .get(building_entity)
             .ok()
-            .and_then(|children| children.iter().find(|&&child| indicators.contains(child)));
+            .and_then(|children| children.iter().find(|&child| indicators.contains(child)));
 
         match (operational.get_status(), existing_indicator) {
             (false, None) => {
@@ -147,7 +143,7 @@ pub fn update_operational_indicators(
 
                 commands.entity(building_entity).add_child(indicator);
             }
-            (true, Some(&indicator_entity)) => {
+            (true, Some(indicator_entity)) => {
                 commands.entity(indicator_entity).despawn();
             }
             _ => {}
@@ -169,8 +165,7 @@ pub fn update_placement_ghost(
     match (&selected_building.building_name, cursor_coords) {
         (Some(building_name), Some(coords)) => {
             if let Some(def) = building_registry.get_definition(building_name) {
-                if let Ok((_, mut transform, mut sprite, mut ghost)) = ghost_query.get_single_mut()
-                {
+                if let Ok((_, mut transform, mut sprite, mut ghost)) = ghost_query.single_mut() {
                     let world_pos = grid.grid_to_world_coordinates(coords.grid_x, coords.grid_y);
                     transform.translation = Vec3::new(world_pos.x, world_pos.y, 0.5);
 

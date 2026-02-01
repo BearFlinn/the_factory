@@ -85,7 +85,7 @@ fn toggle_workflow_panel(
         spawn_panel(&mut commands);
     } else {
         for entity in &panels {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -191,7 +191,7 @@ fn handle_workflow_panel_buttons(
         if *interaction == Interaction::Pressed {
             state.visible = false;
             for entity in &panels {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
             return;
         }
@@ -199,7 +199,7 @@ fn handle_workflow_panel_buttons(
 
     for (interaction, btn) in &pause_buttons {
         if *interaction == Interaction::Pressed {
-            pause_events.send(PauseWorkflowEvent {
+            pause_events.write(PauseWorkflowEvent {
                 workflow: btn.workflow,
             });
         }
@@ -207,7 +207,7 @@ fn handle_workflow_panel_buttons(
 
     for (interaction, btn) in &delete_buttons {
         if *interaction == Interaction::Pressed {
-            delete_events.send(DeleteWorkflowEvent {
+            delete_events.write(DeleteWorkflowEvent {
                 workflow: btn.workflow,
             });
         }
@@ -216,7 +216,7 @@ fn handle_workflow_panel_buttons(
     for (interaction, btn) in &add_buttons {
         if *interaction == Interaction::Pressed {
             if let Some(worker) = idle_workers.iter().next() {
-                assign_events.send(AssignWorkersEvent {
+                assign_events.write(AssignWorkersEvent {
                     workflow: btn.workflow,
                     workers: vec![worker],
                 });
@@ -232,7 +232,7 @@ fn handle_workflow_panel_buttons(
                 .map(|(entity, _)| entity);
 
             if let Some(worker_entity) = worker {
-                unassign_events.send(UnassignWorkersEvent {
+                unassign_events.write(UnassignWorkersEvent {
                     workers: vec![worker_entity],
                 });
             }
@@ -248,7 +248,7 @@ fn update_workflow_panel_content(
     assigned_workers: Query<&WorkflowAssignment, With<Worker>>,
 ) {
     for container in &list_containers {
-        commands.entity(container).despawn_descendants();
+        commands.entity(container).despawn_related::<Children>();
 
         if registry.workflows.is_empty() {
             commands.entity(container).with_children(|parent| {
@@ -286,7 +286,7 @@ fn update_workflow_panel_content(
 }
 
 fn spawn_workflow_card(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     workflow_entity: Entity,
     workflow: &Workflow,
     current_workers: usize,
@@ -314,7 +314,7 @@ fn spawn_workflow_card(
         });
 }
 
-fn spawn_card_header(card: &mut ChildBuilder, workflow: &Workflow) {
+fn spawn_card_header(card: &mut ChildSpawnerCommands, workflow: &Workflow) {
     card.spawn(Node {
         width: Val::Percent(100.0),
         flex_direction: FlexDirection::Row,
@@ -346,7 +346,7 @@ fn spawn_card_header(card: &mut ChildBuilder, workflow: &Workflow) {
 }
 
 fn spawn_card_details(
-    card: &mut ChildBuilder,
+    card: &mut ChildSpawnerCommands,
     workflow_entity: Entity,
     workflow: &Workflow,
     current_workers: usize,
@@ -393,7 +393,7 @@ fn spawn_card_details(
     ));
 }
 
-fn spawn_card_buttons(card: &mut ChildBuilder, workflow_entity: Entity, is_paused: bool) {
+fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, is_paused: bool) {
     card.spawn(Node {
         width: Val::Percent(100.0),
         flex_direction: FlexDirection::Row,
@@ -439,7 +439,12 @@ fn spawn_card_buttons(card: &mut ChildBuilder, workflow_entity: Entity, is_pause
     });
 }
 
-fn spawn_panel_button(parent: &mut ChildBuilder, label: &str, bg: Color, marker: impl Component) {
+fn spawn_panel_button(
+    parent: &mut ChildSpawnerCommands,
+    label: &str,
+    bg: Color,
+    marker: impl Component,
+) {
     parent
         .spawn((
             Button,
@@ -479,7 +484,7 @@ fn handle_workflow_scroll(
     >,
     child_sizes: Query<&ComputedNode, Without<WorkflowListContainer>>,
 ) {
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let Some(cursor_pos) = window.cursor_position() else {
@@ -508,7 +513,7 @@ fn handle_workflow_scroll(
         for (mut scroll_pos, container_node, container_style, children) in &mut scroll_query {
             let content_height: f32 = children
                 .iter()
-                .filter_map(|&child| child_sizes.get(child).ok())
+                .filter_map(|child| child_sizes.get(child).ok())
                 .map(|node| node.size().y)
                 .sum();
             let gap = match container_style.row_gap {

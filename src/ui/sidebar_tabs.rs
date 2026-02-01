@@ -21,7 +21,7 @@ impl SidebarTab {
         }
     }
 
-    pub fn spawn(&self, parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
+    pub fn spawn(&self, parent: &mut ChildSpawnerCommands, registry: &BuildingRegistry) -> Entity {
         let color = get_building_type_color(registry, self.building_type);
         let hotkey = get_building_type_hotkey(self.building_type);
 
@@ -92,7 +92,10 @@ impl SidebarTab {
     }
 }
 
-pub fn spawn_sidebar_tabs(parent: &mut ChildBuilder, registry: &BuildingRegistry) -> Entity {
+pub fn spawn_sidebar_tabs(
+    parent: &mut ChildSpawnerCommands,
+    registry: &BuildingRegistry,
+) -> Entity {
     let available_types = get_available_building_categories(registry);
 
     let tab_container = parent

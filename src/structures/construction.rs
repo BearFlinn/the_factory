@@ -292,7 +292,7 @@ pub fn monitor_construction_completion(
                     cell_children.0.push(building_entity);
                 }
 
-                network_events.send(NetworkChangedEvent);
+                network_events.write(NetworkChangedEvent);
                 println!(
                     "Construction completed: {} at ({}, {})",
                     construction_site.building_name, position.x, position.y
@@ -342,7 +342,7 @@ pub fn handle_building_view_range_expansion(
 ) {
     for (view_range, position) in &buildings_with_view_range {
         if view_range.radius > 0 {
-            expand_events.send(ExpandGridEvent {
+            expand_events.write(ExpandGridEvent {
                 center_x: position.x,
                 center_y: position.y,
                 radius: view_range.radius,

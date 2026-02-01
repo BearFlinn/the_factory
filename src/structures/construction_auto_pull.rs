@@ -90,7 +90,7 @@ pub fn auto_pull_construction_materials(
             }
             remaining_deficit.retain(|_, v| *v > 0);
 
-            transfer_events.send(ItemTransferRequestEvent {
+            transfer_events.write(ItemTransferRequestEvent {
                 sender: storage_entity,
                 receiver: site_entity,
                 items: transfer_items,

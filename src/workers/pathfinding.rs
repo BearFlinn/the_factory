@@ -55,7 +55,7 @@ pub fn move_workers(
                     if let Some(target_coords) =
                         grid.world_to_grid_coordinates(transform.translation.truncate())
                     {
-                        arrival_events.send(WorkerArrivedEvent {
+                        arrival_events.write(WorkerArrivedEvent {
                             worker: worker_entity,
                             position: (target_coords.grid_x, target_coords.grid_y),
                         });

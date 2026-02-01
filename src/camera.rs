@@ -32,13 +32,13 @@ pub fn handle_camera_keyboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut camera_query: Query<(&mut Transform, &mut GameCamera), With<Camera2d>>,
-    projection_query: Query<&OrthographicProjection, With<Camera2d>>,
+    projection_query: Query<&Projection, With<Camera2d>>,
 ) {
-    let Ok((mut camera_transform, mut game_camera)) = camera_query.get_single_mut() else {
+    let Ok((mut camera_transform, mut game_camera)) = camera_query.single_mut() else {
         return;
     };
 
-    let Ok(projection) = projection_query.get_single() else {
+    let Ok(Projection::Orthographic(projection)) = projection_query.single() else {
         return;
     };
 
@@ -84,7 +84,7 @@ pub fn handle_camera_zoom(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera2d>>,
-    mut projection_query: Query<&mut OrthographicProjection, With<Camera2d>>,
+    mut projection_query: Query<&mut Projection, With<Camera2d>>,
     game_camera_query: Query<&GameCamera, With<Camera2d>>,
     ui_interactions: Query<&Interaction>,
 ) {
@@ -92,23 +92,27 @@ pub fn handle_camera_zoom(
         .iter()
         .any(|i| matches!(i, Interaction::Pressed | Interaction::Hovered));
 
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
 
-    let Ok((camera, camera_global_transform)) = camera_q.get_single() else {
+    let Ok((camera, camera_global_transform)) = camera_q.single() else {
         return;
     };
 
-    let Ok(mut camera_transform) = camera_transform_query.get_single_mut() else {
+    let Ok(mut camera_transform) = camera_transform_query.single_mut() else {
         return;
     };
 
-    let Ok(mut projection) = projection_query.get_single_mut() else {
+    let Ok(mut projection_component) = projection_query.single_mut() else {
         return;
     };
 
-    let Ok(game_camera) = game_camera_query.get_single() else {
+    let Projection::Orthographic(ref mut projection) = *projection_component else {
+        return;
+    };
+
+    let Ok(game_camera) = game_camera_query.single() else {
         return;
     };
 

@@ -285,7 +285,7 @@ pub fn validate_item_transfer(
             get_sender_port_data(request.sender, &output_ports, &storage_ports, &cargo_query);
 
         let Some((sender_items, _sender_capacity)) = sender_data else {
-            validation_events.send(ItemTransferValidationEvent {
+            validation_events.write(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
             });
@@ -296,7 +296,7 @@ pub fn validate_item_transfer(
             get_receiver_port_data(request.receiver, &input_ports, &storage_ports, &cargo_query);
 
         let Some((receiver_total, receiver_capacity)) = receiver_data else {
-            validation_events.send(ItemTransferValidationEvent {
+            validation_events.write(ItemTransferValidationEvent {
                 result: Err(TransferError::ItemNotFound),
                 request: request.clone(),
             });
@@ -339,12 +339,12 @@ pub fn validate_item_transfer(
                 TransferError::DestinationFull
             };
 
-            validation_events.send(ItemTransferValidationEvent {
+            validation_events.write(ItemTransferValidationEvent {
                 result: Err(error),
                 request: request.clone(),
             });
         } else {
-            validation_events.send(ItemTransferValidationEvent {
+            validation_events.write(ItemTransferValidationEvent {
                 result: Ok(validated_transfer),
                 request: request.clone(),
             });
@@ -458,7 +458,7 @@ pub fn execute_item_transfer(
             }
         }
 
-        transfer_events.send(ItemTransferEvent {
+        transfer_events.write(ItemTransferEvent {
             sender,
             receiver,
             items_transferred: actual_transfer,
@@ -473,7 +473,7 @@ pub fn request_transfer_specific_items(
     transfer_events: &mut EventWriter<ItemTransferRequestEvent>,
 ) {
     if !items.is_empty() {
-        transfer_events.send(ItemTransferRequestEvent {
+        transfer_events.write(ItemTransferRequestEvent {
             sender,
             receiver,
             items,

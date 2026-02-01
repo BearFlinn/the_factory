@@ -51,7 +51,7 @@ pub fn handle_building_input(
 
     if mouse_button.just_pressed(MouseButton::Left) {
         if let Some(building_name) = &selected_building.building_name {
-            place_events.send(PlaceBuildingRequestEvent {
+            place_events.write(PlaceBuildingRequestEvent {
                 building_name: building_name.clone(),
                 grid_x: coords.grid_x,
                 grid_y: coords.grid_y,
@@ -60,7 +60,7 @@ pub fn handle_building_input(
     }
 
     if mouse_button.just_pressed(MouseButton::Right) {
-        remove_events.send(RemoveBuildingEvent {
+        remove_events.write(RemoveBuildingEvent {
             grid_x: coords.grid_x,
             grid_y: coords.grid_y,
         });
@@ -118,7 +118,7 @@ pub fn place_building(
 
                 cell_children.0.push(construction_site_entity);
 
-                network_events.send(NetworkChangedEvent);
+                network_events.write(NetworkChangedEvent);
             }
         }
     }
@@ -146,7 +146,7 @@ pub fn remove_building(
             if building_layers.contains(building_entity) {
                 if let Ok(pos) = building_positions.get(building_entity) {
                     if pos.x == event.grid_x && pos.y == event.grid_y {
-                        commands.entity(building_entity).despawn_recursive();
+                        commands.entity(building_entity).despawn();
                         to_remove.push(index);
                     }
                 }
@@ -157,6 +157,6 @@ pub fn remove_building(
             cell_children.0.remove(index);
         }
 
-        network_events.send(NetworkChangedEvent);
+        network_events.write(NetworkChangedEvent);
     }
 }

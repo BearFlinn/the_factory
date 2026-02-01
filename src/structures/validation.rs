@@ -57,7 +57,7 @@ pub fn validate_placement(
             .iter()
             .find(|(_, pos, _)| pos.x == event.grid_x && pos.y == event.grid_y)
         else {
-            validation_events.send(PlaceBuildingValidationEvent {
+            validation_events.write(PlaceBuildingValidationEvent {
                 result: Err(PlacementError::CellNotFound),
                 request: event.clone(),
             });
@@ -67,7 +67,7 @@ pub fn validate_placement(
         for &entity in &cell_children.0 {
             if let Ok(layer) = building_layers.get(entity) {
                 if layer.0 == BUILDING_LAYER {
-                    validation_events.send(PlaceBuildingValidationEvent {
+                    validation_events.write(PlaceBuildingValidationEvent {
                         result: Err(PlacementError::CellOccupied),
                         request: event.clone(),
                     });
@@ -85,7 +85,7 @@ pub fn validate_placement(
                             .iter()
                             .any(|&entity| resources.contains(entity));
                         if !has_resource {
-                            validation_events.send(PlaceBuildingValidationEvent {
+                            validation_events.write(PlaceBuildingValidationEvent {
                                 result: Err(PlacementError::RequiresResourceNode),
                                 request: event.clone(),
                             });
@@ -96,7 +96,7 @@ pub fn validate_placement(
                         if !network_connectivity
                             .is_adjacent_to_core_network(event.grid_x, event.grid_y)
                         {
-                            validation_events.send(PlaceBuildingValidationEvent {
+                            validation_events.write(PlaceBuildingValidationEvent {
                                 result: Err(PlacementError::NotAdjacentToNetwork),
                                 request: event.clone(),
                             });
@@ -107,7 +107,7 @@ pub fn validate_placement(
             }
         }
 
-        validation_events.send(PlaceBuildingValidationEvent {
+        validation_events.write(PlaceBuildingValidationEvent {
             result: Ok(()),
             request: event.clone(),
         });

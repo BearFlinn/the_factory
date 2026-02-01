@@ -48,8 +48,12 @@ impl Grid {
         windows: &Query<&Window>,
         camera_q: &Query<(&Camera, &GlobalTransform)>,
     ) -> Option<GridCoordinates> {
-        let window = windows.single();
-        let (camera, camera_transform) = camera_q.single();
+        let Ok(window) = windows.single() else {
+            return None;
+        };
+        let Ok((camera, camera_transform)) = camera_q.single() else {
+            return None;
+        };
 
         if let Some(world_position) = window
             .cursor_position()
@@ -168,7 +172,7 @@ pub fn handle_grid_expansion(
             if !grid.valid_coordinates.contains(&(x, y)) {
                 grid.add_coordinate(x, y);
                 spawn_cell(&mut commands, &grid, x, y);
-                cell_event.send(NewCellEvent { x, y });
+                cell_event.write(NewCellEvent { x, y });
             }
         }
     }
@@ -190,7 +194,7 @@ pub fn handle_grid_cells_expansion(
             if !grid.valid_coordinates.contains(&(*x, *y)) {
                 grid.add_coordinate(*x, *y);
                 spawn_cell(&mut commands, &grid, *x, *y);
-                cell_event.send(NewCellEvent { x: *x, y: *y });
+                cell_event.write(NewCellEvent { x: *x, y: *y });
             }
         }
     }
