@@ -80,7 +80,7 @@ pub fn handle_camera_keyboard_input(
 }
 
 pub fn handle_camera_zoom(
-    mut mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera2d>>,

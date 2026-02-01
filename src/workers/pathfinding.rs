@@ -12,7 +12,7 @@ pub struct WorkerPath {
     pub current_target: Option<Vec2>,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct WorkerArrivedEvent {
     pub worker: Entity,
     pub position: (i32, i32),
@@ -31,7 +31,7 @@ pub fn move_workers(
     >,
     grid: Res<Grid>,
     time: Res<Time>,
-    mut arrival_events: EventWriter<WorkerArrivedEvent>,
+    mut arrival_events: MessageWriter<WorkerArrivedEvent>,
 ) {
     for (worker_entity, mut transform, mut path, mut worker_pos, speed) in &mut workers {
         if let Some(target) = path.current_target {

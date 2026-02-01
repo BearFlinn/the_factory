@@ -7,7 +7,7 @@ use super::components::{
 
 pub fn handle_create_workflow(
     mut commands: Commands,
-    mut events: EventReader<CreateWorkflowEvent>,
+    mut events: MessageReader<CreateWorkflowEvent>,
     mut registry: ResMut<WorkflowRegistry>,
 ) {
     for event in events.read() {
@@ -25,7 +25,7 @@ pub fn handle_create_workflow(
 
 pub fn handle_delete_workflow(
     mut commands: Commands,
-    mut events: EventReader<DeleteWorkflowEvent>,
+    mut events: MessageReader<DeleteWorkflowEvent>,
     mut registry: ResMut<WorkflowRegistry>,
     assignments: Query<(Entity, &WorkflowAssignment)>,
 ) {
@@ -44,7 +44,7 @@ pub fn handle_delete_workflow(
 }
 
 pub fn handle_pause_workflow(
-    mut events: EventReader<PauseWorkflowEvent>,
+    mut events: MessageReader<PauseWorkflowEvent>,
     mut workflows: Query<&mut Workflow>,
 ) {
     for event in events.read() {
@@ -54,7 +54,10 @@ pub fn handle_pause_workflow(
     }
 }
 
-pub fn handle_assign_workers(mut commands: Commands, mut events: EventReader<AssignWorkersEvent>) {
+pub fn handle_assign_workers(
+    mut commands: Commands,
+    mut events: MessageReader<AssignWorkersEvent>,
+) {
     for event in events.read() {
         for &worker in &event.workers {
             commands.entity(worker).insert(WorkflowAssignment {
@@ -67,7 +70,7 @@ pub fn handle_assign_workers(mut commands: Commands, mut events: EventReader<Ass
 
 pub fn handle_unassign_workers(
     mut commands: Commands,
-    mut events: EventReader<UnassignWorkersEvent>,
+    mut events: MessageReader<UnassignWorkersEvent>,
 ) {
     for event in events.read() {
         for &worker in &event.workers {
@@ -84,11 +87,11 @@ mod tests {
 
     fn setup_app() -> App {
         let mut app = App::new();
-        app.add_event::<CreateWorkflowEvent>();
-        app.add_event::<DeleteWorkflowEvent>();
-        app.add_event::<PauseWorkflowEvent>();
-        app.add_event::<AssignWorkersEvent>();
-        app.add_event::<UnassignWorkersEvent>();
+        app.add_message::<CreateWorkflowEvent>();
+        app.add_message::<DeleteWorkflowEvent>();
+        app.add_message::<PauseWorkflowEvent>();
+        app.add_message::<AssignWorkersEvent>();
+        app.add_message::<UnassignWorkersEvent>();
         app.init_resource::<WorkflowRegistry>();
         app.add_systems(
             Update,
@@ -107,7 +110,7 @@ mod tests {
     fn create_workflow_spawns_entity_and_adds_to_registry() {
         let mut app = setup_app();
 
-        app.world_mut().send_event(CreateWorkflowEvent {
+        app.world_mut().write_message(CreateWorkflowEvent {
             name: "test workflow".to_string(),
             steps: vec![WorkflowStep {
                 target: Entity::PLACEHOLDER,
@@ -132,7 +135,7 @@ mod tests {
     fn delete_workflow_despawns_and_removes_from_registry() {
         let mut app = setup_app();
 
-        app.world_mut().send_event(CreateWorkflowEvent {
+        app.world_mut().write_message(CreateWorkflowEvent {
             name: "to delete".to_string(),
             steps: vec![],
             desired_worker_count: 1,
@@ -141,7 +144,7 @@ mod tests {
 
         let workflow_entity = app.world().resource::<WorkflowRegistry>().workflows[0];
 
-        app.world_mut().send_event(DeleteWorkflowEvent {
+        app.world_mut().write_message(DeleteWorkflowEvent {
             workflow: workflow_entity,
         });
         app.update();
@@ -155,7 +158,7 @@ mod tests {
     fn delete_workflow_unassigns_workers() {
         let mut app = setup_app();
 
-        app.world_mut().send_event(CreateWorkflowEvent {
+        app.world_mut().write_message(CreateWorkflowEvent {
             name: "worker workflow".to_string(),
             steps: vec![],
             desired_worker_count: 1,
@@ -165,7 +168,7 @@ mod tests {
         let workflow_entity = app.world().resource::<WorkflowRegistry>().workflows[0];
         let worker_entity = app.world_mut().spawn_empty().id();
 
-        app.world_mut().send_event(AssignWorkersEvent {
+        app.world_mut().write_message(AssignWorkersEvent {
             workflow: workflow_entity,
             workers: vec![worker_entity],
         });
@@ -176,7 +179,7 @@ mod tests {
             .get::<WorkflowAssignment>(worker_entity)
             .is_some());
 
-        app.world_mut().send_event(DeleteWorkflowEvent {
+        app.world_mut().write_message(DeleteWorkflowEvent {
             workflow: workflow_entity,
         });
         app.update();
@@ -191,7 +194,7 @@ mod tests {
     fn pause_workflow_toggles() {
         let mut app = setup_app();
 
-        app.world_mut().send_event(CreateWorkflowEvent {
+        app.world_mut().write_message(CreateWorkflowEvent {
             name: "pausable".to_string(),
             steps: vec![],
             desired_worker_count: 1,
@@ -203,7 +206,7 @@ mod tests {
         let workflow = app.world().get::<Workflow>(workflow_entity).unwrap();
         assert!(!workflow.is_paused);
 
-        app.world_mut().send_event(PauseWorkflowEvent {
+        app.world_mut().write_message(PauseWorkflowEvent {
             workflow: workflow_entity,
         });
         app.update();
@@ -211,7 +214,7 @@ mod tests {
         let workflow = app.world().get::<Workflow>(workflow_entity).unwrap();
         assert!(workflow.is_paused);
 
-        app.world_mut().send_event(PauseWorkflowEvent {
+        app.world_mut().write_message(PauseWorkflowEvent {
             workflow: workflow_entity,
         });
         app.update();
@@ -237,7 +240,7 @@ mod tests {
         let worker_a = app.world_mut().spawn_empty().id();
         let worker_b = app.world_mut().spawn_empty().id();
 
-        app.world_mut().send_event(AssignWorkersEvent {
+        app.world_mut().write_message(AssignWorkersEvent {
             workflow: workflow_entity,
             workers: vec![worker_a, worker_b],
         });
@@ -268,7 +271,7 @@ mod tests {
 
         let worker = app.world_mut().spawn_empty().id();
 
-        app.world_mut().send_event(AssignWorkersEvent {
+        app.world_mut().write_message(AssignWorkersEvent {
             workflow: workflow_entity,
             workers: vec![worker],
         });
@@ -276,7 +279,7 @@ mod tests {
 
         assert!(app.world().get::<WorkflowAssignment>(worker).is_some());
 
-        app.world_mut().send_event(UnassignWorkersEvent {
+        app.world_mut().write_message(UnassignWorkersEvent {
             workers: vec![worker],
         });
         app.update();

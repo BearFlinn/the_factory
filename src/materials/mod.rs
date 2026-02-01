@@ -23,9 +23,9 @@ fn setup(mut commands: Commands) {
 
 impl Plugin for MaterialsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<ItemTransferRequestEvent>()
-            .add_event::<ItemTransferValidationEvent>()
-            .add_event::<ItemTransferEvent>()
+        app.add_message::<ItemTransferRequestEvent>()
+            .add_message::<ItemTransferValidationEvent>()
+            .add_message::<ItemTransferEvent>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,

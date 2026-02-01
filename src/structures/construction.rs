@@ -256,7 +256,7 @@ pub fn monitor_construction_completion(
     >,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
-    mut network_events: EventWriter<NetworkChangedEvent>,
+    mut network_events: MessageWriter<NetworkChangedEvent>,
 ) {
     for (site_entity, construction_site, input_port, building_cost, position, transform) in
         &construction_sites
@@ -338,7 +338,7 @@ pub fn drill_awaiting_assignment(
 
 pub fn handle_building_view_range_expansion(
     buildings_with_view_range: Query<(&ViewRange, &Position), Added<Building>>,
-    mut expand_events: EventWriter<ExpandGridEvent>,
+    mut expand_events: MessageWriter<ExpandGridEvent>,
 ) {
     for (view_range, position) in &buildings_with_view_range {
         if view_range.radius > 0 {

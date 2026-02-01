@@ -107,7 +107,7 @@ fn spawn_panel(commands: &mut Commands) {
                 ..default()
             },
             BackgroundColor(PANEL_BG),
-            BorderColor(PANEL_BORDER),
+            BorderColor::all(PANEL_BORDER),
             Interaction::None,
             WorkflowPanel,
         ))
@@ -180,10 +180,10 @@ fn handle_workflow_panel_buttons(
     delete_buttons: Query<(&Interaction, &WorkflowDeleteButton), Changed<Interaction>>,
     add_buttons: Query<(&Interaction, &WorkflowWorkerAddButton), Changed<Interaction>>,
     remove_buttons: Query<(&Interaction, &WorkflowWorkerRemoveButton), Changed<Interaction>>,
-    mut pause_events: EventWriter<PauseWorkflowEvent>,
-    mut delete_events: EventWriter<DeleteWorkflowEvent>,
-    mut assign_events: EventWriter<AssignWorkersEvent>,
-    mut unassign_events: EventWriter<UnassignWorkersEvent>,
+    mut pause_events: MessageWriter<PauseWorkflowEvent>,
+    mut delete_events: MessageWriter<DeleteWorkflowEvent>,
+    mut assign_events: MessageWriter<AssignWorkersEvent>,
+    mut unassign_events: MessageWriter<UnassignWorkersEvent>,
     idle_workers: Query<Entity, (With<Worker>, Without<WorkflowAssignment>)>,
     assigned_workers: Query<(Entity, &WorkflowAssignment), With<Worker>>,
 ) {
@@ -302,7 +302,7 @@ fn spawn_workflow_card(
                 ..default()
             },
             BackgroundColor(CARD_BG),
-            BorderColor(PANEL_BORDER),
+            BorderColor::all(PANEL_BORDER),
             WorkflowEntry {
                 workflow: workflow_entity,
             },
@@ -475,7 +475,7 @@ const LINE_HEIGHT: f32 = 21.0;
 const SCROLL_GAP: f32 = 6.0;
 
 fn handle_workflow_scroll(
-    mut mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
     windows: Query<&Window>,
     panel_query: Query<(&GlobalTransform, &ComputedNode), With<WorkflowPanel>>,
     mut scroll_query: Query<
@@ -524,7 +524,7 @@ fn handle_workflow_scroll(
             let gap_total = children.len().saturating_sub(1) as f32 * gap;
             let total_content = content_height + gap_total;
             let max_offset = (total_content - container_node.size().y).max(0.0);
-            scroll_pos.offset_y = (scroll_pos.offset_y - delta).clamp(0.0, max_offset);
+            scroll_pos.y = (scroll_pos.y - delta).clamp(0.0, max_offset);
         }
     }
 }

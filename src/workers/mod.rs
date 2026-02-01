@@ -22,7 +22,7 @@ pub struct WorkersPlugin;
 
 impl Plugin for WorkersPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<WorkerArrivedEvent>()
+        app.add_message::<WorkerArrivedEvent>()
             .add_plugins(WorkflowsPlugin)
             .configure_sets(
                 Update,

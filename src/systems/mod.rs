@@ -46,7 +46,7 @@ impl Plugin for SystemsPlugin {
             .insert_resource(ComputeGrid::default())
             .insert_resource(NetworkConnectivity::default())
             .init_resource::<GameScore>()
-            .add_event::<NetworkChangedEvent>()
+            .add_message::<NetworkChangedEvent>()
             .configure_sets(
                 Update,
                 (

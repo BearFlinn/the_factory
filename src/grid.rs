@@ -118,7 +118,7 @@ pub fn spawn_grid(mut commands: Commands, mut grid: ResMut<Grid>) {
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct NewCellEvent {
     pub x: i32,
     pub y: i32,
@@ -152,7 +152,7 @@ pub fn spawn_cell(commands: &mut Commands, grid: &Grid, x: i32, y: i32) -> Entit
     cell_entity
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ExpandGridEvent {
     pub center_x: i32,
     pub center_y: i32,
@@ -161,9 +161,9 @@ pub struct ExpandGridEvent {
 
 pub fn handle_grid_expansion(
     mut commands: Commands,
-    mut expand_events: EventReader<ExpandGridEvent>,
+    mut expand_events: MessageReader<ExpandGridEvent>,
     mut grid: ResMut<Grid>,
-    mut cell_event: EventWriter<NewCellEvent>,
+    mut cell_event: MessageWriter<NewCellEvent>,
 ) {
     for event in expand_events.read() {
         let new_coordinates =
@@ -178,16 +178,16 @@ pub fn handle_grid_expansion(
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ExpandGridCellsEvent {
     pub coordinates: Vec<(i32, i32)>,
 }
 
 pub fn handle_grid_cells_expansion(
     mut commands: Commands,
-    mut expand_events: EventReader<ExpandGridCellsEvent>,
+    mut expand_events: MessageReader<ExpandGridCellsEvent>,
     mut grid: ResMut<Grid>,
-    mut cell_event: EventWriter<NewCellEvent>,
+    mut cell_event: MessageWriter<NewCellEvent>,
 ) {
     for event in expand_events.read() {
         for (x, y) in &event.coordinates {
@@ -204,9 +204,9 @@ pub struct GridPlugin;
 
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<NewCellEvent>()
-            .add_event::<ExpandGridEvent>()
-            .add_event::<ExpandGridCellsEvent>()
+        app.add_message::<NewCellEvent>()
+            .add_message::<ExpandGridEvent>()
+            .add_message::<ExpandGridCellsEvent>()
             .add_systems(Startup, (setup_grid, spawn_grid).chain())
             .add_systems(Update, (handle_grid_expansion, handle_grid_cells_expansion));
     }

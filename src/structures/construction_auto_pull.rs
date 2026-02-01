@@ -40,7 +40,7 @@ pub fn auto_pull_construction_materials(
     >,
     storage_ports: Query<(Entity, &StoragePort, &Position)>,
     network: Res<NetworkConnectivity>,
-    mut transfer_events: EventWriter<ItemTransferRequestEvent>,
+    mut transfer_events: MessageWriter<ItemTransferRequestEvent>,
 ) {
     timer.timer.tick(time.delta());
     if !timer.timer.just_finished() {

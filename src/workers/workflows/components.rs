@@ -51,30 +51,30 @@ impl Default for WaitingForItems {
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreateWorkflowEvent {
     pub name: String,
     pub steps: Vec<WorkflowStep>,
     pub desired_worker_count: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct DeleteWorkflowEvent {
     pub workflow: Entity,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct PauseWorkflowEvent {
     pub workflow: Entity,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct AssignWorkersEvent {
     pub workflow: Entity,
     pub workers: Vec<Entity>,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct UnassignWorkersEvent {
     pub workers: Vec<Entity>,
 }

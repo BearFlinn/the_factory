@@ -22,11 +22,11 @@ pub struct WorkflowsPlugin;
 
 impl Plugin for WorkflowsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<CreateWorkflowEvent>()
-            .add_event::<DeleteWorkflowEvent>()
-            .add_event::<PauseWorkflowEvent>()
-            .add_event::<AssignWorkersEvent>()
-            .add_event::<UnassignWorkersEvent>()
+        app.add_message::<CreateWorkflowEvent>()
+            .add_message::<DeleteWorkflowEvent>()
+            .add_message::<PauseWorkflowEvent>()
+            .add_message::<AssignWorkersEvent>()
+            .add_message::<UnassignWorkersEvent>()
             .init_resource::<WorkflowRegistry>()
             .configure_sets(
                 Update,

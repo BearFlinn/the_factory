@@ -122,7 +122,7 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
                 ..default()
             },
             BackgroundColor(PANEL_BG),
-            BorderColor(PANEL_BORDER),
+            BorderColor::all(PANEL_BORDER),
             WorkflowCreationPanel,
         ))
         .with_children(|parent| {
@@ -267,7 +267,7 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
                     ..default()
                 },
                 BackgroundColor(CANCEL_BG),
-                BorderColor(Color::srgb(0.5, 0.3, 0.3)),
+                BorderColor::all(Color::srgb(0.5, 0.3, 0.3)),
                 WorkflowCancelButton,
             ))
             .with_children(|btn| {
@@ -292,7 +292,7 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
                     ..default()
                 },
                 BackgroundColor(CONFIRM_BG),
-                BorderColor(Color::srgb(0.3, 0.5, 0.3)),
+                BorderColor::all(Color::srgb(0.3, 0.5, 0.3)),
                 WorkflowConfirmButton,
             ))
             .with_children(|btn| {
@@ -310,7 +310,7 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
 
 fn handle_building_click_in_creation_mode(
     mut state: ResMut<WorkflowCreationState>,
-    mut click_events: EventReader<BuildingClickEvent>,
+    mut click_events: MessageReader<BuildingClickEvent>,
     mut commands: Commands,
     existing_popups: Query<Entity, With<WorkflowActionPopup>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
@@ -358,7 +358,7 @@ fn handle_building_click_in_creation_mode(
                     ..default()
                 },
                 BackgroundColor(POPUP_BG),
-                BorderColor(PANEL_BORDER),
+                BorderColor::all(PANEL_BORDER),
                 WorkflowActionPopup,
             ))
             .with_children(|popup| {
@@ -547,7 +547,7 @@ fn handle_creation_controls(
     panels: Query<Entity, With<WorkflowCreationPanel>>,
     popups: Query<Entity, With<WorkflowActionPopup>>,
     step_lists: Query<(Entity, &Children), With<WorkflowStepList>>,
-    mut create_events: EventWriter<CreateWorkflowEvent>,
+    mut create_events: MessageWriter<CreateWorkflowEvent>,
 ) {
     if !state.active {
         return;

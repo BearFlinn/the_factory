@@ -116,7 +116,7 @@ fn spawn_tooltip(commands: &mut Commands, content: String, position: Vec2) {
                 ..default()
             },
             BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.95)),
-            BorderColor(Color::srgb(0.6, 0.6, 0.6)),
+            BorderColor::all(Color::srgb(0.6, 0.6, 0.6)),
             Tooltip {
                 content: content.clone(),
             },

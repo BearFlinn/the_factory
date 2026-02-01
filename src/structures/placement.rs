@@ -9,14 +9,14 @@ use crate::{
 };
 use bevy::prelude::*;
 
-#[derive(Event, Clone)]
+#[derive(Message, Clone)]
 pub struct PlaceBuildingRequestEvent {
     pub building_name: String,
     pub grid_x: i32,
     pub grid_y: i32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct RemoveBuildingEvent {
     pub grid_x: i32,
     pub grid_y: i32,
@@ -29,8 +29,8 @@ pub fn handle_building_input(
     grid: Res<Grid>,
     selected_building: Res<SelectedBuilding>,
     ui_interactions: Query<&Interaction, With<Button>>,
-    mut place_events: EventWriter<PlaceBuildingRequestEvent>,
-    mut remove_events: EventWriter<RemoveBuildingEvent>,
+    mut place_events: MessageWriter<PlaceBuildingRequestEvent>,
+    mut remove_events: MessageWriter<RemoveBuildingEvent>,
     creation_state: Res<WorkflowCreationState>,
 ) {
     if creation_state.active {
@@ -69,11 +69,11 @@ pub fn handle_building_input(
 
 pub fn place_building(
     mut commands: Commands,
-    mut validation_events: EventReader<PlaceBuildingValidationEvent>,
+    mut validation_events: MessageReader<PlaceBuildingValidationEvent>,
     grid: Res<Grid>,
     registry: Res<BuildingRegistry>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
-    mut network_events: EventWriter<NetworkChangedEvent>,
+    mut network_events: MessageWriter<NetworkChangedEvent>,
 ) {
     for event in validation_events.read() {
         if event.result.is_ok() {
@@ -126,8 +126,8 @@ pub fn place_building(
 
 pub fn remove_building(
     mut commands: Commands,
-    mut remove_events: EventReader<RemoveBuildingEvent>,
-    mut network_events: EventWriter<NetworkChangedEvent>,
+    mut remove_events: MessageReader<RemoveBuildingEvent>,
+    mut network_events: MessageWriter<NetworkChangedEvent>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
     building_layers: Query<&Layer, Or<(With<Building>, With<ConstructionSite>)>>,
     building_positions: Query<&Position, Or<(With<Building>, With<ConstructionSite>)>>,

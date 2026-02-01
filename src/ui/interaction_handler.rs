@@ -55,7 +55,7 @@ impl DynamicStyles {
     }
 
     pub fn with_border(mut self, color: Color) -> Self {
-        self.border_color = Some(BorderColor(color));
+        self.border_color = Some(BorderColor::all(color));
         self
     }
 }

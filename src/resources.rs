@@ -58,7 +58,7 @@ fn select_random_ore() -> (RecipeName, Color) {
 pub fn spawn_resource_node(
     mut commands: Commands,
     grid: Res<Grid>,
-    mut cell_event: EventReader<NewCellEvent>,
+    mut cell_event: MessageReader<NewCellEvent>,
     mut grid_cells: Query<(Entity, &Position, &mut CellChildren)>,
 ) {
     for event in cell_event.read() {

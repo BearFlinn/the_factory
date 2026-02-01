@@ -209,7 +209,7 @@ pub fn update_placement_ghost(
 
 pub fn display_placement_error(
     mut commands: Commands,
-    mut validation_events: EventReader<PlaceBuildingValidationEvent>,
+    mut validation_events: MessageReader<PlaceBuildingValidationEvent>,
     grid: Res<Grid>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
@@ -246,7 +246,7 @@ pub fn cleanup_placement_errors(
 ) {
     for (entity, mut error_msg) in &mut error_messages {
         error_msg.timer.tick(time.delta());
-        if error_msg.timer.finished() {
+        if error_msg.timer.is_finished() {
             commands.entity(entity).despawn();
         }
     }

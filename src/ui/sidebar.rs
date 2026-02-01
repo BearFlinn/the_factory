@@ -79,7 +79,7 @@ impl Sidebar {
                 border: UiRect::bottom(Val::Px(1.0)),
                 ..default()
             })
-            .insert(BorderColor(Color::srgb(0.3, 0.3, 0.3)))
+            .insert(BorderColor::all(Color::srgb(0.3, 0.3, 0.3)))
             .id();
 
         let title_text = commands

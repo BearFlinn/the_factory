@@ -244,20 +244,20 @@ impl std::fmt::Display for TransferError {
     }
 }
 
-#[derive(Event, Clone)]
+#[derive(Message, Clone)]
 pub struct ItemTransferRequestEvent {
     pub sender: Entity,
     pub receiver: Entity,
     pub items: HashMap<ItemName, u32>,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ItemTransferValidationEvent {
     pub result: Result<HashMap<ItemName, u32>, TransferError>,
     pub request: ItemTransferRequestEvent,
 }
 
-#[derive(Event, Debug)]
+#[derive(Message, Debug)]
 #[allow(dead_code)]
 pub struct ItemTransferEvent {
     pub sender: Entity,
@@ -266,15 +266,15 @@ pub struct ItemTransferEvent {
 }
 
 #[allow(dead_code)]
-pub fn print_transferred_items(mut events: EventReader<ItemTransferEvent>) {
+pub fn print_transferred_items(mut events: MessageReader<ItemTransferEvent>) {
     for event in events.read() {
         println!("Items transferred: {:?}", event.items_transferred);
     }
 }
 
 pub fn validate_item_transfer(
-    mut requests: EventReader<ItemTransferRequestEvent>,
-    mut validation_events: EventWriter<ItemTransferValidationEvent>,
+    mut requests: MessageReader<ItemTransferRequestEvent>,
+    mut validation_events: MessageWriter<ItemTransferValidationEvent>,
     output_ports: Query<&OutputPort>,
     input_ports: Query<&InputPort>,
     storage_ports: Query<&StoragePort>,
@@ -392,12 +392,12 @@ fn get_receiver_port_data(
 }
 
 pub fn execute_item_transfer(
-    mut validation_events: EventReader<ItemTransferValidationEvent>,
+    mut validation_events: MessageReader<ItemTransferValidationEvent>,
     mut output_ports: Query<&mut OutputPort>,
     mut input_ports: Query<&mut InputPort>,
     mut storage_ports: Query<&mut StoragePort>,
     mut cargo_query: Query<&mut Cargo>,
-    mut transfer_events: EventWriter<ItemTransferEvent>,
+    mut transfer_events: MessageWriter<ItemTransferEvent>,
 ) {
     for validation in validation_events.read() {
         let Ok(validated_items) = &validation.result else {
@@ -470,7 +470,7 @@ pub fn request_transfer_specific_items(
     sender: Entity,
     receiver: Entity,
     items: HashMap<ItemName, u32>,
-    transfer_events: &mut EventWriter<ItemTransferRequestEvent>,
+    transfer_events: &mut MessageWriter<ItemTransferRequestEvent>,
 ) {
     if !items.is_empty() {
         transfer_events.write(ItemTransferRequestEvent {

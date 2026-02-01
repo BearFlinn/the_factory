@@ -126,13 +126,13 @@ pub fn process_workflow_workers(
 }
 
 pub fn handle_workflow_arrivals(
-    mut events: EventReader<WorkerArrivedEvent>,
+    mut events: MessageReader<WorkerArrivedEvent>,
     mut workers: Query<(&mut WorkflowAssignment, &Cargo), With<Worker>>,
     workflows: Query<&Workflow>,
     output_ports: Query<&OutputPort>,
     storage_ports: Query<&StoragePort>,
     input_ports: Query<&InputPort>,
-    mut transfer_events: EventWriter<ItemTransferRequestEvent>,
+    mut transfer_events: MessageWriter<ItemTransferRequestEvent>,
     mut commands: Commands,
 ) {
     for event in events.read() {
@@ -189,7 +189,7 @@ pub fn recheck_waiting_workers(
     output_ports: Query<&OutputPort>,
     storage_ports: Query<&StoragePort>,
     input_ports: Query<&InputPort>,
-    mut transfer_events: EventWriter<ItemTransferRequestEvent>,
+    mut transfer_events: MessageWriter<ItemTransferRequestEvent>,
 ) {
     for (worker_entity, mut waiting, mut assignment) in &mut workers {
         waiting.timer.tick(time.delta());
@@ -247,7 +247,7 @@ pub fn cleanup_invalid_workflow_refs(
 pub fn emergency_dropoff_unassigned_workers(
     workers: Query<(Entity, &Cargo, &Position), (With<Worker>, Without<WorkflowAssignment>)>,
     storage_ports: Query<(Entity, &Position), With<StoragePort>>,
-    mut transfer_events: EventWriter<ItemTransferRequestEvent>,
+    mut transfer_events: MessageWriter<ItemTransferRequestEvent>,
 ) {
     for (worker_entity, cargo, worker_pos) in &workers {
         if cargo.is_empty() {

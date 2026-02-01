@@ -7,7 +7,7 @@ use crate::{
 use bevy::prelude::*;
 use std::collections::{HashSet, VecDeque};
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct NetworkChangedEvent;
 
 #[derive(Component)]
@@ -128,7 +128,7 @@ pub fn calculate_network_connectivity(
 
 pub fn update_network_connectivity(
     mut network_connectivity: ResMut<NetworkConnectivity>,
-    mut network_events: EventReader<NetworkChangedEvent>,
+    mut network_events: MessageReader<NetworkChangedEvent>,
     building_layers: Query<
         (&Position, &Layer, Option<&NetWorkComponent>),
         Or<(With<Building>, With<ConstructionSite>)>,
@@ -151,7 +151,7 @@ pub fn update_network_connectivity(
 
 pub fn update_visual_network_connections(
     mut commands: Commands,
-    mut network_events: EventReader<NetworkChangedEvent>,
+    mut network_events: MessageReader<NetworkChangedEvent>,
     network_connectivity: Res<NetworkConnectivity>,
     existing_connections: Query<Entity, With<NetworkConnection>>,
 ) {

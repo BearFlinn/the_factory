@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct PlaceBuildingValidationEvent {
     pub result: Result<(), PlacementError>,
     pub request: PlaceBuildingRequestEvent,
@@ -44,8 +44,8 @@ impl fmt::Display for PlacementError {
 }
 
 pub fn validate_placement(
-    mut place_request: EventReader<PlaceBuildingRequestEvent>,
-    mut validation_events: EventWriter<PlaceBuildingValidationEvent>,
+    mut place_request: MessageReader<PlaceBuildingRequestEvent>,
+    mut validation_events: MessageWriter<PlaceBuildingValidationEvent>,
     registry: Res<BuildingRegistry>,
     grid_cells: Query<(Entity, &Position, &CellChildren)>,
     building_layers: Query<&Layer>,

@@ -11,13 +11,13 @@ use crate::{
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct BuildingClickEvent {
     pub building_entity: Entity,
     pub world_position: Vec2,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct CloseMenuEvent {
     pub menu_entity: Entity,
 }
@@ -56,7 +56,7 @@ pub struct RecipeSelector {
     pub recipe_name: String,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct RecipeChangeEvent {
     pub building_entity: Entity,
     pub recipe_name: String,
@@ -67,7 +67,7 @@ pub fn detect_building_clicks(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     buildings: Query<(Entity, &Position, &Transform), With<Building>>,
-    mut click_events: EventWriter<BuildingClickEvent>,
+    mut click_events: MessageWriter<BuildingClickEvent>,
     ui_interactions: Query<&Interaction, With<Button>>,
 ) {
     if ui_interactions
@@ -112,7 +112,7 @@ pub fn detect_building_clicks(
 
 pub fn spawn_building_menu(
     mut commands: Commands,
-    mut click_events: EventReader<BuildingClickEvent>,
+    mut click_events: MessageReader<BuildingClickEvent>,
     existing_menus: Query<(&BuildingMenu, Entity)>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
@@ -166,7 +166,7 @@ pub fn spawn_building_menu(
                     ..default()
                 },
                 BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.95)),
-                BorderColor(Color::srgb(0.4, 0.4, 0.4)),
+                BorderColor::all(Color::srgb(0.4, 0.4, 0.4)),
                 Interaction::None,
                 BuildingMenu {
                     target_building: click.building_entity,
@@ -307,7 +307,7 @@ fn spawn_content_section(
 
 pub fn handle_menu_close_buttons_interaction(
     close_buttons: Query<(&MenuCloseButton, &Interaction), Changed<Interaction>>,
-    mut close_events: EventWriter<CloseMenuEvent>,
+    mut close_events: MessageWriter<CloseMenuEvent>,
 ) {
     for (close_button, interaction) in &close_buttons {
         if *interaction == Interaction::Pressed {
@@ -320,7 +320,7 @@ pub fn handle_menu_close_buttons_interaction(
 
 pub fn process_menu_close_events(
     mut commands: Commands,
-    mut close_events: EventReader<CloseMenuEvent>,
+    mut close_events: MessageReader<CloseMenuEvent>,
     menu_query: Query<Entity, With<BuildingMenu>>,
 ) {
     for close_event in close_events.read() {
@@ -759,7 +759,7 @@ fn spawn_recipe_selector(
 pub fn handle_escape_close_menus(
     keyboard: Res<ButtonInput<KeyCode>>,
     menu_query: Query<Entity, With<BuildingMenu>>,
-    mut close_events: EventWriter<CloseMenuEvent>,
+    mut close_events: MessageWriter<CloseMenuEvent>,
     creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
     if creation_state.active {
@@ -775,7 +775,7 @@ pub fn handle_escape_close_menus(
 
 pub fn handle_recipe_selection(
     recipe_selectors: Query<(Entity, &RecipeSelector, &Selectable), Changed<Selectable>>,
-    mut recipe_change_events: EventWriter<RecipeChangeEvent>,
+    mut recipe_change_events: MessageWriter<RecipeChangeEvent>,
     mut previous_states: Local<std::collections::HashMap<Entity, bool>>,
 ) {
     for (entity, selector, selectable) in &recipe_selectors {
@@ -795,7 +795,7 @@ pub fn handle_recipe_selection(
 
 pub fn apply_recipe_changes(
     mut commands: Commands,
-    mut recipe_events: EventReader<RecipeChangeEvent>,
+    mut recipe_events: MessageReader<RecipeChangeEvent>,
     mut buildings: Query<&mut RecipeCrafter, With<Building>>,
 ) {
     for event in recipe_events.read() {
@@ -821,7 +821,7 @@ pub fn apply_recipe_changes(
 const MENU_LINE_HEIGHT: f32 = 21.0;
 
 fn handle_building_menu_scroll(
-    mut mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
     windows: Query<&Window>,
     menu_query: Query<(&GlobalTransform, &ComputedNode), With<BuildingMenu>>,
     mut scroll_query: Query<
@@ -863,7 +863,7 @@ fn handle_building_menu_scroll(
                 .map(|node| node.size().y)
                 .sum();
             let max_offset = (content_height - container_node.size().y).max(0.0);
-            scroll_pos.offset_y = (scroll_pos.offset_y - delta).clamp(0.0, max_offset);
+            scroll_pos.y = (scroll_pos.y - delta).clamp(0.0, max_offset);
         }
     }
 }
@@ -872,9 +872,9 @@ pub struct BuildingMenuPlugin;
 
 impl Plugin for BuildingMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<BuildingClickEvent>()
-            .add_event::<CloseMenuEvent>()
-            .add_event::<RecipeChangeEvent>()
+        app.add_message::<BuildingClickEvent>()
+            .add_message::<CloseMenuEvent>()
+            .add_message::<RecipeChangeEvent>()
             .add_systems(
                 Update,
                 (

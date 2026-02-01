@@ -171,7 +171,7 @@ impl Scanner {
 
 pub fn handle_progressive_scanning(
     mut scanners: Query<&mut Scanner, With<Building>>,
-    mut expand_events: EventWriter<ExpandGridCellsEvent>,
+    mut expand_events: MessageWriter<ExpandGridCellsEvent>,
     grid: Res<Grid>,
     time: Res<Time>,
 ) {

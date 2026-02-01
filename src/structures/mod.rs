@@ -47,9 +47,9 @@ impl Plugin for BuildingsPlugin {
     fn build(&self, app: &mut App) {
         configure_building_system_sets(app);
 
-        app.add_event::<PlaceBuildingRequestEvent>()
-            .add_event::<PlaceBuildingValidationEvent>()
-            .add_event::<RemoveBuildingEvent>()
+        app.add_message::<PlaceBuildingRequestEvent>()
+            .add_message::<PlaceBuildingValidationEvent>()
+            .add_message::<RemoveBuildingEvent>()
             .init_resource::<construction_auto_pull::ConstructionAutoPullTimer>()
             .add_systems(Startup, (setup, place_hub).chain())
             .add_systems(
