@@ -4,7 +4,7 @@ version = "0.1.3"
 edition = "2021"
 
 [dependencies]
-bevy = "0.18"
+bevy = { version = "0.18", features = ["experimental_bevy_ui_widgets"] }
 rand = "0.8.3"
 ron = "0.10"
 serde = "1.0.219"

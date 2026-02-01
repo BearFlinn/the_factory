@@ -210,35 +210,13 @@ fn determine_styles<'a>(
     }
 }
 
-pub fn handle_escape_clear_selection(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut selectables: Query<&mut Selectable>,
-    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
-) {
-    if creation_state.active {
-        return;
-    }
-
-    if keyboard.just_pressed(KeyCode::Escape) {
-        for mut selectable in &mut selectables {
-            if selectable.is_selected {
-                selectable.is_selected = false;
-            }
-        }
-    }
-}
-
 pub struct InteractionHandlerPlugin;
 
 impl Plugin for InteractionHandlerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                handle_escape_clear_selection.in_set(UISystemSet::InputDetection),
-                (handle_interactive_ui, update_selection_visuals)
-                    .in_set(UISystemSet::VisualUpdates),
-            ),
+            (handle_interactive_ui, update_selection_visuals).in_set(UISystemSet::VisualUpdates),
         );
     }
 }

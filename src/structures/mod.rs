@@ -55,7 +55,9 @@ impl Plugin for BuildingsPlugin {
             .add_systems(
                 Update,
                 (
-                    handle_building_input.in_set(BuildingSystemSet::Input),
+                    handle_building_input
+                        .in_set(BuildingSystemSet::Input)
+                        .run_if(not(in_state(crate::ui::UiMode::WorkflowCreate))),
                     validate_placement.in_set(BuildingSystemSet::Validation),
                     (
                         place_building,

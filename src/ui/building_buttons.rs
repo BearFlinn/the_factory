@@ -193,27 +193,6 @@ pub fn handle_building_button_interactions(
     }
 }
 
-pub fn handle_building_selection_hotkeys(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut button_query: Query<(&mut BuildingButton, &mut Selectable)>,
-    mut selected_building: ResMut<SelectedBuilding>,
-    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
-) {
-    if creation_state.active {
-        return;
-    }
-
-    if keyboard.just_pressed(KeyCode::Escape) {
-        for (mut button, mut selectable) in &mut button_query {
-            if button.is_selected {
-                button.set_selected(false);
-                selectable.is_selected = false;
-            }
-        }
-        selected_building.building_name = None;
-    }
-}
-
 pub fn update_building_buttons_for_active_tab(
     commands: &mut Commands,
     active_building_type: Option<BuildingCategory>,
@@ -258,10 +237,9 @@ impl Plugin for BuildingButtonsPlugin {
         app.insert_resource(SelectedBuilding::default())
             .add_systems(
                 Update,
-                (
-                    handle_building_selection_hotkeys.in_set(UISystemSet::InputDetection),
-                    handle_building_button_interactions.in_set(UISystemSet::VisualUpdates),
-                ),
+                handle_building_button_interactions
+                    .in_set(UISystemSet::VisualUpdates)
+                    .run_if(not(in_state(crate::ui::UiMode::WorkflowCreate))),
             );
     }
 }

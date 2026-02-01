@@ -81,17 +81,13 @@ fn toggle_workflow_creation_mode(
     mut counter: ResMut<WorkflowCreationCounter>,
     mut commands: Commands,
     existing_panels: Query<Entity, With<WorkflowCreationPanel>>,
+    mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyN) {
         return;
     }
 
-    if state.active {
-        return;
-    }
-
     counter.count += 1;
-    state.active = true;
     state.name = format!("Workflow {}", counter.count);
     state.steps.clear();
     state.desired_worker_count = 1;
@@ -102,6 +98,7 @@ fn toggle_workflow_creation_mode(
     }
 
     spawn_creation_panel(&mut commands, &state);
+    next_mode.set(crate::ui::UiMode::WorkflowCreate);
 }
 
 fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) {
@@ -316,11 +313,6 @@ fn handle_building_click_in_creation_mode(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
 ) {
-    if !state.active {
-        click_events.clear();
-        return;
-    }
-
     for click in click_events.read() {
         for popup in &existing_popups {
             commands.entity(popup).despawn();
@@ -414,10 +406,6 @@ fn handle_action_selection(
     popups: Query<Entity, With<WorkflowActionPopup>>,
     step_lists: Query<(Entity, &Children), With<WorkflowStepList>>,
 ) {
-    if !state.active {
-        return;
-    }
-
     for (action_button, interaction) in &action_buttons {
         if *interaction != Interaction::Pressed {
             continue;
@@ -531,7 +519,6 @@ fn rebuild_step_list(
 
 fn handle_creation_controls(
     mut state: ResMut<WorkflowCreationState>,
-    keyboard: Res<ButtonInput<KeyCode>>,
     confirm_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowConfirmButton>)>,
     cancel_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowCancelButton>)>,
     increment_buttons: Query<
@@ -544,16 +531,11 @@ fn handle_creation_controls(
     >,
     remove_buttons: Query<(&Interaction, &WorkflowStepRemoveButton), Changed<Interaction>>,
     mut commands: Commands,
-    panels: Query<Entity, With<WorkflowCreationPanel>>,
-    popups: Query<Entity, With<WorkflowActionPopup>>,
     step_lists: Query<(Entity, &Children), With<WorkflowStepList>>,
     mut create_events: MessageWriter<CreateWorkflowEvent>,
+    mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
 ) {
-    if !state.active {
-        return;
-    }
-
-    let mut should_cancel = keyboard.just_pressed(KeyCode::Escape);
+    let mut should_cancel = false;
     let mut should_confirm = false;
     let mut worker_delta: i32 = 0;
     let mut step_to_remove: Option<usize> = None;
@@ -595,12 +577,12 @@ fn handle_creation_controls(
             desired_worker_count: state.desired_worker_count,
         });
         info!(name = %state.name, steps = state.steps.len(), "workflow created");
-        cleanup_creation_mode(&mut state, &mut commands, &panels, &popups);
+        next_mode.set(crate::ui::UiMode::Observe);
         return;
     }
 
     if should_cancel {
-        cleanup_creation_mode(&mut state, &mut commands, &panels, &popups);
+        next_mode.set(crate::ui::UiMode::Observe);
         return;
     }
 
@@ -616,26 +598,6 @@ fn handle_creation_controls(
             state.steps.remove(index);
             rebuild_step_list(&mut commands, &step_lists, &state.steps);
         }
-    }
-}
-
-fn cleanup_creation_mode(
-    state: &mut ResMut<WorkflowCreationState>,
-    commands: &mut Commands,
-    panels: &Query<Entity, With<WorkflowCreationPanel>>,
-    popups: &Query<Entity, With<WorkflowActionPopup>>,
-) {
-    state.active = false;
-    state.name.clear();
-    state.steps.clear();
-    state.desired_worker_count = 1;
-    state.pending_building = None;
-
-    for entity in panels {
-        commands.entity(entity).despawn();
-    }
-    for entity in popups {
-        commands.entity(entity).despawn();
     }
 }
 
@@ -698,15 +660,19 @@ impl Plugin for WorkflowCreationPlugin {
             .add_systems(
                 Update,
                 (
-                    toggle_workflow_creation_mode.in_set(UISystemSet::InputDetection),
+                    toggle_workflow_creation_mode
+                        .in_set(UISystemSet::InputDetection)
+                        .run_if(in_state(crate::ui::UiMode::Observe)),
                     (
                         handle_building_click_in_creation_mode,
                         handle_action_selection,
                         handle_creation_controls,
                     )
-                        .in_set(UISystemSet::EntityManagement),
+                        .in_set(UISystemSet::EntityManagement)
+                        .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                     (update_worker_count_display, update_button_hover_visuals)
-                        .in_set(UISystemSet::VisualUpdates),
+                        .in_set(UISystemSet::VisualUpdates)
+                        .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                 ),
             );
     }

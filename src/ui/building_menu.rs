@@ -117,12 +117,7 @@ pub fn spawn_building_menu(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
     buildings: Query<&Name, With<Building>>,
-    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
 ) {
-    if creation_state.active {
-        return;
-    }
-
     for click in click_events.read() {
         if existing_menus
             .iter()
@@ -756,23 +751,6 @@ fn spawn_recipe_selector(
     }
 }
 
-pub fn handle_escape_close_menus(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    menu_query: Query<Entity, With<BuildingMenu>>,
-    mut close_events: MessageWriter<CloseMenuEvent>,
-    creation_state: Res<crate::ui::workflow_creation::WorkflowCreationState>,
-) {
-    if creation_state.active {
-        return;
-    }
-
-    if keyboard.just_pressed(KeyCode::Escape) {
-        for menu_entity in &menu_query {
-            close_events.write(CloseMenuEvent { menu_entity });
-        }
-    }
-}
-
 pub fn handle_recipe_selection(
     recipe_selectors: Query<(Entity, &RecipeSelector, &Selectable), Changed<Selectable>>,
     mut recipe_change_events: MessageWriter<RecipeChangeEvent>,
@@ -878,14 +856,10 @@ impl Plugin for BuildingMenuPlugin {
             .add_systems(
                 Update,
                 (
-                    (
-                        detect_building_clicks,
-                        handle_escape_close_menus,
-                        handle_building_menu_scroll,
-                    )
+                    (detect_building_clicks, handle_building_menu_scroll)
                         .in_set(UISystemSet::InputDetection),
                     (
-                        spawn_building_menu,
+                        spawn_building_menu.run_if(in_state(crate::ui::UiMode::Observe)),
                         handle_menu_close_buttons_interaction,
                         process_menu_close_events,
                         handle_recipe_selection,

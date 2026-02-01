@@ -5,7 +5,7 @@ use crate::{
         ConstructionSiteBundle, NetWorkComponent, PlaceBuildingValidationEvent,
     },
     systems::NetworkChangedEvent,
-    ui::{workflow_creation::WorkflowCreationState, SelectedBuilding},
+    ui::SelectedBuilding,
 };
 use bevy::prelude::*;
 
@@ -31,12 +31,7 @@ pub fn handle_building_input(
     ui_interactions: Query<&Interaction, With<Button>>,
     mut place_events: MessageWriter<PlaceBuildingRequestEvent>,
     mut remove_events: MessageWriter<RemoveBuildingEvent>,
-    creation_state: Res<WorkflowCreationState>,
 ) {
-    if creation_state.active {
-        return;
-    }
-
     let ui_active = ui_interactions
         .iter()
         .any(|interaction| matches!(interaction, Interaction::Pressed | Interaction::Hovered));
