@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn placement_rule_serialization_roundtrip() {
-        use bevy::scene::ron;
+        use ron;
 
         let rules = vec![
             PlacementRule::AdjacentToNetwork,
