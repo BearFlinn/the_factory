@@ -1,4 +1,4 @@
-use bevy::prelude::{App, Commands, IntoScheduleConfigs, Plugin, Startup, Update};
+use bevy::prelude::{error, App, IntoScheduleConfigs, Plugin, Update};
 
 pub mod items;
 pub mod recipes;
@@ -12,21 +12,28 @@ pub use recipes::{RecipeDef, RecipeName, RecipeRegistry};
 
 pub struct MaterialsPlugin;
 
-fn setup(mut commands: Commands) {
-    if let Ok(registry) = ItemRegistry::load_from_assets() {
-        commands.insert_resource(registry);
-    }
-    if let Ok(registry) = RecipeRegistry::load_from_assets() {
-        commands.insert_resource(registry);
-    }
-}
-
 impl Plugin for MaterialsPlugin {
     fn build(&self, app: &mut App) {
+        match ItemRegistry::load_from_assets() {
+            Ok(registry) => {
+                app.insert_resource(registry);
+            }
+            Err(e) => {
+                error!("failed to load item registry: {e}");
+            }
+        }
+        match RecipeRegistry::load_from_assets() {
+            Ok(registry) => {
+                app.insert_resource(registry);
+            }
+            Err(e) => {
+                error!("failed to load recipe registry: {e}");
+            }
+        }
+
         app.add_message::<ItemTransferRequestEvent>()
             .add_message::<ItemTransferValidationEvent>()
             .add_message::<ItemTransferEvent>()
-            .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (

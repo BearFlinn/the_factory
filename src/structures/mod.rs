@@ -35,23 +35,26 @@ fn configure_building_system_sets(app: &mut App) {
     );
 }
 
-pub fn setup(mut commands: Commands) {
-    if let Ok(registry) = BuildingRegistry::load_from_assets() {
-        commands.insert_resource(registry);
-    }
-}
-
 pub struct BuildingsPlugin;
 
 impl Plugin for BuildingsPlugin {
     fn build(&self, app: &mut App) {
         configure_building_system_sets(app);
 
+        match BuildingRegistry::load_from_assets() {
+            Ok(registry) => {
+                app.insert_resource(registry);
+            }
+            Err(e) => {
+                error!("failed to load building registry: {e}");
+            }
+        }
+
         app.add_message::<PlaceBuildingRequestEvent>()
             .add_message::<PlaceBuildingValidationEvent>()
             .add_message::<RemoveBuildingEvent>()
             .init_resource::<construction_auto_pull::ConstructionAutoPullTimer>()
-            .add_systems(Startup, (setup, place_hub).chain())
+            .add_systems(Startup, place_hub)
             .add_systems(
                 Update,
                 (
