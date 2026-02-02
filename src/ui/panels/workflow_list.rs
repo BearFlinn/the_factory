@@ -527,9 +527,9 @@ fn handle_workflow_scroll(
     }
 }
 
-pub struct WorkflowPanelPlugin;
+pub struct WorkflowListPlugin;
 
-impl Plugin for WorkflowPanelPlugin {
+impl Plugin for WorkflowListPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorkflowPanelState>().add_systems(
             Update,

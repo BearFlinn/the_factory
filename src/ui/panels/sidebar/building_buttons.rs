@@ -1,8 +1,8 @@
 use bevy::{picking::hover::Hovered, prelude::*, ui::Checked};
 
 use crate::structures::{BuildingCategory, BuildingRegistry};
+use crate::ui::popups::tooltip::TooltipTarget;
 use crate::ui::style::{ButtonStyle, BUTTON_BG, DIM_TEXT, PANEL_BORDER};
-use crate::ui::{TooltipTarget, UISystemSet};
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -214,18 +214,4 @@ fn get_buildings_of_category(
 
     buildings.sort();
     buildings
-}
-
-pub struct BuildingButtonsPlugin;
-
-impl Plugin for BuildingButtonsPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(SelectedBuilding::default())
-            .add_systems(
-                Update,
-                handle_building_button_interactions
-                    .in_set(UISystemSet::VisualUpdates)
-                    .run_if(not(in_state(crate::ui::UiMode::WorkflowCreate))),
-            );
-    }
 }

@@ -1,5 +1,6 @@
 use crate::structures::{BuildingComponentDef, BuildingRegistry};
-use crate::ui::{BuildingButton, UISystemSet};
+use crate::ui::panels::sidebar::building_buttons::BuildingButton;
+use crate::ui::UISystemSet;
 use bevy::prelude::*;
 
 #[derive(Component)]

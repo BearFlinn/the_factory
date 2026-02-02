@@ -1,14 +1,18 @@
+pub mod building_buttons;
+pub mod tabs;
+
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use crate::{
     structures::BuildingRegistry,
     ui::{
-        get_active_tab_type, spawn_sidebar_tabs,
         style::{ButtonStyle, BUTTON_BG, CANCEL_BG, HEADER_COLOR, PANEL_BG, PANEL_BORDER},
-        update_building_buttons_for_active_tab, BuildingButton, SidebarTab, UISystemSet,
+        UISystemSet,
     },
 };
+use building_buttons::{update_building_buttons_for_active_tab, BuildingButton};
+use tabs::{get_active_tab_type, spawn_sidebar_tabs, SidebarTab};
 
 #[derive(Component)]
 pub struct Sidebar {
@@ -272,15 +276,24 @@ pub struct SidebarPlugin;
 
 impl Plugin for SidebarPlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(building_buttons::SelectedBuilding::default());
+
         app.add_systems(PostStartup, setup_sidebar).add_systems(
             Update,
             (
-                handle_sidebar_hotkeys.in_set(UISystemSet::InputDetection),
+                (handle_sidebar_hotkeys, tabs::handle_tab_hotkeys)
+                    .in_set(UISystemSet::InputDetection),
                 (
                     handle_sidebar_interactions,
                     update_building_buttons_on_tab_change,
                 )
                     .in_set(UISystemSet::EntityManagement),
+                (
+                    tabs::handle_tab_interactions,
+                    building_buttons::handle_building_button_interactions
+                        .run_if(not(in_state(crate::ui::UiMode::WorkflowCreate))),
+                )
+                    .in_set(UISystemSet::VisualUpdates),
             ),
         );
     }

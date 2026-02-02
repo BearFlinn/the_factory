@@ -2,28 +2,18 @@ use bevy::prelude::*;
 use bevy::ui::Checked;
 use bevy::ui_widgets::UiWidgetsPlugins;
 
-pub mod building_buttons;
-pub mod building_menu;
 pub mod modes;
-pub mod production_display;
-pub mod score_display;
-pub mod sidebar;
-pub mod sidebar_tabs;
-pub mod spawn_worker_button;
+pub mod panels;
+pub mod popups;
 pub mod style;
-pub mod tooltips;
-pub mod workflow_creation;
-pub mod workflow_panel;
 
-pub use building_buttons::*;
-pub use building_menu::*;
-pub use production_display::*;
-pub use score_display::*;
-pub use sidebar::*;
-pub use sidebar_tabs::*;
-pub use spawn_worker_button::*;
-pub use style::*;
-pub use tooltips::*;
+pub use panels::sidebar::building_buttons::SelectedBuilding;
+
+use modes::workflow_create::{WorkflowCreationPanel, WorkflowCreationState};
+use panels::sidebar::building_buttons::BuildingButton;
+use popups::building_menu::{BuildingMenu, CloseMenuEvent};
+use popups::workflow_action::WorkflowActionPopup;
+use style::StylePlugin;
 
 #[derive(States, Debug, Default, Hash, PartialEq, Eq, Clone)]
 pub enum UiMode {
@@ -109,17 +99,12 @@ fn on_exit_place(
     }
 }
 
-fn on_enter_workflow_create(mut state: ResMut<workflow_creation::WorkflowCreationState>) {
-    state.active = true;
-}
-
 fn on_exit_workflow_create(
-    mut state: ResMut<workflow_creation::WorkflowCreationState>,
+    mut state: ResMut<WorkflowCreationState>,
     mut commands: Commands,
-    panels: Query<Entity, With<workflow_creation::WorkflowCreationPanel>>,
-    popups: Query<Entity, With<workflow_creation::WorkflowActionPopup>>,
+    panels: Query<Entity, With<WorkflowCreationPanel>>,
+    popups: Query<Entity, With<WorkflowActionPopup>>,
 ) {
-    state.active = false;
     state.name.clear();
     state.steps.clear();
     state.desired_worker_count = 1;
@@ -149,23 +134,20 @@ impl Plugin for UIPlugin {
         );
 
         app.add_systems(OnExit(UiMode::Place), on_exit_place);
-        app.add_systems(OnEnter(UiMode::WorkflowCreate), on_enter_workflow_create);
         app.add_systems(OnExit(UiMode::WorkflowCreate), on_exit_workflow_create);
 
         app.add_plugins((
             UiWidgetsPlugins,
             StylePlugin,
             modes::PlacementPlugin,
-            SidebarPlugin,
-            SidebarTabsPlugin,
-            BuildingButtonsPlugin,
-            ProductionDisplayPlugin,
-            SpawnWorkerButtonPlugin,
-            TooltipsPlugin,
-            BuildingMenuPlugin,
-            ScoreDisplayPlugin,
-            workflow_creation::WorkflowCreationPlugin,
-            workflow_panel::WorkflowPanelPlugin,
+            modes::workflow_create::WorkflowCreationPlugin,
+            panels::SidebarPlugin,
+            panels::ProductionHudPlugin,
+            panels::SpawnWorkerButtonPlugin,
+            panels::WorkflowListPlugin,
+            popups::BuildingMenuPlugin,
+            popups::TooltipsPlugin,
+            popups::WorkflowActionPlugin,
         ));
     }
 }

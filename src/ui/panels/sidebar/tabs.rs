@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 use crate::structures::{BuildingCategory, BuildingRegistry};
 use crate::ui::style::{ButtonStyle, BUTTON_BG, PANEL_BORDER};
-use crate::ui::UISystemSet;
 
 #[derive(Component)]
 pub struct SidebarTab {
@@ -204,19 +203,5 @@ fn get_building_type_hotkey(building_type: BuildingCategory) -> &'static str {
         BuildingCategory::Logistics => "[1]",
         BuildingCategory::Production => "[2]",
         BuildingCategory::Utility => "[3]",
-    }
-}
-
-pub struct SidebarTabsPlugin;
-
-impl Plugin for SidebarTabsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                handle_tab_hotkeys.in_set(UISystemSet::InputDetection),
-                handle_tab_interactions.in_set(UISystemSet::VisualUpdates),
-            ),
-        );
     }
 }

@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use crate::{
     materials::{InventoryAccess, ItemRegistry, StoragePort},
     structures::Hub,
-    systems::{ComputeGrid, PowerGrid},
-    ui::style::{PANEL_BG, TEXT_COLOR},
+    systems::{ComputeGrid, GameScore, PowerGrid},
+    ui::style::{HEADER_COLOR, PANEL_BG, TEXT_COLOR},
 };
 
 #[derive(Component)]
@@ -15,6 +15,9 @@ pub struct PowerGridText;
 
 #[derive(Component)]
 pub struct ComputeGridText;
+
+#[derive(Component)]
+pub struct ScoreText;
 
 pub fn setup_production_ui(mut commands: Commands) {
     commands
@@ -57,6 +60,31 @@ pub fn setup_production_ui(mut commands: Commands) {
                 },
                 TextColor(TEXT_COLOR),
                 ComputeGridText,
+            ));
+        });
+}
+
+pub fn setup_score_ui(mut commands: Commands) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(20.0),
+                bottom: Val::Px(20.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                ..default()
+            },
+            BackgroundColor(PANEL_BG),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("Score: 0"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(HEADER_COLOR),
+                ScoreText,
             ));
         });
 }
@@ -114,17 +142,26 @@ pub fn update_production_text(
     }
 }
 
-pub struct ProductionDisplayPlugin;
+pub fn update_score_text(score: Res<GameScore>, mut text_query: Query<&mut Text, With<ScoreText>>) {
+    if score.is_changed() {
+        if let Ok(mut text) = text_query.single_mut() {
+            **text = format!("Score: {}", score.total_score);
+        }
+    }
+}
 
-impl Plugin for ProductionDisplayPlugin {
+pub struct ProductionHudPlugin;
+
+impl Plugin for ProductionHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, setup_production_ui);
+        app.add_systems(PostStartup, (setup_production_ui, setup_score_ui));
         app.add_systems(
             Update,
             (
                 update_production_text,
                 update_power_grid_text,
                 update_compute_grid_text,
+                update_score_text,
             ),
         );
     }
