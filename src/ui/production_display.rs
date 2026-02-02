@@ -4,6 +4,7 @@ use crate::{
     materials::{InventoryAccess, ItemRegistry, StoragePort},
     structures::Hub,
     systems::{ComputeGrid, PowerGrid},
+    ui::style::{PANEL_BG, TEXT_COLOR},
 };
 
 #[derive(Component)]
@@ -25,33 +26,36 @@ pub fn setup_production_ui(mut commands: Commands) {
                 top: Val::Px(20.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.8)),
+            BackgroundColor(PANEL_BG),
         ))
         .with_children(|parent| {
             parent.spawn((
                 Text::new("Total Production: 0"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: 14.0,
                     ..Default::default()
                 },
+                TextColor(TEXT_COLOR),
                 ProductionText,
             ));
 
             parent.spawn((
                 Text::new("Available Power: 0"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: 14.0,
                     ..Default::default()
                 },
+                TextColor(TEXT_COLOR),
                 PowerGridText,
             ));
 
             parent.spawn((
                 Text::new("Available Compute: 0"),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: 14.0,
                     ..Default::default()
                 },
+                TextColor(TEXT_COLOR),
                 ComputeGridText,
             ));
         });

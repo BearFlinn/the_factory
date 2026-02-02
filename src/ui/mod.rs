@@ -1,25 +1,27 @@
 use bevy::prelude::*;
+use bevy::ui::Checked;
+use bevy::ui_widgets::UiWidgetsPlugins;
 
 pub mod building_buttons;
 pub mod building_menu;
-pub mod interaction_handler;
 pub mod production_display;
 pub mod score_display;
 pub mod sidebar;
 pub mod sidebar_tabs;
 pub mod spawn_worker_button;
+pub mod style;
 pub mod tooltips;
 pub mod workflow_creation;
 pub mod workflow_panel;
 
 pub use building_buttons::*;
 pub use building_menu::*;
-pub use interaction_handler::*;
 pub use production_display::*;
 pub use score_display::*;
 pub use sidebar::*;
 pub use sidebar_tabs::*;
 pub use spawn_worker_button::*;
+pub use style::*;
 pub use tooltips::*;
 
 #[derive(States, Debug, Default, Hash, PartialEq, Eq, Clone)]
@@ -96,15 +98,13 @@ fn sync_selected_building_to_mode(
 }
 
 fn on_exit_place(
+    mut commands: Commands,
     mut selected_building: ResMut<SelectedBuilding>,
-    mut button_query: Query<(&mut BuildingButton, &mut interaction_handler::Selectable)>,
+    button_query: Query<Entity, (With<BuildingButton>, With<Checked>)>,
 ) {
     selected_building.building_name = None;
-    for (mut button, mut selectable) in &mut button_query {
-        if button.is_selected {
-            button.set_selected(false);
-            selectable.is_selected = false;
-        }
+    for entity in &button_query {
+        commands.entity(entity).remove::<Checked>();
     }
 }
 
@@ -152,7 +152,8 @@ impl Plugin for UIPlugin {
         app.add_systems(OnExit(UiMode::WorkflowCreate), on_exit_workflow_create);
 
         app.add_plugins((
-            InteractionHandlerPlugin,
+            UiWidgetsPlugins,
+            StylePlugin,
             SidebarPlugin,
             SidebarTabsPlugin,
             BuildingButtonsPlugin,

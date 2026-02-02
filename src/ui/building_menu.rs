@@ -1,15 +1,16 @@
+use crate::ui::style::{
+    ButtonStyle, BUTTON_BG, CANCEL_BG, PANEL_BG, PANEL_BORDER, SELECTED_BG, SELECTED_BORDER,
+};
 use crate::{
     grid::Position,
     materials::{InputPort, InventoryAccess, OutputPort, RecipeRegistry, StoragePort},
     structures::{Building, NeedsRecipeCommitmentEvaluation, RecipeCrafter},
     systems::Operational,
-    ui::{
-        interaction_handler::{DynamicStyles, InteractiveUI, Selectable},
-        SelectionBehavior, UISystemSet,
-    },
+    ui::UISystemSet,
 };
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy::{picking::hover::Hovered, ui::Checked};
 
 #[derive(Message)]
 pub struct BuildingClickEvent {
@@ -160,8 +161,8 @@ pub fn spawn_building_menu(
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.95)),
-                BorderColor::all(Color::srgb(0.4, 0.4, 0.4)),
+                BackgroundColor(PANEL_BG),
+                BorderColor::all(PANEL_BORDER),
                 Interaction::None,
                 BuildingMenu {
                     target_building: click.building_entity,
@@ -219,10 +220,6 @@ fn spawn_menu_header(parent: &mut ChildSpawnerCommands, title: &str, menu_entity
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ));
 
-            let close_styles = InteractiveUI::new()
-                .default(DynamicStyles::new().with_background(Color::srgb(0.6, 0.2, 0.2)))
-                .on_hover(DynamicStyles::new().with_background(Color::srgb(0.8, 0.3, 0.3)));
-
             parent
                 .spawn((
                     Button,
@@ -233,8 +230,9 @@ fn spawn_menu_header(parent: &mut ChildSpawnerCommands, title: &str, menu_entity
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    close_styles,
-                    Selectable::new(),
+                    BackgroundColor(CANCEL_BG),
+                    ButtonStyle::close(),
+                    Hovered::default(),
                     MenuCloseButton { menu_entity },
                 ))
                 .with_children(|parent| {
@@ -695,79 +693,71 @@ fn spawn_recipe_selector(
     for recipe_name in &crafter.available_recipes {
         let is_selected = crafter.get_active_recipe() == Some(recipe_name);
 
-        let button_styles = InteractiveUI::new()
-            .default(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.2, 0.2, 0.2))
-                    .with_border(Color::srgb(0.4, 0.4, 0.4)),
-            )
-            .on_hover(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.3, 0.3, 0.3))
-                    .with_border(Color::srgb(0.6, 0.6, 0.6)),
-            )
-            .selected(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.2, 0.4, 0.2))
-                    .with_border(Color::srgb(0.4, 0.8, 0.4)),
-            );
-
-        parent
-            .spawn((
-                Button,
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Px(24.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    margin: UiRect::bottom(Val::Px(2.0)),
-                    border: UiRect::all(Val::Px(1.0)),
+        let mut entity_commands = parent.spawn((
+            Button,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(24.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                margin: UiRect::bottom(Val::Px(2.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(if is_selected { SELECTED_BG } else { BUTTON_BG }),
+            BorderColor::all(if is_selected {
+                SELECTED_BORDER
+            } else {
+                PANEL_BORDER
+            }),
+            ButtonStyle::building_button(),
+            Hovered::default(),
+            RecipeSelector {
+                target_building: building_entity,
+                recipe_name: recipe_name.clone(),
+            },
+        ));
+        if is_selected {
+            entity_commands.insert(Checked);
+        }
+        entity_commands.with_children(|parent| {
+            parent.spawn((
+                Text::new(recipe_name.clone()),
+                TextFont {
+                    font_size: 11.0,
                     ..default()
                 },
-                button_styles,
-                Selectable {
-                    is_selected,
-                    selection_behavior: SelectionBehavior::Exclusive(format!(
-                        "recipe_selector_{}",
-                        building_entity.index()
-                    )),
-                    selection_group: Some(format!("recipe_selector_{}", building_entity.index())),
-                },
-                RecipeSelector {
-                    target_building: building_entity,
-                    recipe_name: recipe_name.clone(),
-                },
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Text::new(recipe_name.clone()),
-                    TextFont {
-                        font_size: 11.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                ));
-            });
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ));
+        });
     }
 }
 
 pub fn handle_recipe_selection(
-    recipe_selectors: Query<(Entity, &RecipeSelector, &Selectable), Changed<Selectable>>,
+    mut commands: Commands,
+    recipe_selectors: Query<
+        (Entity, &RecipeSelector, &Interaction),
+        (Changed<Interaction>, With<RecipeSelector>),
+    >,
+    all_selectors: Query<(Entity, &RecipeSelector)>,
     mut recipe_change_events: MessageWriter<RecipeChangeEvent>,
-    mut previous_states: Local<std::collections::HashMap<Entity, bool>>,
 ) {
-    for (entity, selector, selectable) in &recipe_selectors {
-        let was_selected = previous_states.get(&entity).copied().unwrap_or(false);
-        let is_selected = selectable.is_selected;
-
-        if !was_selected && is_selected {
-            recipe_change_events.write(RecipeChangeEvent {
-                building_entity: selector.target_building,
-                recipe_name: selector.recipe_name.clone(),
-            });
+    for (entity, selector, interaction) in &recipe_selectors {
+        if *interaction != Interaction::Pressed {
+            continue;
         }
 
-        previous_states.insert(entity, is_selected);
+        for (other_entity, other_selector) in &all_selectors {
+            if other_selector.target_building == selector.target_building {
+                commands.entity(other_entity).remove::<Checked>();
+            }
+        }
+
+        commands.entity(entity).insert(Checked);
+        recipe_change_events.write(RecipeChangeEvent {
+            building_entity: selector.target_building,
+            recipe_name: selector.recipe_name.clone(),
+        });
     }
 }
 

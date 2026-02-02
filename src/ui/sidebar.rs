@@ -1,12 +1,12 @@
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use crate::{
     structures::BuildingRegistry,
     ui::{
-        get_active_tab_type,
-        interaction_handler::{DynamicStyles, InteractiveUI, Selectable},
-        spawn_sidebar_tabs, update_building_buttons_for_active_tab, BuildingButton, SidebarTab,
-        UISystemSet,
+        get_active_tab_type, spawn_sidebar_tabs,
+        style::{ButtonStyle, BUTTON_BG, CANCEL_BG, HEADER_COLOR, PANEL_BG, PANEL_BORDER},
+        update_building_buttons_for_active_tab, BuildingButton, SidebarTab, UISystemSet,
     },
 };
 
@@ -34,16 +34,6 @@ impl Sidebar {
 
     #[allow(clippy::too_many_lines)]
     pub fn spawn(&self, commands: &mut Commands, registry: &BuildingRegistry) -> Entity {
-        let close_button_styles = InteractiveUI::new()
-            .default(DynamicStyles::new().with_background(Color::srgb(0.4, 0.2, 0.2)))
-            .on_hover(DynamicStyles::new().with_background(Color::srgb(0.6, 0.3, 0.3)))
-            .on_click(DynamicStyles::new().with_background(Color::srgb(0.5, 0.25, 0.25)));
-
-        let toggle_button_styles = InteractiveUI::new()
-            .default(DynamicStyles::new().with_background(Color::srgb(0.2, 0.2, 0.2)))
-            .on_hover(DynamicStyles::new().with_background(Color::srgb(0.3, 0.3, 0.3)))
-            .on_click(DynamicStyles::new().with_background(Color::srgb(0.25, 0.25, 0.25)));
-
         let sidebar_container = commands
             .spawn((
                 Node {
@@ -60,7 +50,7 @@ impl Sidebar {
                     },
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.9)),
+                BackgroundColor(PANEL_BG),
                 SidebarContainer,
                 Sidebar {
                     is_visible: self.is_visible,
@@ -79,7 +69,7 @@ impl Sidebar {
                 border: UiRect::bottom(Val::Px(1.0)),
                 ..default()
             })
-            .insert(BorderColor::all(Color::srgb(0.3, 0.3, 0.3)))
+            .insert(BorderColor::all(PANEL_BORDER))
             .id();
 
         let title_text = commands
@@ -89,6 +79,7 @@ impl Sidebar {
                     font_size: 18.0,
                     ..default()
                 },
+                TextColor(HEADER_COLOR),
             ))
             .id();
 
@@ -102,8 +93,9 @@ impl Sidebar {
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                close_button_styles,
-                Selectable::new(),
+                BackgroundColor(CANCEL_BG),
+                ButtonStyle::close(),
+                Hovered::default(),
                 SidebarCloseButton,
             ))
             .id();
@@ -145,8 +137,9 @@ impl Sidebar {
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                toggle_button_styles,
-                Selectable::new(),
+                BackgroundColor(BUTTON_BG),
+                ButtonStyle::default_button(),
+                Hovered::default(),
                 SidebarToggleButton,
             ))
             .id();
@@ -186,13 +179,13 @@ impl Sidebar {
 }
 
 pub fn handle_sidebar_interactions(
-    close_button_query: Query<&Selectable, (With<SidebarCloseButton>, Changed<Selectable>)>,
-    toggle_button_query: Query<&Selectable, (With<SidebarToggleButton>, Changed<Selectable>)>,
+    close_button_query: Query<&Interaction, (With<SidebarCloseButton>, Changed<Interaction>)>,
+    toggle_button_query: Query<&Interaction, (With<SidebarToggleButton>, Changed<Interaction>)>,
     mut sidebar_query: Query<(&mut Sidebar, &mut Node), With<SidebarContainer>>,
     mut toggle_text_query: Query<&mut Text, With<SidebarToggleButton>>,
 ) {
-    for selectable in &close_button_query {
-        if selectable.is_selected {
+    for interaction in &close_button_query {
+        if *interaction == Interaction::Pressed {
             for (mut sidebar, mut node) in &mut sidebar_query {
                 sidebar.set_visibility(false);
                 node.display = Display::None;
@@ -204,8 +197,8 @@ pub fn handle_sidebar_interactions(
         }
     }
 
-    for selectable in &toggle_button_query {
-        if selectable.is_selected {
+    for interaction in &toggle_button_query {
+        if *interaction == Interaction::Pressed {
             for (mut sidebar, mut node) in &mut sidebar_query {
                 sidebar.toggle_visibility();
                 node.display = if sidebar.is_visible {

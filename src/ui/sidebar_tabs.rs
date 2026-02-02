@@ -1,8 +1,9 @@
-use crate::structures::{BuildingCategory, BuildingRegistry};
-use crate::ui::interaction_handler::{DynamicStyles, InteractiveUI, Selectable, SelectionBehavior};
-use crate::ui::UISystemSet;
-use bevy::prelude::*;
+use bevy::{picking::hover::Hovered, prelude::*, ui::Checked};
 use std::collections::HashSet;
+
+use crate::structures::{BuildingCategory, BuildingRegistry};
+use crate::ui::style::{ButtonStyle, BUTTON_BG, PANEL_BORDER};
+use crate::ui::UISystemSet;
 
 #[derive(Component)]
 pub struct SidebarTab {
@@ -25,23 +26,6 @@ impl SidebarTab {
         let color = get_building_type_color(registry, self.building_type);
         let hotkey = get_building_type_hotkey(self.building_type);
 
-        let tab_styles = InteractiveUI::new()
-            .default(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.15, 0.15, 0.15))
-                    .with_border(Color::srgb(0.3, 0.3, 0.3)),
-            )
-            .on_hover(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.25, 0.25, 0.25))
-                    .with_border(Color::srgb(0.4, 0.4, 0.4)),
-            )
-            .selected(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.2, 0.3, 0.2))
-                    .with_border(Color::srgb(0.4, 0.6, 0.4)),
-            );
-
         let tab_button = parent
             .spawn((
                 Button,
@@ -54,10 +38,10 @@ impl SidebarTab {
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                tab_styles,
-                Selectable::new()
-                    .with_behavior(SelectionBehavior::Exclusive("sidebar_tabs".to_string()))
-                    .with_group("sidebar_tabs".to_string()),
+                BackgroundColor(BUTTON_BG),
+                BorderColor::all(PANEL_BORDER),
+                ButtonStyle::tab(),
+                Hovered::default(),
                 SidebarTab {
                     building_type: self.building_type,
                     is_active: self.is_active,
@@ -121,20 +105,35 @@ pub fn spawn_sidebar_tabs(
 }
 
 pub fn handle_tab_interactions(
-    mut tab_query: Query<(&mut SidebarTab, &Selectable), Changed<Selectable>>,
+    mut commands: Commands,
+    interactions: Query<(Entity, &Interaction), (Changed<Interaction>, With<SidebarTab>)>,
+    mut all_tabs: Query<(Entity, &mut SidebarTab)>,
 ) {
-    for (mut tab, selectable) in &mut tab_query {
-        if selectable.is_selected && !tab.is_active {
-            tab.set_active(true);
-        }
+    let mut clicked_entity = None;
 
-        tab.is_active = selectable.is_selected;
+    for (entity, interaction) in &interactions {
+        if *interaction == Interaction::Pressed {
+            clicked_entity = Some(entity);
+        }
+    }
+
+    if let Some(clicked) = clicked_entity {
+        for (entity, mut tab) in &mut all_tabs {
+            if entity == clicked {
+                tab.set_active(true);
+                commands.entity(entity).insert(Checked);
+            } else {
+                tab.set_active(false);
+                commands.entity(entity).remove::<Checked>();
+            }
+        }
     }
 }
 
 pub fn handle_tab_hotkeys(
+    mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut tab_query: Query<(&mut SidebarTab, &mut Selectable)>,
+    mut tab_query: Query<(Entity, &mut SidebarTab)>,
 ) {
     let mut target_building_type = None;
 
@@ -147,12 +146,12 @@ pub fn handle_tab_hotkeys(
     }
 
     if let Some(building_type) = target_building_type {
-        for (mut tab, mut selectable) in &mut tab_query {
+        for (entity, mut tab) in &mut tab_query {
             if tab.building_type == building_type {
-                selectable.is_selected = true;
+                commands.entity(entity).insert(Checked);
                 tab.set_active(true);
             } else {
-                selectable.is_selected = false;
+                commands.entity(entity).remove::<Checked>();
                 tab.set_active(false);
             }
         }

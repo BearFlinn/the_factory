@@ -1,8 +1,15 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use crate::{
-    ui::UISystemSet,
+    ui::{
+        style::{
+            ButtonStyle, BUTTON_BG, CARD_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG, PANEL_BORDER,
+            TEXT_COLOR,
+        },
+        UISystemSet,
+    },
     workers::{
         workflows::components::{
             AssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent, UnassignWorkersEvent,
@@ -55,19 +62,6 @@ pub struct WorkflowDetailText {
 
 #[derive(Component)]
 pub struct WorkflowPanelCloseButton;
-
-const PANEL_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.9);
-const PANEL_BORDER: Color = Color::srgb(0.3, 0.4, 0.6);
-const HEADER_COLOR: Color = Color::srgb(0.85, 0.85, 0.95);
-const TEXT_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
-const DIM_TEXT: Color = Color::srgb(0.5, 0.5, 0.5);
-const BUTTON_BG: Color = Color::srgb(0.2, 0.2, 0.3);
-const BUTTON_HOVER: Color = Color::srgb(0.3, 0.3, 0.45);
-const PAUSE_BG: Color = Color::srgb(0.15, 0.35, 0.15);
-const PAUSE_HOVER: Color = Color::srgb(0.2, 0.5, 0.2);
-const DELETE_BG: Color = Color::srgb(0.35, 0.15, 0.15);
-const DELETE_HOVER: Color = Color::srgb(0.5, 0.2, 0.2);
-const CARD_BG: Color = Color::srgba(0.15, 0.15, 0.2, 0.8);
 
 fn toggle_workflow_panel(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -142,6 +136,8 @@ fn spawn_panel(commands: &mut Commands) {
                                 ..default()
                             },
                             BackgroundColor(BUTTON_BG),
+                            ButtonStyle::close(),
+                            Hovered::default(),
                             WorkflowPanelCloseButton,
                         ))
                         .with_children(|btn| {
@@ -407,7 +403,7 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
         spawn_panel_button(
             button_row,
             pause_label,
-            PAUSE_BG,
+            ButtonStyle::confirm(),
             WorkflowPauseButton {
                 workflow: workflow_entity,
             },
@@ -415,7 +411,7 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
         spawn_panel_button(
             button_row,
             "Delete",
-            DELETE_BG,
+            ButtonStyle::cancel(),
             WorkflowDeleteButton {
                 workflow: workflow_entity,
             },
@@ -423,7 +419,7 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
         spawn_panel_button(
             button_row,
             "+W",
-            BUTTON_BG,
+            ButtonStyle::default_button(),
             WorkflowWorkerAddButton {
                 workflow: workflow_entity,
             },
@@ -431,7 +427,7 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
         spawn_panel_button(
             button_row,
             "-W",
-            BUTTON_BG,
+            ButtonStyle::default_button(),
             WorkflowWorkerRemoveButton {
                 workflow: workflow_entity,
             },
@@ -442,7 +438,7 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
 fn spawn_panel_button(
     parent: &mut ChildSpawnerCommands,
     label: &str,
-    bg: Color,
+    style: ButtonStyle,
     marker: impl Component,
 ) {
     parent
@@ -456,7 +452,9 @@ fn spawn_panel_button(
                 flex_grow: 1.0,
                 ..default()
             },
-            BackgroundColor(bg),
+            BackgroundColor(style.default_bg),
+            style,
+            Hovered::default(),
             marker,
         ))
         .with_children(|btn| {
@@ -529,42 +527,6 @@ fn handle_workflow_scroll(
     }
 }
 
-fn update_panel_button_hover_visuals(
-    mut buttons: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            Option<&WorkflowPauseButton>,
-            Option<&WorkflowDeleteButton>,
-        ),
-        (
-            Changed<Interaction>,
-            Or<(
-                With<WorkflowPauseButton>,
-                With<WorkflowDeleteButton>,
-                With<WorkflowWorkerAddButton>,
-                With<WorkflowWorkerRemoveButton>,
-                With<WorkflowPanelCloseButton>,
-            )>,
-        ),
-    >,
-) {
-    for (interaction, mut bg, pause, delete) in &mut buttons {
-        let (normal, hovered) = if pause.is_some() {
-            (PAUSE_BG, PAUSE_HOVER)
-        } else if delete.is_some() {
-            (DELETE_BG, DELETE_HOVER)
-        } else {
-            (BUTTON_BG, BUTTON_HOVER)
-        };
-
-        *bg = match interaction {
-            Interaction::Pressed | Interaction::Hovered => BackgroundColor(hovered),
-            Interaction::None => BackgroundColor(normal),
-        };
-    }
-}
-
 pub struct WorkflowPanelPlugin;
 
 impl Plugin for WorkflowPanelPlugin {
@@ -578,10 +540,7 @@ impl Plugin for WorkflowPanelPlugin {
                 )
                     .in_set(UISystemSet::InputDetection),
                 handle_workflow_panel_buttons.in_set(UISystemSet::EntityManagement),
-                (
-                    update_workflow_panel_content,
-                    update_panel_button_hover_visuals,
-                )
+                (update_workflow_panel_content,)
                     .in_set(UISystemSet::VisualUpdates)
                     .run_if(|state: Res<WorkflowPanelState>| state.visible),
             ),

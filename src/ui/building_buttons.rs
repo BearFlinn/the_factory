@@ -1,7 +1,8 @@
+use bevy::{picking::hover::Hovered, prelude::*, ui::Checked};
+
 use crate::structures::{BuildingCategory, BuildingRegistry};
-use crate::ui::interaction_handler::{DynamicStyles, InteractiveUI, Selectable, SelectionBehavior};
+use crate::ui::style::{ButtonStyle, BUTTON_BG, DIM_TEXT, PANEL_BORDER};
 use crate::ui::{TooltipTarget, UISystemSet};
-use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub struct SelectedBuilding {
@@ -33,23 +34,6 @@ impl BuildingButton {
             return parent.spawn(Node::default()).id();
         };
 
-        let button_styles = InteractiveUI::new()
-            .default(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.2, 0.2, 0.2))
-                    .with_border(Color::srgb(0.4, 0.4, 0.4)),
-            )
-            .on_hover(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.3, 0.3, 0.3))
-                    .with_border(Color::srgb(0.6, 0.6, 0.6)),
-            )
-            .selected(
-                DynamicStyles::new()
-                    .with_background(Color::srgb(0.3, 0.4, 0.2))
-                    .with_border(Color::srgb(0.6, 0.8, 0.4)),
-            );
-
         let building_button = parent
             .spawn((
                 Button,
@@ -64,10 +48,10 @@ impl BuildingButton {
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
-                button_styles,
-                Selectable::new()
-                    .with_behavior(SelectionBehavior::Exclusive("building_buttons".to_string()))
-                    .with_group("building_buttons".to_string()),
+                BackgroundColor(BUTTON_BG),
+                BorderColor::all(PANEL_BORDER),
+                ButtonStyle::building_button(),
+                Hovered::default(),
                 BuildingButton {
                     building_name: self.building_name.clone(),
                     is_selected: self.is_selected,
@@ -122,7 +106,7 @@ impl BuildingButton {
                                 font_size: 10.0,
                                 ..default()
                             },
-                            TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                            TextColor(DIM_TEXT),
                         ));
                     });
             })
@@ -173,23 +157,25 @@ pub fn spawn_building_buttons_for_category(
 }
 
 pub fn handle_building_button_interactions(
-    mut button_query: Query<(&mut BuildingButton, &Selectable), Changed<Selectable>>,
+    mut commands: Commands,
+    button_query: Query<
+        (Entity, &BuildingButton, &Interaction),
+        (Changed<Interaction>, With<BuildingButton>),
+    >,
+    checked_buttons: Query<Entity, (With<BuildingButton>, With<Checked>)>,
     mut selected_building: ResMut<SelectedBuilding>,
 ) {
-    for (mut button, selectable) in &mut button_query {
-        if selectable.is_selected && !button.is_selected {
-            button.set_selected(true);
-            selected_building.building_name = Some(button.building_name.clone());
+    for (entity, button, interaction) in &button_query {
+        if *interaction != Interaction::Pressed {
+            continue;
         }
 
-        button.is_selected = selectable.is_selected;
-
-        if !selectable.is_selected
-            && button.is_selected
-            && selected_building.building_name.as_ref() == Some(&button.building_name)
-        {
-            selected_building.building_name = None;
+        for other in &checked_buttons {
+            commands.entity(other).remove::<Checked>();
         }
+
+        commands.entity(entity).insert(Checked);
+        selected_building.building_name = Some(button.building_name.clone());
     }
 }
 

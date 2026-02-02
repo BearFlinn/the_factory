@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 
-use crate::systems::GameScore;
+use crate::{
+    systems::GameScore,
+    ui::style::{HEADER_COLOR, PANEL_BG},
+};
 
 #[derive(Component)]
 pub struct ScoreText;
@@ -15,16 +18,16 @@ pub fn setup_score_ui(mut commands: Commands) {
                 padding: UiRect::all(Val::Px(12.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.1, 0.1, 0.15, 0.9)),
+            BackgroundColor(PANEL_BG),
         ))
         .with_children(|parent| {
             parent.spawn((
                 Text::new("Score: 0"),
                 TextFont {
-                    font_size: 28.0,
+                    font_size: 14.0,
                     ..default()
                 },
-                TextColor(Color::srgb(0.9, 0.85, 0.2)),
+                TextColor(HEADER_COLOR),
                 ScoreText,
             ));
         });

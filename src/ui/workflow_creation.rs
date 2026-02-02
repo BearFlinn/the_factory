@@ -1,7 +1,14 @@
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use crate::{
-    ui::{BuildingClickEvent, UISystemSet},
+    ui::{
+        style::{
+            ButtonStyle, BUTTON_BG, CANCEL_BG, CONFIRM_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG,
+            PANEL_BORDER, POPUP_BG, TEXT_COLOR,
+        },
+        BuildingClickEvent, UISystemSet,
+    },
     workers::workflows::components::{CreateWorkflowEvent, WorkflowAction, WorkflowStep},
 };
 
@@ -61,19 +68,6 @@ pub struct WorkflowStepRemoveButton {
 
 #[derive(Component)]
 pub struct WorkflowStepList;
-
-const PANEL_BG: Color = Color::srgba(0.08, 0.08, 0.12, 0.95);
-const PANEL_BORDER: Color = Color::srgb(0.3, 0.4, 0.6);
-const HEADER_COLOR: Color = Color::srgb(0.85, 0.85, 0.95);
-const TEXT_COLOR: Color = Color::srgb(0.8, 0.8, 0.8);
-const DIM_TEXT: Color = Color::srgb(0.5, 0.5, 0.5);
-const BUTTON_BG: Color = Color::srgb(0.2, 0.2, 0.3);
-const BUTTON_HOVER: Color = Color::srgb(0.3, 0.3, 0.45);
-const CONFIRM_BG: Color = Color::srgb(0.15, 0.35, 0.15);
-const CONFIRM_HOVER: Color = Color::srgb(0.2, 0.5, 0.2);
-const CANCEL_BG: Color = Color::srgb(0.35, 0.15, 0.15);
-const CANCEL_HOVER: Color = Color::srgb(0.5, 0.2, 0.2);
-const POPUP_BG: Color = Color::srgba(0.1, 0.1, 0.15, 0.95);
 
 fn toggle_workflow_creation_mode(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -192,6 +186,8 @@ fn spawn_worker_count_row(parent: &mut ChildSpawnerCommands, count: u32) {
                     ..default()
                 },
                 BackgroundColor(BUTTON_BG),
+                ButtonStyle::default_button(),
+                Hovered::default(),
                 WorkflowWorkerDecrementButton,
             ))
             .with_children(|btn| {
@@ -225,6 +221,8 @@ fn spawn_worker_count_row(parent: &mut ChildSpawnerCommands, count: u32) {
                     ..default()
                 },
                 BackgroundColor(BUTTON_BG),
+                ButtonStyle::default_button(),
+                Hovered::default(),
                 WorkflowWorkerIncrementButton,
             ))
             .with_children(|btn| {
@@ -265,6 +263,8 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
                 },
                 BackgroundColor(CANCEL_BG),
                 BorderColor::all(Color::srgb(0.5, 0.3, 0.3)),
+                ButtonStyle::cancel(),
+                Hovered::default(),
                 WorkflowCancelButton,
             ))
             .with_children(|btn| {
@@ -290,6 +290,8 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
                 },
                 BackgroundColor(CONFIRM_BG),
                 BorderColor::all(Color::srgb(0.3, 0.5, 0.3)),
+                ButtonStyle::confirm(),
+                Hovered::default(),
                 WorkflowConfirmButton,
             ))
             .with_children(|btn| {
@@ -385,6 +387,8 @@ fn spawn_action_button(
                 ..default()
             },
             BackgroundColor(BUTTON_BG),
+            ButtonStyle::default_button(),
+            Hovered::default(),
             WorkflowActionButton { action_type },
         ))
         .with_children(|btn| {
@@ -499,6 +503,8 @@ fn rebuild_step_list(
                                 ..default()
                             },
                             BackgroundColor(CANCEL_BG),
+                            ButtonStyle::cancel(),
+                            Hovered::default(),
                             WorkflowStepRemoveButton { step_index: i },
                         ))
                         .with_children(|btn| {
@@ -614,43 +620,6 @@ fn update_worker_count_display(
     }
 }
 
-fn update_button_hover_visuals(
-    mut buttons: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            Option<&WorkflowConfirmButton>,
-            Option<&WorkflowCancelButton>,
-        ),
-        (
-            Changed<Interaction>,
-            Or<(
-                With<WorkflowActionButton>,
-                With<WorkflowConfirmButton>,
-                With<WorkflowCancelButton>,
-                With<WorkflowWorkerIncrementButton>,
-                With<WorkflowWorkerDecrementButton>,
-                With<WorkflowStepRemoveButton>,
-            )>,
-        ),
-    >,
-) {
-    for (interaction, mut bg, confirm, cancel) in &mut buttons {
-        let (normal, hovered) = if confirm.is_some() {
-            (CONFIRM_BG, CONFIRM_HOVER)
-        } else if cancel.is_some() {
-            (CANCEL_BG, CANCEL_HOVER)
-        } else {
-            (BUTTON_BG, BUTTON_HOVER)
-        };
-
-        *bg = match interaction {
-            Interaction::Pressed | Interaction::Hovered => BackgroundColor(hovered),
-            Interaction::None => BackgroundColor(normal),
-        };
-    }
-}
-
 pub struct WorkflowCreationPlugin;
 
 impl Plugin for WorkflowCreationPlugin {
@@ -670,7 +639,7 @@ impl Plugin for WorkflowCreationPlugin {
                     )
                         .in_set(UISystemSet::EntityManagement)
                         .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
-                    (update_worker_count_display, update_button_hover_visuals)
+                    (update_worker_count_display,)
                         .in_set(UISystemSet::VisualUpdates)
                         .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                 ),
