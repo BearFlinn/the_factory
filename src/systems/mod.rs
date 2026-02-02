@@ -9,9 +9,8 @@ pub mod scanning;
 
 pub use compute::{update_compute, ComputeGrid};
 pub use display::{
-    cleanup_placement_errors, display_placement_error, update_inventory_display,
-    update_operational_indicators, update_placement_ghost, InventoryDisplay,
-    NonOperationalIndicator, PlacementErrorMessage, PlacementGhost,
+    update_inventory_display, update_operational_indicators, InventoryDisplay,
+    NonOperationalIndicator,
 };
 pub use network::{
     calculate_network_connectivity, update_network_connectivity, update_visual_network_connections,
@@ -76,9 +75,6 @@ impl Plugin for SystemsPlugin {
                         update_inventory_display,
                         update_operational_indicators,
                         update_visual_network_connections,
-                        update_placement_ghost,
-                        display_placement_error,
-                        cleanup_placement_errors,
                     )
                         .in_set(SystemsSet::Display),
                 ),

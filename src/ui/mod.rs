@@ -4,6 +4,7 @@ use bevy::ui_widgets::UiWidgetsPlugins;
 
 pub mod building_buttons;
 pub mod building_menu;
+pub mod modes;
 pub mod production_display;
 pub mod score_display;
 pub mod sidebar;
@@ -154,6 +155,7 @@ impl Plugin for UIPlugin {
         app.add_plugins((
             UiWidgetsPlugins,
             StylePlugin,
+            modes::PlacementPlugin,
             SidebarPlugin,
             SidebarTabsPlugin,
             BuildingButtonsPlugin,
