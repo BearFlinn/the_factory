@@ -105,10 +105,6 @@ impl Grid {
     }
 }
 
-pub fn setup_grid(mut commands: Commands) {
-    commands.insert_resource(Grid::new(64.0));
-}
-
 pub fn spawn_grid(mut commands: Commands, mut grid: ResMut<Grid>) {
     for y in -2..=2 {
         for x in -2..=2 {
@@ -204,10 +200,11 @@ pub struct GridPlugin;
 
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<NewCellEvent>()
+        app.insert_resource(Grid::new(64.0))
+            .add_message::<NewCellEvent>()
             .add_message::<ExpandGridEvent>()
             .add_message::<ExpandGridCellsEvent>()
-            .add_systems(Startup, (setup_grid, spawn_grid).chain())
+            .add_systems(Startup, spawn_grid)
             .add_systems(Update, (handle_grid_expansion, handle_grid_cells_expansion));
     }
 }

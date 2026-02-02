@@ -1,3 +1,4 @@
+use bevy::input_focus::InputDispatchPlugin;
 use bevy::prelude::*;
 use bevy::ui::Checked;
 use bevy::ui_widgets::UiWidgetsPlugins;
@@ -139,6 +140,7 @@ impl Plugin for UIPlugin {
         app.add_systems(OnExit(UiMode::WorkflowCreate), on_exit_workflow_create);
 
         app.add_plugins((
+            InputDispatchPlugin,
             UiWidgetsPlugins,
             StylePlugin,
             modes::PlacementPlugin,
