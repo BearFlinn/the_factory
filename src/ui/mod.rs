@@ -5,6 +5,7 @@ use bevy::ui_widgets::UiWidgetsPlugins;
 pub mod modes;
 pub mod panels;
 pub mod popups;
+pub mod scroll;
 pub mod style;
 
 pub use panels::sidebar::building_buttons::SelectedBuilding;
@@ -13,6 +14,7 @@ use modes::workflow_create::{WorkflowCreationPanel, WorkflowCreationState};
 use panels::sidebar::building_buttons::BuildingButton;
 use popups::building_menu::{BuildingMenu, CloseMenuEvent};
 use popups::workflow_action::WorkflowActionPopup;
+use scroll::handle_ui_scroll;
 use style::StylePlugin;
 
 #[derive(States, Debug, Default, Hash, PartialEq, Eq, Clone)]
@@ -128,7 +130,7 @@ impl Plugin for UIPlugin {
         app.add_systems(
             Update,
             (
-                handle_escape.in_set(UISystemSet::InputDetection),
+                (handle_escape, handle_ui_scroll).in_set(UISystemSet::InputDetection),
                 sync_selected_building_to_mode.in_set(UISystemSet::EntityManagement),
             ),
         );

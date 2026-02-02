@@ -8,7 +8,6 @@ use crate::{
     systems::Operational,
     ui::UISystemSet,
 };
-use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::{picking::hover::Hovered, ui::Checked};
 
@@ -33,9 +32,6 @@ pub struct BuildingMenu {
 pub struct MenuCloseButton {
     pub menu_entity: Entity,
 }
-
-#[derive(Component)]
-pub struct BuildingMenuScrollArea;
 
 #[derive(Component)]
 pub struct MenuContent {
@@ -184,7 +180,7 @@ pub fn spawn_building_menu(
                         ..default()
                     },
                     ScrollPosition::default(),
-                    BuildingMenuScrollArea,
+                    crate::ui::scroll::Scrollable,
                 ))
                 .with_children(|scroll_area| {
                     spawn_content_section(scroll_area, click.building_entity, ContentType::Status);
@@ -786,56 +782,6 @@ pub fn apply_recipe_changes(
     }
 }
 
-const MENU_LINE_HEIGHT: f32 = 21.0;
-
-fn handle_building_menu_scroll(
-    mut mouse_wheel: MessageReader<MouseWheel>,
-    windows: Query<&Window>,
-    menu_query: Query<(&GlobalTransform, &ComputedNode), With<BuildingMenu>>,
-    mut scroll_query: Query<
-        (&mut ScrollPosition, &ComputedNode, &Children),
-        With<BuildingMenuScrollArea>,
-    >,
-    child_sizes: Query<&ComputedNode, Without<BuildingMenuScrollArea>>,
-) {
-    let Ok(window) = windows.single() else {
-        return;
-    };
-    let Some(cursor_pos) = window.cursor_position() else {
-        return;
-    };
-
-    let cursor_over_menu = menu_query.iter().any(|(transform, node)| {
-        let center = transform.translation().truncate();
-        let half = node.size() / 2.0;
-        cursor_pos.x >= center.x - half.x
-            && cursor_pos.x <= center.x + half.x
-            && cursor_pos.y >= center.y - half.y
-            && cursor_pos.y <= center.y + half.y
-    });
-
-    if !cursor_over_menu {
-        return;
-    }
-
-    for scroll in mouse_wheel.read() {
-        let delta = match scroll.unit {
-            MouseScrollUnit::Line => scroll.y * MENU_LINE_HEIGHT,
-            MouseScrollUnit::Pixel => scroll.y,
-        };
-
-        for (mut scroll_pos, container_node, children) in &mut scroll_query {
-            let content_height: f32 = children
-                .iter()
-                .filter_map(|child| child_sizes.get(child).ok())
-                .map(|node| node.size().y)
-                .sum();
-            let max_offset = (content_height - container_node.size().y).max(0.0);
-            scroll_pos.y = (scroll_pos.y - delta).clamp(0.0, max_offset);
-        }
-    }
-}
-
 pub struct BuildingMenuPlugin;
 
 impl Plugin for BuildingMenuPlugin {
@@ -846,8 +792,7 @@ impl Plugin for BuildingMenuPlugin {
             .add_systems(
                 Update,
                 (
-                    (detect_building_clicks, handle_building_menu_scroll)
-                        .in_set(UISystemSet::InputDetection),
+                    detect_building_clicks.in_set(UISystemSet::InputDetection),
                     (
                         spawn_building_menu.run_if(in_state(crate::ui::UiMode::Observe)),
                         handle_menu_close_buttons_interaction,

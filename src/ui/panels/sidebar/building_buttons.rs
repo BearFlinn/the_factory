@@ -196,22 +196,3 @@ pub fn update_building_buttons_for_active_tab(
         });
     }
 }
-
-#[allow(dead_code)] // Is use in spawn_building_buttons_for_category rust analyzer broky
-fn get_buildings_of_category(
-    registry: &BuildingRegistry,
-    building_category: BuildingCategory,
-) -> Vec<String> {
-    let mut buildings = Vec::new();
-
-    for building_name in registry.get_all_building_names() {
-        if let Some(definition) = registry.get_definition(&building_name) {
-            if definition.category == building_category {
-                buildings.push(building_name);
-            }
-        }
-    }
-
-    buildings.sort();
-    buildings
-}
