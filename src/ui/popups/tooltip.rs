@@ -2,6 +2,7 @@ use crate::structures::{BuildingComponentDef, BuildingRegistry};
 use crate::ui::panels::action_bar::build_panel::BuildingButton;
 use crate::ui::UISystemSet;
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 
 #[derive(Component)]
 pub struct Tooltip {
@@ -68,7 +69,7 @@ pub fn handle_tooltip_hover_detection(
 pub fn update_tooltip_timers(
     mut commands: Commands,
     mut timer_query: Query<(Entity, &mut TooltipTimer)>,
-    button_query: Query<(&BuildingButton, &GlobalTransform), With<TooltipTarget>>,
+    button_query: Query<(&BuildingButton, &UiGlobalTransform), With<TooltipTarget>>,
     registry: Res<BuildingRegistry>,
     time: Res<Time>,
     existing_tooltips: Query<Entity, With<Tooltip>>,
@@ -88,11 +89,7 @@ pub fn update_tooltip_timers(
             {
                 if let Some(definition) = registry.get_definition(&building_button.building_name) {
                     let tooltip_content = generate_tooltip_content(definition);
-                    spawn_tooltip(
-                        &mut commands,
-                        tooltip_content,
-                        button_transform.translation().truncate(),
-                    );
+                    spawn_tooltip(&mut commands, tooltip_content, button_transform.translation);
                 } else {
                     warn!(
                         "Building definition not found for tooltip: {}",

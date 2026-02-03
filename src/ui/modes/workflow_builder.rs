@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 
 use crate::{
     grid::Position,
@@ -789,7 +790,7 @@ fn handle_step_action_toggle(
 fn handle_step_target_button(
     state: Res<WorkflowCreationState>,
     target_buttons: Query<
-        (&Interaction, &StepTargetButton, &GlobalTransform),
+        (&Interaction, &StepTargetButton, &UiGlobalTransform),
         Changed<Interaction>,
     >,
     mut commands: Commands,
@@ -802,7 +803,7 @@ fn handle_step_target_button(
         return;
     }
 
-    for (interaction, btn, transform) in &target_buttons {
+    for (interaction, btn, ui_transform) in &target_buttons {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -827,7 +828,7 @@ fn handle_step_target_button(
             return;
         };
 
-        let button_pos = transform.translation();
+        let button_pos = ui_transform.translation;
 
         let dropdown_id = commands
             .spawn((
@@ -947,7 +948,7 @@ fn handle_target_dropdown_selection(
 fn handle_step_filter_button(
     state: Res<WorkflowCreationState>,
     filter_buttons: Query<
-        (&Interaction, &StepFilterButton, &GlobalTransform),
+        (&Interaction, &StepFilterButton, &UiGlobalTransform),
         Changed<Interaction>,
     >,
     mut commands: Commands,
@@ -959,7 +960,7 @@ fn handle_step_filter_button(
         return;
     }
 
-    for (interaction, btn, transform) in &filter_buttons {
+    for (interaction, btn, ui_transform) in &filter_buttons {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -984,7 +985,7 @@ fn handle_step_filter_button(
             return;
         };
 
-        let button_pos = transform.translation();
+        let button_pos = ui_transform.translation;
 
         let dropdown_id = commands
             .spawn((

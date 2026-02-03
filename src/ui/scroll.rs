@@ -1,5 +1,6 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 
 #[derive(Component)]
 pub struct Scrollable;
@@ -13,7 +14,7 @@ pub fn handle_ui_scroll(
     mut scroll_query: Query<
         (
             &mut ScrollPosition,
-            &GlobalTransform,
+            &UiGlobalTransform,
             &ComputedNode,
             &Node,
             &Children,
@@ -35,10 +36,10 @@ pub fn handle_ui_scroll(
             MouseScrollUnit::Pixel => scroll.y,
         };
 
-        for (mut scroll_pos, transform, container_node, container_style, children) in
+        for (mut scroll_pos, ui_transform, container_node, container_style, children) in
             &mut scroll_query
         {
-            let center = transform.translation().truncate();
+            let center = ui_transform.translation;
             let half = container_node.size() / 2.0;
             if cursor_pos.x < center.x - half.x
                 || cursor_pos.x > center.x + half.x
