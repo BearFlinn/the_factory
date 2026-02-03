@@ -1168,6 +1168,7 @@ fn close_dropdowns_on_outside_click(
             Without<FilterCheckbox>,
             Without<StepTargetButton>,
             Without<StepFilterButton>,
+            Without<WorkflowBuilderModal>,
         ),
     >,
     mut commands: Commands,
@@ -1202,14 +1203,17 @@ impl Plugin for WorkflowBuilderPlugin {
                     .in_set(UISystemSet::EntityManagement)
                     .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                 (
-                    handle_builder_controls,
-                    handle_step_action_toggle,
-                    handle_step_target_button,
-                    handle_target_dropdown_selection,
-                    handle_step_filter_button,
-                    handle_filter_checkbox_toggle,
+                    (
+                        handle_builder_controls,
+                        handle_step_action_toggle,
+                        handle_step_target_button,
+                        handle_target_dropdown_selection,
+                        handle_step_filter_button,
+                        handle_filter_checkbox_toggle,
+                    ),
                     close_dropdowns_on_outside_click,
                 )
+                    .chain()
                     .in_set(UISystemSet::EntityManagement)
                     .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                 update_builder_worker_count
