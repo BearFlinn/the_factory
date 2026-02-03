@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 
+use crate::{grid::Position, workers::Worker};
+
 use super::components::{
-    AssignWorkersEvent, CreateWorkflowEvent, DeleteWorkflowEvent, PauseWorkflowEvent,
-    UnassignWorkersEvent, Workflow, WorkflowAssignment, WorkflowRegistry,
+    AssignWorkersEvent, BatchAssignWorkersEvent, CreateWorkflowEvent, DeleteWorkflowEvent,
+    PauseWorkflowEvent, UnassignWorkersEvent, Workflow, WorkflowAssignment, WorkflowRegistry,
 };
 
 pub fn handle_create_workflow(
@@ -14,6 +16,7 @@ pub fn handle_create_workflow(
         let entity = commands
             .spawn(Workflow {
                 name: event.name.clone(),
+                building_set: event.building_set.clone(),
                 steps: event.steps.clone(),
                 is_paused: false,
                 desired_worker_count: event.desired_worker_count,
@@ -63,6 +66,7 @@ pub fn handle_assign_workers(
             commands.entity(worker).insert(WorkflowAssignment {
                 workflow: event.workflow,
                 current_step: 0,
+                resolved_target: None,
             });
         }
     }
@@ -79,11 +83,82 @@ pub fn handle_unassign_workers(
     }
 }
 
+pub fn handle_batch_assign_workers(
+    mut events: MessageReader<BatchAssignWorkersEvent>,
+    workflows: Query<&Workflow>,
+    idle_workers: Query<(Entity, &Position), (With<Worker>, Without<WorkflowAssignment>)>,
+    assigned_workers: Query<&WorkflowAssignment, With<Worker>>,
+    positions: Query<&Position>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        let Ok(workflow) = workflows.get(event.workflow) else {
+            continue;
+        };
+
+        let current_assigned = assigned_workers
+            .iter()
+            .filter(|a| a.workflow == event.workflow)
+            .count();
+
+        #[allow(clippy::cast_possible_truncation)]
+        let needed = (event.count as usize).saturating_sub(current_assigned);
+        if needed == 0 {
+            continue;
+        }
+
+        if workflow.building_set.is_empty() {
+            continue;
+        }
+
+        let (sum_x, sum_y, count) =
+            workflow
+                .building_set
+                .iter()
+                .fold((0i64, 0i64, 0u32), |(sx, sy, c), &entity| {
+                    if let Ok(pos) = positions.get(entity) {
+                        (sx + i64::from(pos.x), sy + i64::from(pos.y), c + 1)
+                    } else {
+                        (sx, sy, c)
+                    }
+                });
+
+        if count == 0 {
+            continue;
+        }
+
+        #[allow(clippy::cast_possible_truncation)]
+        let centroid_x = (sum_x / i64::from(count)) as i32;
+        #[allow(clippy::cast_possible_truncation)]
+        let centroid_y = (sum_y / i64::from(count)) as i32;
+
+        let mut candidates: Vec<(Entity, i32)> = idle_workers
+            .iter()
+            .map(|(entity, pos)| {
+                let dist = (pos.x - centroid_x).abs() + (pos.y - centroid_y).abs();
+                (entity, dist)
+            })
+            .collect();
+
+        candidates.sort_by_key(|&(_, dist)| dist);
+
+        for (worker_entity, _) in candidates.into_iter().take(needed) {
+            commands.entity(worker_entity).insert(WorkflowAssignment {
+                workflow: event.workflow,
+                current_step: 0,
+                resolved_target: None,
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
-    use crate::workers::workflows::components::{WorkflowAction, WorkflowStep};
+    use crate::workers::workflows::components::{StepTarget, WorkflowAction, WorkflowStep};
 
     fn setup_app() -> App {
         let mut app = App::new();
@@ -92,6 +167,7 @@ mod tests {
         app.add_message::<PauseWorkflowEvent>();
         app.add_message::<AssignWorkersEvent>();
         app.add_message::<UnassignWorkersEvent>();
+        app.add_message::<BatchAssignWorkersEvent>();
         app.init_resource::<WorkflowRegistry>();
         app.add_systems(
             Update,
@@ -101,6 +177,7 @@ mod tests {
                 handle_pause_workflow,
                 handle_assign_workers,
                 handle_unassign_workers,
+                handle_batch_assign_workers,
             ),
         );
         app
@@ -112,8 +189,9 @@ mod tests {
 
         app.world_mut().write_message(CreateWorkflowEvent {
             name: "test workflow".to_string(),
+            building_set: HashSet::new(),
             steps: vec![WorkflowStep {
-                target: Entity::PLACEHOLDER,
+                target: StepTarget::Specific(Entity::PLACEHOLDER),
                 action: WorkflowAction::Pickup(None),
             }],
             desired_worker_count: 2,
@@ -137,6 +215,7 @@ mod tests {
 
         app.world_mut().write_message(CreateWorkflowEvent {
             name: "to delete".to_string(),
+            building_set: HashSet::new(),
             steps: vec![],
             desired_worker_count: 1,
         });
@@ -160,6 +239,7 @@ mod tests {
 
         app.world_mut().write_message(CreateWorkflowEvent {
             name: "worker workflow".to_string(),
+            building_set: HashSet::new(),
             steps: vec![],
             desired_worker_count: 1,
         });
@@ -196,6 +276,7 @@ mod tests {
 
         app.world_mut().write_message(CreateWorkflowEvent {
             name: "pausable".to_string(),
+            building_set: HashSet::new(),
             steps: vec![],
             desired_worker_count: 1,
         });
@@ -231,6 +312,7 @@ mod tests {
             .world_mut()
             .spawn(Workflow {
                 name: "assign test".to_string(),
+                building_set: HashSet::new(),
                 steps: vec![],
                 is_paused: false,
                 desired_worker_count: 2,
@@ -263,6 +345,7 @@ mod tests {
             .world_mut()
             .spawn(Workflow {
                 name: "unassign test".to_string(),
+                building_set: HashSet::new(),
                 steps: vec![],
                 is_paused: false,
                 desired_worker_count: 1,
@@ -285,5 +368,44 @@ mod tests {
         app.update();
 
         assert!(app.world().get::<WorkflowAssignment>(worker).is_none());
+    }
+
+    #[test]
+    fn batch_assign_workers_picks_nearest() {
+        let mut app = setup_app();
+
+        let building = app.world_mut().spawn(Position { x: 10, y: 10 }).id();
+
+        let mut building_set = HashSet::new();
+        building_set.insert(building);
+
+        let workflow_entity = app
+            .world_mut()
+            .spawn(Workflow {
+                name: "batch test".to_string(),
+                building_set,
+                steps: vec![],
+                is_paused: false,
+                desired_worker_count: 2,
+            })
+            .id();
+
+        let near_worker = app
+            .world_mut()
+            .spawn((Worker, Position { x: 9, y: 9 }))
+            .id();
+        let far_worker = app
+            .world_mut()
+            .spawn((Worker, Position { x: 100, y: 100 }))
+            .id();
+
+        app.world_mut().write_message(BatchAssignWorkersEvent {
+            workflow: workflow_entity,
+            count: 1,
+        });
+        app.update();
+
+        assert!(app.world().get::<WorkflowAssignment>(near_worker).is_some());
+        assert!(app.world().get::<WorkflowAssignment>(far_worker).is_none());
     }
 }

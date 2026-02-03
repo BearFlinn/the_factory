@@ -1,4 +1,5 @@
 pub mod placement;
+pub mod workflow_builder;
 pub mod workflow_create;
 
 use bevy::prelude::*;

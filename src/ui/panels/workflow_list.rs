@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
@@ -6,14 +8,15 @@ use crate::{
         panels::action_bar::ActivePanel,
         style::{
             ButtonStyle, ACTION_BAR_WIDTH, BUTTON_BG, CARD_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG,
-            PANEL_BORDER, TEXT_COLOR, TOP_BAR_HEIGHT,
+            PANEL_BORDER, TEXT_COLOR, TOP_BAR_HEIGHT, WARNING_COLOR,
         },
         UISystemSet,
     },
     workers::{
         workflows::components::{
-            AssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent, UnassignWorkersEvent,
-            Workflow, WorkflowAction, WorkflowAssignment, WorkflowRegistry,
+            AssignWorkersEvent, BatchAssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent,
+            StepTarget, UnassignWorkersEvent, WaitingForItems, Workflow, WorkflowAction,
+            WorkflowAssignment, WorkflowRegistry,
         },
         Worker,
     },
@@ -37,6 +40,11 @@ pub struct WorkflowPauseButton {
 
 #[derive(Component)]
 pub struct WorkflowDeleteButton {
+    pub workflow: Entity,
+}
+
+#[derive(Component)]
+pub struct WorkflowFillButton {
     pub workflow: Entity,
 }
 
@@ -149,12 +157,15 @@ fn handle_workflow_panel_buttons(
     delete_buttons: Query<(&Interaction, &WorkflowDeleteButton), Changed<Interaction>>,
     add_buttons: Query<(&Interaction, &WorkflowWorkerAddButton), Changed<Interaction>>,
     remove_buttons: Query<(&Interaction, &WorkflowWorkerRemoveButton), Changed<Interaction>>,
+    fill_buttons: Query<(&Interaction, &WorkflowFillButton), Changed<Interaction>>,
     mut pause_events: MessageWriter<PauseWorkflowEvent>,
     mut delete_events: MessageWriter<DeleteWorkflowEvent>,
     mut assign_events: MessageWriter<AssignWorkersEvent>,
     mut unassign_events: MessageWriter<UnassignWorkersEvent>,
+    mut batch_assign_events: MessageWriter<BatchAssignWorkersEvent>,
     idle_workers: Query<Entity, (With<Worker>, Without<WorkflowAssignment>)>,
     assigned_workers: Query<(Entity, &WorkflowAssignment), With<Worker>>,
+    workflows: Query<&Workflow>,
 ) {
     for interaction in &close_buttons {
         if *interaction == Interaction::Pressed {
@@ -176,6 +187,17 @@ fn handle_workflow_panel_buttons(
             delete_events.write(DeleteWorkflowEvent {
                 workflow: btn.workflow,
             });
+        }
+    }
+
+    for (interaction, btn) in &fill_buttons {
+        if *interaction == Interaction::Pressed {
+            if let Ok(workflow) = workflows.get(btn.workflow) {
+                batch_assign_events.write(BatchAssignWorkersEvent {
+                    workflow: btn.workflow,
+                    count: workflow.desired_worker_count,
+                });
+            }
         }
     }
 
@@ -211,7 +233,8 @@ fn update_workflow_panel_content(
     list_containers: Query<Entity, With<WorkflowListContainer>>,
     registry: Res<WorkflowRegistry>,
     workflows: Query<&Workflow>,
-    assigned_workers: Query<&WorkflowAssignment, With<Worker>>,
+    assigned_workers: Query<(&WorkflowAssignment, Has<WaitingForItems>), With<Worker>>,
+    names: Query<&Name>,
 ) {
     for container in &list_containers {
         commands.entity(container).despawn_related::<Children>();
@@ -240,12 +263,25 @@ fn update_workflow_panel_content(
                     continue;
                 };
 
-                let current_workers = assigned_workers
-                    .iter()
-                    .filter(|a| a.workflow == workflow_entity)
-                    .count();
+                let mut current_workers = 0u32;
+                let mut waiting_workers = 0u32;
+                for (assignment, is_waiting) in &assigned_workers {
+                    if assignment.workflow == workflow_entity {
+                        current_workers += 1;
+                        if is_waiting {
+                            waiting_workers += 1;
+                        }
+                    }
+                }
 
-                spawn_workflow_card(parent, workflow_entity, workflow, current_workers);
+                spawn_workflow_card(
+                    parent,
+                    workflow_entity,
+                    workflow,
+                    current_workers,
+                    waiting_workers,
+                    &names,
+                );
             }
         });
     }
@@ -255,7 +291,9 @@ fn spawn_workflow_card(
     parent: &mut ChildSpawnerCommands,
     workflow_entity: Entity,
     workflow: &Workflow,
-    current_workers: usize,
+    current_workers: u32,
+    waiting_workers: u32,
+    names: &Query<&Name>,
 ) {
     parent
         .spawn((
@@ -275,7 +313,14 @@ fn spawn_workflow_card(
         ))
         .with_children(|card| {
             spawn_card_header(card, workflow);
-            spawn_card_details(card, workflow_entity, workflow, current_workers);
+            spawn_card_details(
+                card,
+                workflow_entity,
+                workflow,
+                current_workers,
+                waiting_workers,
+                names,
+            );
             spawn_card_buttons(card, workflow_entity, workflow.is_paused);
         });
 }
@@ -315,18 +360,36 @@ fn spawn_card_details(
     card: &mut ChildSpawnerCommands,
     workflow_entity: Entity,
     workflow: &Workflow,
-    current_workers: usize,
+    current_workers: u32,
+    waiting_workers: u32,
+    names: &Query<&Name>,
 ) {
+    let pool_summary = build_pool_summary(&workflow.building_set, names);
+    card.spawn((
+        Text::new(format!("Buildings: {pool_summary}")),
+        TextFont {
+            font_size: 11.0,
+            ..default()
+        },
+        TextColor(DIM_TEXT),
+    ));
+
     let step_details: Vec<String> = workflow
         .steps
         .iter()
         .enumerate()
         .map(|(i, step)| {
             let action_label = match &step.action {
-                WorkflowAction::Pickup(_) => "Pickup",
-                WorkflowAction::Dropoff(_) => "Dropoff",
+                WorkflowAction::Pickup(_) => "Pickup from",
+                WorkflowAction::Dropoff(_) => "Dropoff to",
             };
-            format!("  {}. {}", i + 1, action_label)
+            let target_label = match &step.target {
+                StepTarget::Specific(entity) => names
+                    .get(*entity)
+                    .map_or_else(|_| "???".to_string(), |n| n.as_str().to_string()),
+                StepTarget::ByType(type_name) => format!("any {type_name}"),
+            };
+            format!("  {}. {} {}", i + 1, action_label, target_label)
         })
         .collect();
 
@@ -346,17 +409,63 @@ fn spawn_card_details(
         },
     ));
 
-    card.spawn((
-        Text::new(format!(
+    let worker_color = if current_workers >= workflow.desired_worker_count {
+        Color::srgb(0.3, 0.8, 0.3)
+    } else if waiting_workers > 0 {
+        WARNING_COLOR
+    } else {
+        TEXT_COLOR
+    };
+
+    let worker_text = if waiting_workers > 0 {
+        format!(
+            "Workers: {current_workers}/{} ({waiting_workers} waiting)",
+            workflow.desired_worker_count
+        )
+    } else {
+        format!(
             "Workers: {current_workers}/{}",
             workflow.desired_worker_count
-        )),
+        )
+    };
+
+    card.spawn((
+        Text::new(worker_text),
         TextFont {
             font_size: 12.0,
             ..default()
         },
-        TextColor(TEXT_COLOR),
+        TextColor(worker_color),
     ));
+}
+
+fn build_pool_summary(
+    building_set: &std::collections::HashSet<Entity>,
+    names: &Query<&Name>,
+) -> String {
+    if building_set.is_empty() {
+        return "None".to_string();
+    }
+    let mut type_counts: HashMap<String, u32> = HashMap::new();
+    for &entity in building_set {
+        let name = names
+            .get(entity)
+            .map_or_else(|_| "Unknown".to_string(), |n| n.as_str().to_string());
+        *type_counts.entry(name).or_default() += 1;
+    }
+    let mut types: Vec<_> = type_counts.into_iter().collect();
+    types.sort_by(|a, b| a.0.cmp(&b.0));
+    types
+        .iter()
+        .map(|(name, count)| {
+            if *count > 1 {
+                format!("{count}x {name}")
+            } else {
+                name.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, is_paused: bool) {
@@ -383,6 +492,14 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
             "Delete",
             ButtonStyle::cancel(),
             WorkflowDeleteButton {
+                workflow: workflow_entity,
+            },
+        );
+        spawn_panel_button(
+            button_row,
+            "Fill",
+            ButtonStyle::default_button(),
+            WorkflowFillButton {
                 workflow: workflow_entity,
             },
         );

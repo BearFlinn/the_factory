@@ -12,11 +12,11 @@ pub mod style;
 
 pub use panels::action_bar::build_panel::SelectedBuilding;
 
+use modes::workflow_builder::{FilterDropdown, TargetDropdown, WorkflowBuilderModal};
 use modes::workflow_create::{WorkflowCreationPanel, WorkflowCreationState};
 use panels::action_bar::build_panel::BuildingButton;
 use panels::action_bar::ActivePanel;
 use popups::building_menu::{BuildingMenu, CloseMenuEvent};
-use popups::workflow_action::WorkflowActionPopup;
 use scroll::handle_ui_scroll;
 use style::StylePlugin;
 
@@ -113,17 +113,26 @@ fn on_exit_workflow_create(
     mut state: ResMut<WorkflowCreationState>,
     mut commands: Commands,
     panels: Query<Entity, With<WorkflowCreationPanel>>,
-    popups: Query<Entity, With<WorkflowActionPopup>>,
+    modals: Query<Entity, With<WorkflowBuilderModal>>,
+    target_dropdowns: Query<Entity, With<TargetDropdown>>,
+    filter_dropdowns: Query<Entity, With<FilterDropdown>>,
 ) {
     state.name.clear();
     state.steps.clear();
     state.desired_worker_count = 1;
-    state.pending_building = None;
+    state.building_set.clear();
+    state.phase = modes::workflow_create::CreationPhase::SelectBuildings;
 
     for entity in &panels {
         commands.entity(entity).despawn();
     }
-    for entity in &popups {
+    for entity in &modals {
+        commands.entity(entity).despawn();
+    }
+    for entity in &target_dropdowns {
+        commands.entity(entity).despawn();
+    }
+    for entity in &filter_dropdowns {
         commands.entity(entity).despawn();
     }
 }
@@ -153,13 +162,13 @@ impl Plugin for UIPlugin {
             icons::IconPlugin,
             modes::PlacementPlugin,
             modes::workflow_create::WorkflowCreationPlugin,
+            modes::workflow_builder::WorkflowBuilderPlugin,
             panels::TopBarPlugin,
             panels::ActionBarPlugin,
             panels::action_bar::build_panel::BuildPanelPlugin,
             panels::WorkflowListPlugin,
             popups::BuildingMenuPlugin,
             popups::TooltipsPlugin,
-            popups::WorkflowActionPlugin,
         ));
     }
 }

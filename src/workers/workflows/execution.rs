@@ -1,4 +1,6 @@
-use super::components::{WaitingForItems, Workflow, WorkflowAction, WorkflowAssignment};
+use super::components::{
+    StepTarget, WaitingForItems, Workflow, WorkflowAction, WorkflowAssignment,
+};
 use crate::{
     grid::{Grid, Position},
     materials::{
@@ -9,7 +11,7 @@ use crate::{
     workers::{pathfinding::calculate_path, Worker, WorkerArrivedEvent, WorkerPath},
 };
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 fn get_available_items_at(
     target: Entity,
@@ -77,6 +79,49 @@ fn compute_dropoff_items(
     }
 }
 
+fn resolve_step_target(
+    step: &super::components::WorkflowStep,
+    worker_pos: Position,
+    building_set: &HashSet<Entity>,
+    positions: &Query<&Position>,
+    names: &Query<&Name>,
+) -> Option<Entity> {
+    match &step.target {
+        StepTarget::Specific(entity) => {
+            if building_set.contains(entity) && positions.get(*entity).is_ok() {
+                Some(*entity)
+            } else {
+                None
+            }
+        }
+        StepTarget::ByType(type_name) => {
+            let mut best: Option<(Entity, i32)> = None;
+            for &entity in building_set {
+                let Ok(name) = names.get(entity) else {
+                    continue;
+                };
+                if name.as_str() != type_name {
+                    continue;
+                }
+                let Ok(pos) = positions.get(entity) else {
+                    continue;
+                };
+                let dist = (worker_pos.x - pos.x).abs() + (worker_pos.y - pos.y).abs();
+                match best {
+                    Some((_, best_dist)) if dist < best_dist => {
+                        best = Some((entity, dist));
+                    }
+                    None => {
+                        best = Some((entity, dist));
+                    }
+                    _ => {}
+                }
+            }
+            best.map(|(e, _)| e)
+        }
+    }
+}
+
 pub fn process_workflow_workers(
     mut workers: Query<
         (Entity, &mut WorkflowAssignment, &Position, &mut WorkerPath),
@@ -84,6 +129,7 @@ pub fn process_workflow_workers(
     >,
     workflows: Query<&Workflow>,
     positions: Query<&Position>,
+    names: Query<&Name>,
     network: Res<NetworkConnectivity>,
     grid: Res<Grid>,
 ) {
@@ -108,7 +154,21 @@ pub fn process_workflow_workers(
             continue;
         }
 
-        let Ok(target_pos) = positions.get(step.target) else {
+        let Some(target_entity) = resolve_step_target(
+            step,
+            *worker_pos,
+            &workflow.building_set,
+            &positions,
+            &names,
+        ) else {
+            assignment.current_step = workflow.next_step(assignment.current_step);
+            continue;
+        };
+
+        assignment.resolved_target = Some(target_entity);
+
+        let Ok(target_pos) = positions.get(target_entity) else {
+            assignment.current_step = workflow.next_step(assignment.current_step);
             continue;
         };
 
@@ -152,7 +212,13 @@ pub fn handle_workflow_arrivals(
             continue;
         };
 
-        let target = step.target;
+        let target = match assignment.resolved_target {
+            Some(entity) => entity,
+            None => match &step.target {
+                StepTarget::Specific(entity) => *entity,
+                StepTarget::ByType(_) => continue,
+            },
+        };
 
         match &step.action {
             WorkflowAction::Pickup(filter) => {
@@ -177,6 +243,7 @@ pub fn handle_workflow_arrivals(
             }
         }
 
+        assignment.resolved_target = None;
         assignment.current_step = workflow.next_step(assignment.current_step);
     }
 }
@@ -206,7 +273,13 @@ pub fn recheck_waiting_workers(
             continue;
         };
 
-        let target = step.target;
+        let target = match assignment.resolved_target {
+            Some(entity) => entity,
+            None => match &step.target {
+                StepTarget::Specific(entity) => *entity,
+                StepTarget::ByType(_) => continue,
+            },
+        };
 
         if let WorkflowAction::Pickup(filter) = &step.action {
             let available =
@@ -216,6 +289,7 @@ pub fn recheck_waiting_workers(
             if !items.is_empty() {
                 commands.entity(worker_entity).remove::<WaitingForItems>();
                 request_transfer_specific_items(target, worker_entity, items, &mut transfer_events);
+                assignment.resolved_target = None;
                 assignment.current_step = workflow.next_step(assignment.current_step);
             }
         }
@@ -225,9 +299,15 @@ pub fn recheck_waiting_workers(
 pub fn cleanup_invalid_workflow_refs(
     mut commands: Commands,
     mut workers: Query<(Entity, &mut WorkflowAssignment)>,
-    workflows: Query<&Workflow>,
+    mut workflows: Query<&mut Workflow>,
     positions: Query<&Position>,
 ) {
+    for mut workflow in &mut workflows {
+        workflow
+            .building_set
+            .retain(|entity| positions.get(*entity).is_ok());
+    }
+
     for (worker_entity, mut assignment) in &mut workers {
         let Ok(workflow) = workflows.get(assignment.workflow) else {
             commands
@@ -236,9 +316,20 @@ pub fn cleanup_invalid_workflow_refs(
             continue;
         };
 
+        if let Some(resolved) = assignment.resolved_target {
+            if positions.get(resolved).is_err() {
+                assignment.resolved_target = None;
+            }
+        }
+
         if let Some(step) = workflow.steps.get(assignment.current_step) {
-            if positions.get(step.target).is_err() {
-                assignment.current_step = workflow.next_step(assignment.current_step);
+            match &step.target {
+                StepTarget::Specific(entity) => {
+                    if positions.get(*entity).is_err() {
+                        assignment.current_step = workflow.next_step(assignment.current_step);
+                    }
+                }
+                StepTarget::ByType(_) => {}
             }
         }
     }
@@ -285,6 +376,7 @@ pub fn emergency_dropoff_unassigned_workers(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::workers::workflows::components::WorkflowStep;
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
@@ -380,5 +472,105 @@ mod tests {
         let result = compute_dropoff_items(&cargo_items, Some(&filter));
 
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn resolve_step_target_specific_in_set() {
+        let mut app = App::new();
+        let building = app
+            .world_mut()
+            .spawn((Position { x: 5, y: 5 }, Name::new("Smelter")))
+            .id();
+        let mut building_set = HashSet::new();
+        building_set.insert(building);
+        let worker_pos = Position { x: 0, y: 0 };
+        let step = WorkflowStep {
+            target: StepTarget::Specific(building),
+            action: WorkflowAction::Pickup(None),
+        };
+
+        app.world_mut()
+            .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
+                let result =
+                    resolve_step_target(&step, worker_pos, &building_set, &positions, &names);
+                assert_eq!(result, Some(building));
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn resolve_step_target_specific_not_in_set() {
+        let mut app = App::new();
+        let building = app
+            .world_mut()
+            .spawn((Position { x: 5, y: 5 }, Name::new("Smelter")))
+            .id();
+        let building_set = HashSet::new();
+        let worker_pos = Position { x: 0, y: 0 };
+        let step = WorkflowStep {
+            target: StepTarget::Specific(building),
+            action: WorkflowAction::Pickup(None),
+        };
+
+        app.world_mut()
+            .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
+                let result =
+                    resolve_step_target(&step, worker_pos, &building_set, &positions, &names);
+                assert!(result.is_none());
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn resolve_step_target_by_type_finds_nearest() {
+        let mut app = App::new();
+        let far_smelter = app
+            .world_mut()
+            .spawn((Position { x: 10, y: 10 }, Name::new("Smelter")))
+            .id();
+        let near_smelter = app
+            .world_mut()
+            .spawn((Position { x: 2, y: 2 }, Name::new("Smelter")))
+            .id();
+        let mut building_set = HashSet::new();
+        building_set.insert(far_smelter);
+        building_set.insert(near_smelter);
+        let worker_pos = Position { x: 0, y: 0 };
+        let step = WorkflowStep {
+            target: StepTarget::ByType("Smelter".to_string()),
+            action: WorkflowAction::Pickup(None),
+        };
+
+        app.world_mut()
+            .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
+                let result =
+                    resolve_step_target(&step, worker_pos, &building_set, &positions, &names);
+                assert_eq!(result, Some(near_smelter));
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn resolve_step_target_by_type_no_match() {
+        let mut app = App::new();
+        let drill = app
+            .world_mut()
+            .spawn((Position { x: 5, y: 5 }, Name::new("Mining Drill")))
+            .id();
+        let mut building_set = HashSet::new();
+        building_set.insert(drill);
+        let worker_pos = Position { x: 0, y: 0 };
+        let step = WorkflowStep {
+            target: StepTarget::ByType("Smelter".to_string()),
+            action: WorkflowAction::Pickup(None),
+        };
+
+        app.world_mut()
+            .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
+                let result =
+                    resolve_step_target(&step, worker_pos, &building_set, &positions, &names);
+                assert!(result.is_none());
+            })
+            .unwrap();
     }
 }

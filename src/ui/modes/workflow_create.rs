@@ -1,23 +1,34 @@
+use std::collections::{HashMap, HashSet};
+
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 
 use crate::{
     ui::{
+        popups::building_menu::BuildingClickEvent,
         style::{
-            ButtonStyle, BUTTON_BG, CANCEL_BG, CONFIRM_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG,
-            PANEL_BORDER, TEXT_COLOR,
+            ButtonStyle, CANCEL_BG, CONFIRM_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG, PANEL_BORDER,
+            TEXT_COLOR,
         },
         UISystemSet,
     },
-    workers::workflows::components::{CreateWorkflowEvent, WorkflowAction, WorkflowStep},
+    workers::workflows::components::WorkflowStep,
 };
+
+#[derive(Default, Clone, PartialEq, Eq)]
+pub enum CreationPhase {
+    #[default]
+    SelectBuildings,
+    BuilderModal,
+}
 
 #[derive(Resource, Default)]
 pub struct WorkflowCreationState {
     pub name: String,
+    pub building_set: HashSet<Entity>,
     pub steps: Vec<WorkflowStep>,
     pub desired_worker_count: u32,
-    pub pending_building: Option<Entity>,
+    pub phase: CreationPhase,
 }
 
 #[derive(Resource, Default)]
@@ -29,30 +40,13 @@ pub struct WorkflowCreationCounter {
 pub struct WorkflowCreationPanel;
 
 #[derive(Component)]
-pub struct WorkflowStepDisplay;
-
-#[derive(Component)]
-pub struct WorkflowWorkerCountLabel;
-
-#[derive(Component)]
-pub struct WorkflowConfirmButton;
-
-#[derive(Component)]
 pub struct WorkflowCancelButton;
 
 #[derive(Component)]
-pub struct WorkflowWorkerIncrementButton;
+pub struct BuildingPoolList;
 
 #[derive(Component)]
-pub struct WorkflowWorkerDecrementButton;
-
-#[derive(Component)]
-pub struct WorkflowStepRemoveButton {
-    step_index: usize,
-}
-
-#[derive(Component)]
-pub struct WorkflowStepList;
+pub struct BuildWorkflowButton;
 
 fn toggle_workflow_creation_mode(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -70,7 +64,8 @@ fn toggle_workflow_creation_mode(
     state.name = format!("Workflow {}", counter.count);
     state.steps.clear();
     state.desired_worker_count = 1;
-    state.pending_building = None;
+    state.building_set.clear();
+    state.phase = CreationPhase::SelectBuildings;
 
     for entity in &existing_panels {
         commands.entity(entity).despawn();
@@ -80,7 +75,7 @@ fn toggle_workflow_creation_mode(
     next_mode.set(crate::ui::UiMode::WorkflowCreate);
 }
 
-fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) {
+pub(crate) fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) {
     commands
         .spawn((
             Node {
@@ -103,7 +98,7 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
         ))
         .with_children(|parent| {
             parent.spawn((
-                Text::new(format!("Creating Workflow: {}", state.name)),
+                Text::new(format!("Creating: {} - Select Buildings", state.name)),
                 TextFont {
                     font_size: 15.0,
                     ..default()
@@ -115,6 +110,15 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
                 },
             ));
 
+            parent.spawn((
+                Text::new("Click buildings on the grid to add/remove them from the pool."),
+                TextFont {
+                    font_size: 11.0,
+                    ..default()
+                },
+                TextColor(DIM_TEXT),
+            ));
+
             parent
                 .spawn((
                     Node {
@@ -123,11 +127,11 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
                         min_height: Val::Px(30.0),
                         ..default()
                     },
-                    WorkflowStepList,
+                    BuildingPoolList,
                 ))
-                .with_children(|step_list| {
-                    step_list.spawn((
-                        Text::new("No steps added. Click a building to add steps."),
+                .with_children(|pool| {
+                    pool.spawn((
+                        Text::new("No buildings selected."),
                         TextFont {
                             font_size: 12.0,
                             ..default()
@@ -136,94 +140,11 @@ fn spawn_creation_panel(commands: &mut Commands, state: &WorkflowCreationState) 
                     ));
                 });
 
-            spawn_worker_count_row(parent, state.desired_worker_count);
-            spawn_bottom_buttons(parent);
+            spawn_phase1_buttons(parent);
         });
 }
 
-fn spawn_worker_count_row(parent: &mut ChildSpawnerCommands, count: u32) {
-    parent
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(30.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Text::new("Workers:"),
-                TextFont {
-                    font_size: 13.0,
-                    ..default()
-                },
-                TextColor(TEXT_COLOR),
-            ));
-
-            row.spawn((
-                Button,
-                Node {
-                    width: Val::Px(28.0),
-                    height: Val::Px(28.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG),
-                ButtonStyle::default_button(),
-                Hovered::default(),
-                WorkflowWorkerDecrementButton,
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    Text::new("-"),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    TextColor(TEXT_COLOR),
-                ));
-            });
-
-            row.spawn((
-                Text::new(format!("{count}")),
-                TextFont {
-                    font_size: 14.0,
-                    ..default()
-                },
-                TextColor(TEXT_COLOR),
-                WorkflowWorkerCountLabel,
-            ));
-
-            row.spawn((
-                Button,
-                Node {
-                    width: Val::Px(28.0),
-                    height: Val::Px(28.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                BackgroundColor(BUTTON_BG),
-                ButtonStyle::default_button(),
-                Hovered::default(),
-                WorkflowWorkerIncrementButton,
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    Text::new("+"),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    TextColor(TEXT_COLOR),
-                ));
-            });
-        });
-}
-
-fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
+fn spawn_phase1_buttons(parent: &mut ChildSpawnerCommands) {
     parent
         .spawn(Node {
             width: Val::Percent(100.0),
@@ -266,7 +187,7 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
             row.spawn((
                 Button,
                 Node {
-                    width: Val::Px(90.0),
+                    width: Val::Px(140.0),
                     height: Val::Px(30.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
@@ -277,11 +198,11 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
                 BorderColor::all(Color::srgb(0.3, 0.5, 0.3)),
                 ButtonStyle::confirm(),
                 Hovered::default(),
-                WorkflowConfirmButton,
+                BuildWorkflowButton,
             ))
             .with_children(|btn| {
                 btn.spawn((
-                    Text::new("Confirm"),
+                    Text::new("Build Workflow ->"),
                     TextFont {
                         font_size: 13.0,
                         ..default()
@@ -292,20 +213,44 @@ fn spawn_bottom_buttons(parent: &mut ChildSpawnerCommands) {
         });
 }
 
-pub fn rebuild_step_list(
-    commands: &mut Commands,
-    step_lists: &Query<(Entity, &Children), With<WorkflowStepList>>,
-    steps: &[WorkflowStep],
+fn handle_building_pool_clicks(
+    mut state: ResMut<WorkflowCreationState>,
+    mut click_events: MessageReader<BuildingClickEvent>,
+    mut commands: Commands,
+    pool_lists: Query<(Entity, &Children), With<BuildingPoolList>>,
+    names: Query<&Name>,
 ) {
-    for (list_entity, children) in step_lists {
+    if state.phase != CreationPhase::SelectBuildings {
+        return;
+    }
+
+    for click in click_events.read() {
+        let entity = click.building_entity;
+        if state.building_set.contains(&entity) {
+            state.building_set.remove(&entity);
+        } else {
+            state.building_set.insert(entity);
+        }
+
+        rebuild_building_pool_list(&mut commands, &pool_lists, &state.building_set, &names);
+    }
+}
+
+fn rebuild_building_pool_list(
+    commands: &mut Commands,
+    pool_lists: &Query<(Entity, &Children), With<BuildingPoolList>>,
+    building_set: &HashSet<Entity>,
+    names: &Query<&Name>,
+) {
+    for (list_entity, children) in pool_lists {
         for &child in children {
             commands.entity(child).despawn();
         }
 
         commands.entity(list_entity).with_children(|parent| {
-            if steps.is_empty() {
+            if building_set.is_empty() {
                 parent.spawn((
-                    Text::new("No steps added. Click a building to add steps."),
+                    Text::new("No buildings selected."),
                     TextFont {
                         font_size: 12.0,
                         ..default()
@@ -315,164 +260,86 @@ pub fn rebuild_step_list(
                 return;
             }
 
-            for (i, step) in steps.iter().enumerate() {
-                let action_label = match &step.action {
-                    WorkflowAction::Pickup(_) => "Pickup",
-                    WorkflowAction::Dropoff(_) => "Dropoff",
-                };
-
-                parent
-                    .spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(24.0),
-                            flex_direction: FlexDirection::Row,
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
-                            ..default()
-                        },
-                        WorkflowStepDisplay,
-                    ))
-                    .with_children(|row| {
-                        row.spawn((
-                            Text::new(format!(
-                                "{}. Building {:?} - {}",
-                                i + 1,
-                                step.target,
-                                action_label
-                            )),
-                            TextFont {
-                                font_size: 12.0,
-                                ..default()
-                            },
-                            TextColor(TEXT_COLOR),
-                        ));
-
-                        row.spawn((
-                            Button,
-                            Node {
-                                width: Val::Px(20.0),
-                                height: Val::Px(20.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(CANCEL_BG),
-                            ButtonStyle::cancel(),
-                            Hovered::default(),
-                            WorkflowStepRemoveButton { step_index: i },
-                        ))
-                        .with_children(|btn| {
-                            btn.spawn((
-                                Text::new("x"),
-                                TextFont {
-                                    font_size: 11.0,
-                                    ..default()
-                                },
-                                TextColor(TEXT_COLOR),
-                            ));
-                        });
-                    });
+            let mut type_counts: HashMap<String, u32> = HashMap::new();
+            for &entity in building_set {
+                let name = names
+                    .get(entity)
+                    .map_or_else(|_| "Unknown".to_string(), |n| n.as_str().to_string());
+                *type_counts.entry(name).or_default() += 1;
             }
+
+            let mut types: Vec<_> = type_counts.into_iter().collect();
+            types.sort_by(|a, b| a.0.cmp(&b.0));
+
+            let summary = types
+                .iter()
+                .map(|(name, count)| {
+                    if *count > 1 {
+                        format!("{count}x {name}")
+                    } else {
+                        name.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            parent.spawn((
+                Text::new(summary),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(TEXT_COLOR),
+            ));
         });
     }
 }
 
-fn handle_creation_controls(
+fn handle_phase1_controls(
     mut state: ResMut<WorkflowCreationState>,
-    confirm_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowConfirmButton>)>,
     cancel_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowCancelButton>)>,
-    increment_buttons: Query<
-        &Interaction,
-        (Changed<Interaction>, With<WorkflowWorkerIncrementButton>),
-    >,
-    decrement_buttons: Query<
-        &Interaction,
-        (Changed<Interaction>, With<WorkflowWorkerDecrementButton>),
-    >,
-    remove_buttons: Query<(&Interaction, &WorkflowStepRemoveButton), Changed<Interaction>>,
+    build_buttons: Query<&Interaction, (Changed<Interaction>, With<BuildWorkflowButton>)>,
     mut commands: Commands,
-    step_lists: Query<(Entity, &Children), With<WorkflowStepList>>,
-    mut create_events: MessageWriter<CreateWorkflowEvent>,
+    panels: Query<Entity, With<WorkflowCreationPanel>>,
     mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
 ) {
-    let mut should_cancel = false;
-    let mut should_confirm = false;
-    let mut worker_delta: i32 = 0;
-    let mut step_to_remove: Option<usize> = None;
-
-    for interaction in &confirm_buttons {
-        if *interaction == Interaction::Pressed {
-            should_confirm = true;
-        }
+    if state.phase != CreationPhase::SelectBuildings {
+        return;
     }
 
     for interaction in &cancel_buttons {
         if *interaction == Interaction::Pressed {
-            should_cancel = true;
+            next_mode.set(crate::ui::UiMode::Observe);
+            return;
         }
     }
 
-    for interaction in &increment_buttons {
-        if *interaction == Interaction::Pressed {
-            worker_delta += 1;
-        }
-    }
-
-    for interaction in &decrement_buttons {
-        if *interaction == Interaction::Pressed {
-            worker_delta -= 1;
-        }
-    }
-
-    for (interaction, remove_btn) in &remove_buttons {
-        if *interaction == Interaction::Pressed {
-            step_to_remove = Some(remove_btn.step_index);
-        }
-    }
-
-    if should_confirm && !state.steps.is_empty() {
-        create_events.write(CreateWorkflowEvent {
-            name: state.name.clone(),
-            steps: state.steps.clone(),
-            desired_worker_count: state.desired_worker_count,
-        });
-        info!(name = %state.name, steps = state.steps.len(), "workflow created");
-        next_mode.set(crate::ui::UiMode::Observe);
-        return;
-    }
-
-    if should_cancel {
-        next_mode.set(crate::ui::UiMode::Observe);
-        return;
-    }
-
-    if worker_delta != 0 {
-        #[allow(clippy::cast_sign_loss)]
-        let new_count =
-            (i64::from(state.desired_worker_count) + i64::from(worker_delta)).clamp(1, 10) as u32;
-        state.desired_worker_count = new_count;
-    }
-
-    if let Some(index) = step_to_remove {
-        if index < state.steps.len() {
-            state.steps.remove(index);
-            rebuild_step_list(&mut commands, &step_lists, &state.steps);
+    for interaction in &build_buttons {
+        if *interaction == Interaction::Pressed && state.building_set.len() >= 2 {
+            state.phase = CreationPhase::BuilderModal;
+            for entity in &panels {
+                commands.entity(entity).despawn();
+            }
+            return;
         }
     }
 }
 
-fn update_worker_count_display(
+fn respawn_panel_on_phase_back(
     state: Res<WorkflowCreationState>,
-    mut labels: Query<&mut Text, With<WorkflowWorkerCountLabel>>,
+    mut commands: Commands,
+    existing_panels: Query<Entity, With<WorkflowCreationPanel>>,
 ) {
     if !state.is_changed() {
         return;
     }
-
-    for mut text in &mut labels {
-        **text = format!("{}", state.desired_worker_count);
+    if state.phase != CreationPhase::SelectBuildings {
+        return;
     }
+    if !existing_panels.is_empty() {
+        return;
+    }
+    spawn_creation_panel(&mut commands, &state);
 }
 
 pub struct WorkflowCreationPlugin;
@@ -487,11 +354,12 @@ impl Plugin for WorkflowCreationPlugin {
                     toggle_workflow_creation_mode
                         .in_set(UISystemSet::InputDetection)
                         .run_if(in_state(crate::ui::UiMode::Observe)),
-                    handle_creation_controls
+                    (
+                        handle_phase1_controls,
+                        handle_building_pool_clicks,
+                        respawn_panel_on_phase_back,
+                    )
                         .in_set(UISystemSet::EntityManagement)
-                        .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
-                    update_worker_count_display
-                        .in_set(UISystemSet::VisualUpdates)
                         .run_if(in_state(crate::ui::UiMode::WorkflowCreate)),
                 ),
             );

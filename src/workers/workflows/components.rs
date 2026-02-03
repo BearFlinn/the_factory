@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::materials::ItemName;
 
@@ -10,14 +10,21 @@ pub enum WorkflowAction {
 }
 
 #[derive(Clone, Debug)]
+pub enum StepTarget {
+    Specific(Entity),
+    ByType(String),
+}
+
+#[derive(Clone, Debug)]
 pub struct WorkflowStep {
-    pub target: Entity,
+    pub target: StepTarget,
     pub action: WorkflowAction,
 }
 
 #[derive(Component)]
 pub struct Workflow {
     pub name: String,
+    pub building_set: HashSet<Entity>,
     pub steps: Vec<WorkflowStep>,
     pub is_paused: bool,
     pub desired_worker_count: u32,
@@ -36,6 +43,7 @@ impl Workflow {
 pub struct WorkflowAssignment {
     pub workflow: Entity,
     pub current_step: usize,
+    pub resolved_target: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -54,6 +62,7 @@ impl Default for WaitingForItems {
 #[derive(Message)]
 pub struct CreateWorkflowEvent {
     pub name: String,
+    pub building_set: HashSet<Entity>,
     pub steps: Vec<WorkflowStep>,
     pub desired_worker_count: u32,
 }
@@ -79,6 +88,12 @@ pub struct UnassignWorkersEvent {
     pub workers: Vec<Entity>,
 }
 
+#[derive(Message)]
+pub struct BatchAssignWorkersEvent {
+    pub workflow: Entity,
+    pub count: u32,
+}
+
 #[derive(Resource, Default)]
 pub struct WorkflowRegistry {
     pub workflows: Vec<Entity>,
@@ -90,13 +105,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn workflow_step_construction() {
+    fn workflow_step_construction_specific() {
         let step = WorkflowStep {
-            target: Entity::PLACEHOLDER,
+            target: StepTarget::Specific(Entity::PLACEHOLDER),
             action: WorkflowAction::Pickup(None),
         };
-        assert_eq!(step.target, Entity::PLACEHOLDER);
+        assert!(matches!(step.target, StepTarget::Specific(_)));
         assert!(matches!(step.action, WorkflowAction::Pickup(None)));
+    }
+
+    #[test]
+    fn workflow_step_construction_by_type() {
+        let step = WorkflowStep {
+            target: StepTarget::ByType("Smelter".to_string()),
+            action: WorkflowAction::Dropoff(None),
+        };
+        match &step.target {
+            StepTarget::ByType(name) => assert_eq!(name, "Smelter"),
+            StepTarget::Specific(_) => panic!("expected ByType"),
+        }
     }
 
     #[test]
@@ -141,6 +168,7 @@ mod tests {
     fn workflow_defaults_not_paused() {
         let workflow = Workflow {
             name: "test workflow".to_string(),
+            building_set: HashSet::new(),
             steps: vec![],
             is_paused: false,
             desired_worker_count: 1,
@@ -153,8 +181,10 @@ mod tests {
         let assignment = WorkflowAssignment {
             workflow: Entity::PLACEHOLDER,
             current_step: 0,
+            resolved_target: None,
         };
         assert_eq!(assignment.current_step, 0);
+        assert!(assignment.resolved_target.is_none());
     }
 
     #[test]
@@ -174,13 +204,14 @@ mod tests {
     fn next_step_wraps_around() {
         let workflow = Workflow {
             name: "cycle test".to_string(),
+            building_set: HashSet::new(),
             steps: vec![
                 WorkflowStep {
-                    target: Entity::PLACEHOLDER,
+                    target: StepTarget::Specific(Entity::PLACEHOLDER),
                     action: WorkflowAction::Pickup(None),
                 },
                 WorkflowStep {
-                    target: Entity::PLACEHOLDER,
+                    target: StepTarget::Specific(Entity::PLACEHOLDER),
                     action: WorkflowAction::Dropoff(None),
                 },
             ],
@@ -196,6 +227,7 @@ mod tests {
     fn next_step_empty_workflow() {
         let workflow = Workflow {
             name: "empty".to_string(),
+            building_set: HashSet::new(),
             steps: vec![],
             is_paused: false,
             desired_worker_count: 0,
@@ -220,11 +252,36 @@ mod tests {
     #[test]
     fn workflow_step_clone() {
         let step = WorkflowStep {
-            target: Entity::PLACEHOLDER,
+            target: StepTarget::Specific(Entity::PLACEHOLDER),
             action: WorkflowAction::Dropoff(None),
         };
         let cloned = step.clone();
-        assert_eq!(cloned.target, step.target);
+        assert!(matches!(cloned.target, StepTarget::Specific(_)));
         assert!(matches!(cloned.action, WorkflowAction::Dropoff(None)));
+    }
+
+    #[test]
+    fn building_set_tracks_entities() {
+        let mut set = HashSet::new();
+        set.insert(Entity::PLACEHOLDER);
+        let workflow = Workflow {
+            name: "pool test".to_string(),
+            building_set: set,
+            steps: vec![],
+            is_paused: false,
+            desired_worker_count: 1,
+        };
+        assert!(workflow.building_set.contains(&Entity::PLACEHOLDER));
+        assert_eq!(workflow.building_set.len(), 1);
+    }
+
+    #[test]
+    fn step_target_by_type_clone() {
+        let target = StepTarget::ByType("Mining Drill".to_string());
+        let cloned = target.clone();
+        match cloned {
+            StepTarget::ByType(name) => assert_eq!(name, "Mining Drill"),
+            StepTarget::Specific(_) => panic!("clone did not preserve ByType"),
+        }
     }
 }
