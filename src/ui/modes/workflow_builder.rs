@@ -796,6 +796,7 @@ fn handle_step_target_button(
     existing_dropdowns: Query<Entity, With<TargetDropdown>>,
     names: Query<&Name>,
     positions: Query<&Position>,
+    modals: Query<Entity, With<WorkflowBuilderModal>>,
 ) {
     if state.phase != CreationPhase::BuilderModal {
         return;
@@ -822,9 +823,13 @@ fn handle_step_target_button(
         let mut sorted_types: Vec<_> = types.into_iter().collect();
         sorted_types.sort_by(|a, b| a.0.cmp(&b.0));
 
+        let Ok(modal_entity) = modals.single() else {
+            return;
+        };
+
         let button_pos = transform.translation();
 
-        commands
+        let dropdown_id = commands
             .spawn((
                 Node {
                     position_type: PositionType::Absolute,
@@ -846,7 +851,6 @@ fn handle_step_target_button(
                 TargetDropdown {
                     step_index: btn.step_index,
                 },
-                GlobalZIndex(100),
             ))
             .with_children(|dropdown| {
                 for (type_name, buildings) in &sorted_types {
@@ -870,7 +874,9 @@ fn handle_step_target_button(
                         );
                     }
                 }
-            });
+            })
+            .id();
+        commands.entity(modal_entity).add_child(dropdown_id);
     }
 }
 
@@ -947,6 +953,7 @@ fn handle_step_filter_button(
     mut commands: Commands,
     existing_dropdowns: Query<Entity, Or<(With<FilterDropdown>, With<TargetDropdown>)>>,
     item_registry: Res<ItemRegistry>,
+    modals: Query<Entity, With<WorkflowBuilderModal>>,
 ) {
     if state.phase != CreationPhase::BuilderModal {
         return;
@@ -973,9 +980,13 @@ fn handle_step_filter_button(
             .map(|f| f.keys().cloned().collect())
             .unwrap_or_default();
 
+        let Ok(modal_entity) = modals.single() else {
+            return;
+        };
+
         let button_pos = transform.translation();
 
-        commands
+        let dropdown_id = commands
             .spawn((
                 Node {
                     position_type: PositionType::Absolute,
@@ -997,63 +1008,78 @@ fn handle_step_filter_button(
                 FilterDropdown {
                     step_index: btn.step_index,
                 },
-                GlobalZIndex(100),
             ))
             .with_children(|dropdown| {
-                dropdown.spawn((
-                    Text::new("Item Filter (empty = all):"),
+                spawn_filter_dropdown_items(
+                    dropdown,
+                    btn.step_index,
+                    &selected_items,
+                    &item_registry,
+                );
+            })
+            .id();
+        commands.entity(modal_entity).add_child(dropdown_id);
+    }
+}
+
+fn spawn_filter_dropdown_items(
+    dropdown: &mut ChildSpawnerCommands,
+    step_index: usize,
+    selected_items: &HashSet<String>,
+    item_registry: &ItemRegistry,
+) {
+    dropdown.spawn((
+        Text::new("Item Filter (empty = all):"),
+        TextFont {
+            font_size: 10.0,
+            ..default()
+        },
+        TextColor(DIM_TEXT),
+        Node {
+            margin: UiRect::bottom(Val::Px(2.0)),
+            ..default()
+        },
+    ));
+
+    let mut item_names: Vec<_> = item_registry.definitions.keys().cloned().collect();
+    item_names.sort();
+
+    for item_name in item_names {
+        let is_selected = selected_items.contains(&item_name);
+        let label = if is_selected {
+            format!("[x] {item_name}")
+        } else {
+            format!("[ ] {item_name}")
+        };
+
+        dropdown
+            .spawn((
+                Button,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(22.0),
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::horizontal(Val::Px(6.0)),
+                    ..default()
+                },
+                BackgroundColor(if is_selected { SELECTED_BG } else { BUTTON_BG }),
+                ButtonStyle::default_button(),
+                Hovered::default(),
+                FilterCheckbox {
+                    step_index,
+                    item_name: item_name.clone(),
+                },
+            ))
+            .with_children(|checkbox_btn| {
+                checkbox_btn.spawn((
+                    Text::new(label),
                     TextFont {
-                        font_size: 10.0,
+                        font_size: 11.0,
                         ..default()
                     },
-                    TextColor(DIM_TEXT),
-                    Node {
-                        margin: UiRect::bottom(Val::Px(2.0)),
-                        ..default()
-                    },
+                    TextColor(TEXT_COLOR),
                 ));
-
-                let mut item_names: Vec<_> = item_registry.definitions.keys().cloned().collect();
-                item_names.sort();
-
-                for item_name in item_names {
-                    let is_selected = selected_items.contains(&item_name);
-                    let label = if is_selected {
-                        format!("[x] {item_name}")
-                    } else {
-                        format!("[ ] {item_name}")
-                    };
-
-                    dropdown
-                        .spawn((
-                            Button,
-                            Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Px(22.0),
-                                justify_content: JustifyContent::FlexStart,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::horizontal(Val::Px(6.0)),
-                                ..default()
-                            },
-                            BackgroundColor(if is_selected { SELECTED_BG } else { BUTTON_BG }),
-                            ButtonStyle::default_button(),
-                            Hovered::default(),
-                            FilterCheckbox {
-                                step_index: btn.step_index,
-                                item_name: item_name.clone(),
-                            },
-                        ))
-                        .with_children(|checkbox_btn| {
-                            checkbox_btn.spawn((
-                                Text::new(label),
-                                TextFont {
-                                    font_size: 11.0,
-                                    ..default()
-                                },
-                                TextColor(TEXT_COLOR),
-                            ));
-                        });
-                }
             });
     }
 }
