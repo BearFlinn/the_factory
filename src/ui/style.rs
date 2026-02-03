@@ -23,6 +23,22 @@ pub const CANCEL_HOVER: Color = Color::srgb(0.5, 0.2, 0.2);
 pub const SELECTED_BG: Color = Color::srgb(0.15, 0.25, 0.35);
 pub const SELECTED_BORDER: Color = Color::srgb(0.3, 0.5, 0.7);
 
+pub const TOP_BAR_BG: Color = Color::srgba(0.06, 0.06, 0.1, 0.95);
+pub const ACTION_BAR_BG: Color = Color::srgba(0.08, 0.08, 0.12, 0.95);
+pub const ACTION_BUTTON_BG: Color = Color::srgba(0.15, 0.15, 0.22, 0.9);
+pub const ACTION_BUTTON_HOVER: Color = Color::srgba(0.22, 0.22, 0.35, 0.95);
+
+pub const POWER_COLOR: Color = Color::srgb(1.0, 0.86, 0.2);
+pub const COMPUTE_COLOR: Color = Color::srgb(0.31, 0.78, 1.0);
+pub const WORKER_COLOR: Color = Color::srgb(0.31, 0.86, 0.39);
+pub const SCORE_COLOR: Color = Color::srgb(1.0, 0.78, 0.2);
+pub const WARNING_COLOR: Color = Color::srgb(1.0, 0.85, 0.3);
+pub const DANGER_COLOR: Color = Color::srgb(1.0, 0.3, 0.3);
+
+pub const TOP_BAR_HEIGHT: f32 = 36.0;
+pub const ACTION_BAR_WIDTH: f32 = 48.0;
+pub const ACTION_BUTTON_SIZE: f32 = 40.0;
+
 #[derive(Component, Clone)]
 pub struct ButtonStyle {
     pub default_bg: Color,
@@ -87,6 +103,18 @@ impl ButtonStyle {
         Self {
             default_bg: BUTTON_BG,
             hovered_bg: BUTTON_HOVER,
+            default_border: Some(PANEL_BORDER),
+            hovered_border: Some(PANEL_BORDER),
+            selected_bg: Some(SELECTED_BG),
+            selected_border: Some(SELECTED_BORDER),
+        }
+    }
+
+    #[must_use]
+    pub fn action_bar() -> Self {
+        Self {
+            default_bg: ACTION_BUTTON_BG,
+            hovered_bg: ACTION_BUTTON_HOVER,
             default_border: Some(PANEL_BORDER),
             hovered_border: Some(PANEL_BORDER),
             selected_bg: Some(SELECTED_BG),

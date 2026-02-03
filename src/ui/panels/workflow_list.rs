@@ -3,9 +3,10 @@ use bevy::prelude::*;
 
 use crate::{
     ui::{
+        panels::action_bar::ActivePanel,
         style::{
-            ButtonStyle, BUTTON_BG, CARD_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG, PANEL_BORDER,
-            TEXT_COLOR,
+            ButtonStyle, ACTION_BAR_WIDTH, BUTTON_BG, CARD_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG,
+            PANEL_BORDER, TEXT_COLOR, TOP_BAR_HEIGHT,
         },
         UISystemSet,
     },
@@ -17,11 +18,6 @@ use crate::{
         Worker,
     },
 };
-
-#[derive(Resource, Default)]
-pub struct WorkflowPanelState {
-    pub visible: bool,
-}
 
 #[derive(Component)]
 pub struct WorkflowPanel;
@@ -62,36 +58,15 @@ pub struct WorkflowDetailText {
 #[derive(Component)]
 pub struct WorkflowPanelCloseButton;
 
-fn toggle_workflow_panel(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<WorkflowPanelState>,
-    mut commands: Commands,
-    panels: Query<Entity, With<WorkflowPanel>>,
-) {
-    if !keyboard.just_pressed(KeyCode::Tab) {
-        return;
-    }
-
-    state.visible = !state.visible;
-
-    if state.visible {
-        spawn_panel(&mut commands);
-    } else {
-        for entity in &panels {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn spawn_panel(commands: &mut Commands) {
+pub fn spawn_workflow_panel(commands: &mut Commands) {
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                right: Val::Px(10.0),
-                top: Val::Px(100.0),
+                left: Val::Px(ACTION_BAR_WIDTH + 4.0),
+                top: Val::Px(TOP_BAR_HEIGHT + 4.0),
                 width: Val::Px(350.0),
-                height: Val::Vh(70.0),
+                max_height: Val::Vh(80.0),
                 min_height: Val::Px(300.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(10.0)),
@@ -168,9 +143,7 @@ fn spawn_panel(commands: &mut Commands) {
 }
 
 fn handle_workflow_panel_buttons(
-    mut state: ResMut<WorkflowPanelState>,
-    mut commands: Commands,
-    panels: Query<Entity, With<WorkflowPanel>>,
+    mut active_panel: ResMut<ActivePanel>,
     close_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowPanelCloseButton>)>,
     pause_buttons: Query<(&Interaction, &WorkflowPauseButton), Changed<Interaction>>,
     delete_buttons: Query<(&Interaction, &WorkflowDeleteButton), Changed<Interaction>>,
@@ -185,10 +158,7 @@ fn handle_workflow_panel_buttons(
 ) {
     for interaction in &close_buttons {
         if *interaction == Interaction::Pressed {
-            state.visible = false;
-            for entity in &panels {
-                commands.entity(entity).despawn();
-            }
+            *active_panel = ActivePanel::None;
             return;
         }
     }
@@ -473,14 +443,13 @@ pub struct WorkflowListPlugin;
 
 impl Plugin for WorkflowListPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<WorkflowPanelState>().add_systems(
+        app.add_systems(
             Update,
             (
-                toggle_workflow_panel.in_set(UISystemSet::InputDetection),
                 handle_workflow_panel_buttons.in_set(UISystemSet::EntityManagement),
                 (update_workflow_panel_content,)
                     .in_set(UISystemSet::VisualUpdates)
-                    .run_if(|state: Res<WorkflowPanelState>| state.visible),
+                    .run_if(|active: Res<ActivePanel>| *active == ActivePanel::Workflows),
             ),
         );
     }

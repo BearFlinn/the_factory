@@ -1,5 +1,5 @@
 use crate::structures::{BuildingComponentDef, BuildingRegistry};
-use crate::ui::panels::sidebar::building_buttons::BuildingButton;
+use crate::ui::panels::action_bar::build_panel::BuildingButton;
 use crate::ui::UISystemSet;
 use bevy::prelude::*;
 
@@ -109,8 +109,8 @@ fn spawn_tooltip(commands: &mut Commands, content: String, position: Vec2) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(position.x + 150.0),
-                top: Val::Px(position.y - 100.0),
+                left: Val::Px(position.x + 200.0),
+                top: Val::Px(position.y - 80.0),
                 max_width: Val::Px(300.0),
                 padding: UiRect::all(Val::Px(12.0)),
                 border: UiRect::all(Val::Px(2.0)),

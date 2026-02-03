@@ -3,16 +3,18 @@ use bevy::prelude::*;
 use bevy::ui::Checked;
 use bevy::ui_widgets::UiWidgetsPlugins;
 
+pub mod icons;
 pub mod modes;
 pub mod panels;
 pub mod popups;
 pub mod scroll;
 pub mod style;
 
-pub use panels::sidebar::building_buttons::SelectedBuilding;
+pub use panels::action_bar::build_panel::SelectedBuilding;
 
 use modes::workflow_create::{WorkflowCreationPanel, WorkflowCreationState};
-use panels::sidebar::building_buttons::BuildingButton;
+use panels::action_bar::build_panel::BuildingButton;
+use panels::action_bar::ActivePanel;
 use popups::building_menu::{BuildingMenu, CloseMenuEvent};
 use popups::workflow_action::WorkflowActionPopup;
 use scroll::handle_ui_scroll;
@@ -54,6 +56,7 @@ fn handle_escape(
     mut next_mode: ResMut<NextState<UiMode>>,
     menu_query: Query<Entity, With<BuildingMenu>>,
     mut close_events: MessageWriter<CloseMenuEvent>,
+    mut active_panel: ResMut<ActivePanel>,
 ) {
     if !keyboard.just_pressed(KeyCode::Escape) {
         return;
@@ -64,8 +67,12 @@ fn handle_escape(
             next_mode.set(UiMode::Observe);
         }
         UiMode::Observe => {
-            for menu_entity in &menu_query {
-                close_events.write(CloseMenuEvent { menu_entity });
+            if *active_panel == ActivePanel::None {
+                for menu_entity in &menu_query {
+                    close_events.write(CloseMenuEvent { menu_entity });
+                }
+            } else {
+                *active_panel = ActivePanel::None;
             }
         }
     }
@@ -143,11 +150,12 @@ impl Plugin for UIPlugin {
             InputDispatchPlugin,
             UiWidgetsPlugins,
             StylePlugin,
+            icons::IconPlugin,
             modes::PlacementPlugin,
             modes::workflow_create::WorkflowCreationPlugin,
-            panels::SidebarPlugin,
-            panels::ProductionHudPlugin,
-            panels::SpawnWorkerButtonPlugin,
+            panels::TopBarPlugin,
+            panels::ActionBarPlugin,
+            panels::action_bar::build_panel::BuildPanelPlugin,
             panels::WorkflowListPlugin,
             popups::BuildingMenuPlugin,
             popups::TooltipsPlugin,

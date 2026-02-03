@@ -142,7 +142,7 @@ pub fn spawn_building_menu(
             .unwrap_or("Unknown Building");
 
         let menu_x = (screen_pos.x + 50.0).clamp(10.0, window.width() - 300.0);
-        let menu_y = (screen_pos.y - 100.0).clamp(10.0, window.height() - 250.0);
+        let menu_y = (screen_pos.y - 100.0).clamp(44.0, window.height() - 250.0);
 
         let menu_entity = commands
             .spawn((
@@ -339,7 +339,7 @@ pub fn update_menu_positions(
             let max_y = window.height() - 250.0;
 
             node.left = Val::Px((screen_pos.x + 50.0).clamp(10.0, max_x));
-            node.top = Val::Px((screen_pos.y - 100.0).clamp(10.0, max_y));
+            node.top = Val::Px((screen_pos.y - 100.0).clamp(44.0, max_y));
         }
     }
 }
