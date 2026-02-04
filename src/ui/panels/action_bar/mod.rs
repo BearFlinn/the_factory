@@ -28,6 +28,9 @@ pub enum ActivePanel {
 }
 
 #[derive(Component)]
+pub struct ActionBarContainer;
+
+#[derive(Component)]
 pub struct ActionBar;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -40,16 +43,19 @@ pub enum ActionBarButton {
 
 fn setup_action_bar(mut commands: Commands, icon_atlas: Res<IconAtlas>) {
     commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(TOP_BAR_HEIGHT),
-            bottom: Val::Px(0.0),
-            width: Val::Px(ACTION_BAR_WIDTH),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        })
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(TOP_BAR_HEIGHT),
+                bottom: Val::Px(0.0),
+                width: Val::Px(ACTION_BAR_WIDTH),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ActionBarContainer,
+        ))
         .with_children(|outer| {
             outer
                 .spawn((
@@ -181,6 +187,7 @@ fn handle_action_bar_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut active_panel: ResMut<ActivePanel>,
     current_mode: Res<State<UiMode>>,
+    mut action_bar_containers: Query<&mut Visibility, With<ActionBarContainer>>,
 ) {
     if *current_mode.get() == UiMode::WorkflowCreate {
         return;
@@ -195,10 +202,13 @@ fn handle_action_bar_hotkeys(
     }
 
     if keyboard.just_pressed(KeyCode::Tab) {
-        if *active_panel == ActivePanel::Build {
-            *active_panel = ActivePanel::None;
-        } else {
-            *active_panel = ActivePanel::Build;
+        for mut visibility in &mut action_bar_containers {
+            if *visibility == Visibility::Hidden {
+                *visibility = Visibility::Inherited;
+            } else {
+                *visibility = Visibility::Hidden;
+                *active_panel = ActivePanel::None;
+            }
         }
     }
 }
