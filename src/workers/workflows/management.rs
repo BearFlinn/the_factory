@@ -4,7 +4,8 @@ use crate::{grid::Position, workers::Worker};
 
 use super::components::{
     AssignWorkersEvent, BatchAssignWorkersEvent, CreateWorkflowEvent, DeleteWorkflowEvent,
-    PauseWorkflowEvent, UnassignWorkersEvent, Workflow, WorkflowAssignment, WorkflowRegistry,
+    PauseWorkflowEvent, UnassignWorkersEvent, UpdateWorkflowEvent, Workflow, WorkflowAssignment,
+    WorkflowRegistry,
 };
 
 pub fn handle_create_workflow(
@@ -148,6 +149,20 @@ pub fn handle_batch_assign_workers(
                 current_step: 0,
                 resolved_target: None,
             });
+        }
+    }
+}
+
+pub fn handle_update_workflow(
+    mut events: MessageReader<UpdateWorkflowEvent>,
+    mut workflows: Query<&mut Workflow>,
+) {
+    for event in events.read() {
+        if let Ok(mut workflow) = workflows.get_mut(event.entity) {
+            workflow.name.clone_from(&event.name);
+            workflow.building_set.clone_from(&event.building_set);
+            workflow.steps.clone_from(&event.steps);
+            workflow.desired_worker_count = event.desired_worker_count;
         }
     }
 }

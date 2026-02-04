@@ -29,11 +29,12 @@ pub struct WorkflowCreationState {
     pub steps: Vec<WorkflowStep>,
     pub desired_worker_count: u32,
     pub phase: CreationPhase,
+    pub editing: Option<Entity>,
 }
 
 #[derive(Resource, Default)]
 pub struct WorkflowCreationCounter {
-    count: u32,
+    pub count: u32,
 }
 
 #[derive(Component)]

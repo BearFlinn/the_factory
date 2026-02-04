@@ -68,6 +68,15 @@ pub struct CreateWorkflowEvent {
 }
 
 #[derive(Message)]
+pub struct UpdateWorkflowEvent {
+    pub entity: Entity,
+    pub name: String,
+    pub building_set: HashSet<Entity>,
+    pub steps: Vec<WorkflowStep>,
+    pub desired_worker_count: u32,
+}
+
+#[derive(Message)]
 pub struct DeleteWorkflowEvent {
     pub workflow: Entity,
 }

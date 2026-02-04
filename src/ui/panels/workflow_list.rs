@@ -7,16 +7,16 @@ use crate::{
     ui::{
         panels::action_bar::ActivePanel,
         style::{
-            ButtonStyle, ACTION_BAR_WIDTH, BUTTON_BG, CARD_BG, DIM_TEXT, HEADER_COLOR, PANEL_BG,
-            PANEL_BORDER, TEXT_COLOR, TOP_BAR_HEIGHT, WARNING_COLOR,
+            ButtonStyle, ACTION_BAR_WIDTH, BUTTON_BG, CARD_BG, CONFIRM_BG, DIM_TEXT, HEADER_COLOR,
+            PANEL_BG, PANEL_BORDER, TEXT_COLOR, TOP_BAR_HEIGHT, WARNING_COLOR,
         },
         UISystemSet,
     },
     workers::{
         workflows::components::{
-            AssignWorkersEvent, BatchAssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent,
-            StepTarget, UnassignWorkersEvent, WaitingForItems, Workflow, WorkflowAction,
-            WorkflowAssignment, WorkflowRegistry,
+            AssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent, StepTarget,
+            UnassignWorkersEvent, WaitingForItems, Workflow, WorkflowAction, WorkflowAssignment,
+            WorkflowRegistry,
         },
         Worker,
     },
@@ -44,7 +44,7 @@ pub struct WorkflowDeleteButton {
 }
 
 #[derive(Component)]
-pub struct WorkflowFillButton {
+pub struct WorkflowEditButton {
     pub workflow: Entity,
 }
 
@@ -66,6 +66,10 @@ pub struct WorkflowDetailText {
 #[derive(Component)]
 pub struct WorkflowPanelCloseButton;
 
+#[derive(Component)]
+pub struct NewWorkflowButton;
+
+#[allow(clippy::too_many_lines)]
 pub fn spawn_workflow_panel(commands: &mut Commands) {
     commands
         .spawn((
@@ -108,29 +112,64 @@ pub fn spawn_workflow_panel(commands: &mut Commands) {
                     ));
 
                     header
-                        .spawn((
-                            Button,
-                            Node {
-                                width: Val::Px(24.0),
-                                height: Val::Px(24.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(BUTTON_BG),
-                            ButtonStyle::close(),
-                            Hovered::default(),
-                            WorkflowPanelCloseButton,
-                        ))
-                        .with_children(|btn| {
-                            btn.spawn((
-                                Text::new("X"),
-                                TextFont {
-                                    font_size: 12.0,
-                                    ..default()
-                                },
-                                TextColor(TEXT_COLOR),
-                            ));
+                        .spawn(Node {
+                            flex_direction: FlexDirection::Row,
+                            column_gap: Val::Px(4.0),
+                            align_items: AlignItems::Center,
+                            ..default()
+                        })
+                        .with_children(|right| {
+                            right
+                                .spawn((
+                                    Button,
+                                    Node {
+                                        height: Val::Px(24.0),
+                                        padding: UiRect::horizontal(Val::Px(8.0)),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    BackgroundColor(CONFIRM_BG),
+                                    ButtonStyle::confirm(),
+                                    Hovered::default(),
+                                    NewWorkflowButton,
+                                ))
+                                .with_children(|btn| {
+                                    btn.spawn((
+                                        Text::new("+ New"),
+                                        TextFont {
+                                            font_size: 11.0,
+                                            ..default()
+                                        },
+                                        TextColor(TEXT_COLOR),
+                                    ));
+                                });
+
+                            right
+                                .spawn((
+                                    Button,
+                                    Node {
+                                        width: Val::Px(24.0),
+                                        height: Val::Px(24.0),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    BackgroundColor(BUTTON_BG),
+                                    ButtonStyle::close(),
+                                    Hovered::default(),
+                                    WorkflowPanelCloseButton,
+                                ))
+                                .with_children(|btn| {
+                                    btn.spawn((
+                                        Text::new("X"),
+                                        TextFont {
+                                            font_size: 12.0,
+                                            ..default()
+                                        },
+                                        TextColor(TEXT_COLOR),
+                                    ));
+                                });
                         });
                 });
 
@@ -150,6 +189,7 @@ pub fn spawn_workflow_panel(commands: &mut Commands) {
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_workflow_panel_buttons(
     mut active_panel: ResMut<ActivePanel>,
     close_buttons: Query<&Interaction, (Changed<Interaction>, With<WorkflowPanelCloseButton>)>,
@@ -157,15 +197,12 @@ fn handle_workflow_panel_buttons(
     delete_buttons: Query<(&Interaction, &WorkflowDeleteButton), Changed<Interaction>>,
     add_buttons: Query<(&Interaction, &WorkflowWorkerAddButton), Changed<Interaction>>,
     remove_buttons: Query<(&Interaction, &WorkflowWorkerRemoveButton), Changed<Interaction>>,
-    fill_buttons: Query<(&Interaction, &WorkflowFillButton), Changed<Interaction>>,
     mut pause_events: MessageWriter<PauseWorkflowEvent>,
     mut delete_events: MessageWriter<DeleteWorkflowEvent>,
     mut assign_events: MessageWriter<AssignWorkersEvent>,
     mut unassign_events: MessageWriter<UnassignWorkersEvent>,
-    mut batch_assign_events: MessageWriter<BatchAssignWorkersEvent>,
     idle_workers: Query<Entity, (With<Worker>, Without<WorkflowAssignment>)>,
     assigned_workers: Query<(Entity, &WorkflowAssignment), With<Worker>>,
-    workflows: Query<&Workflow>,
 ) {
     for interaction in &close_buttons {
         if *interaction == Interaction::Pressed {
@@ -187,17 +224,6 @@ fn handle_workflow_panel_buttons(
             delete_events.write(DeleteWorkflowEvent {
                 workflow: btn.workflow,
             });
-        }
-    }
-
-    for (interaction, btn) in &fill_buttons {
-        if *interaction == Interaction::Pressed {
-            if let Ok(workflow) = workflows.get(btn.workflow) {
-                batch_assign_events.write(BatchAssignWorkersEvent {
-                    workflow: btn.workflow,
-                    count: workflow.desired_worker_count,
-                });
-            }
         }
     }
 
@@ -223,6 +249,35 @@ fn handle_workflow_panel_buttons(
                 unassign_events.write(UnassignWorkersEvent {
                     workers: vec![worker_entity],
                 });
+            }
+        }
+    }
+}
+
+fn handle_edit_workflow_button(
+    mut commands: Commands,
+    edit_buttons: Query<(&Interaction, &WorkflowEditButton), Changed<Interaction>>,
+    workflows: Query<&Workflow>,
+    mut state: ResMut<crate::ui::modes::workflow_create::WorkflowCreationState>,
+    mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
+    existing_panels: Query<Entity, With<crate::ui::modes::workflow_create::WorkflowCreationPanel>>,
+) {
+    for (interaction, btn) in &edit_buttons {
+        if *interaction == Interaction::Pressed {
+            if let Ok(workflow) = workflows.get(btn.workflow) {
+                state.name.clone_from(&workflow.name);
+                state.building_set.clone_from(&workflow.building_set);
+                state.steps.clone_from(&workflow.steps);
+                state.desired_worker_count = workflow.desired_worker_count;
+                state.phase = crate::ui::modes::workflow_create::CreationPhase::BuilderModal;
+                state.editing = Some(btn.workflow);
+
+                for entity in &existing_panels {
+                    commands.entity(entity).despawn();
+                }
+
+                next_mode.set(crate::ui::UiMode::WorkflowCreate);
+                return;
             }
         }
     }
@@ -497,9 +552,9 @@ fn spawn_card_buttons(card: &mut ChildSpawnerCommands, workflow_entity: Entity, 
         );
         spawn_panel_button(
             button_row,
-            "Fill",
+            "Edit",
             ButtonStyle::default_button(),
-            WorkflowFillButton {
+            WorkflowEditButton {
                 workflow: workflow_entity,
             },
         );
@@ -556,6 +611,34 @@ fn spawn_panel_button(
         });
 }
 
+fn handle_new_workflow_button(
+    new_buttons: Query<&Interaction, (Changed<Interaction>, With<NewWorkflowButton>)>,
+    mut state: ResMut<crate::ui::modes::workflow_create::WorkflowCreationState>,
+    mut counter: ResMut<crate::ui::modes::workflow_create::WorkflowCreationCounter>,
+    mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
+    mut commands: Commands,
+    existing_panels: Query<Entity, With<crate::ui::modes::workflow_create::WorkflowCreationPanel>>,
+) {
+    for interaction in &new_buttons {
+        if *interaction == Interaction::Pressed {
+            counter.count += 1;
+            state.name = format!("Workflow {}", counter.count);
+            state.steps.clear();
+            state.desired_worker_count = 1;
+            state.building_set.clear();
+            state.phase = crate::ui::modes::workflow_create::CreationPhase::SelectBuildings;
+
+            for entity in &existing_panels {
+                commands.entity(entity).despawn();
+            }
+
+            crate::ui::modes::workflow_create::spawn_creation_panel(&mut commands, &state);
+            next_mode.set(crate::ui::UiMode::WorkflowCreate);
+            return;
+        }
+    }
+}
+
 pub struct WorkflowListPlugin;
 
 impl Plugin for WorkflowListPlugin {
@@ -564,6 +647,8 @@ impl Plugin for WorkflowListPlugin {
             Update,
             (
                 handle_workflow_panel_buttons.in_set(UISystemSet::EntityManagement),
+                handle_edit_workflow_button.in_set(UISystemSet::EntityManagement),
+                handle_new_workflow_button.in_set(UISystemSet::EntityManagement),
                 (update_workflow_panel_content,)
                     .in_set(UISystemSet::VisualUpdates)
                     .run_if(|active: Res<ActivePanel>| *active == ActivePanel::Workflows),

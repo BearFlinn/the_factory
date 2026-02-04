@@ -17,7 +17,7 @@ use crate::{
         UISystemSet,
     },
     workers::workflows::components::{
-        CreateWorkflowEvent, StepTarget, WorkflowAction, WorkflowStep,
+        CreateWorkflowEvent, StepTarget, UpdateWorkflowEvent, WorkflowAction, WorkflowStep,
     },
 };
 
@@ -673,6 +673,7 @@ fn handle_builder_controls(
     mut commands: Commands,
     modals: Query<Entity, With<WorkflowBuilderModal>>,
     mut create_events: MessageWriter<CreateWorkflowEvent>,
+    mut update_events: MessageWriter<UpdateWorkflowEvent>,
     mut next_mode: ResMut<NextState<crate::ui::UiMode>>,
     names: Query<&Name>,
     step_lists: Query<(Entity, &Children), With<BuilderStepList>>,
@@ -683,13 +684,24 @@ fn handle_builder_controls(
 
     for interaction in &save_buttons {
         if *interaction == Interaction::Pressed && !state.steps.is_empty() {
-            create_events.write(CreateWorkflowEvent {
-                name: state.name.clone(),
-                building_set: state.building_set.clone(),
-                steps: state.steps.clone(),
-                desired_worker_count: state.desired_worker_count,
-            });
-            info!(name = %state.name, steps = state.steps.len(), "workflow created");
+            if let Some(editing_entity) = state.editing {
+                update_events.write(UpdateWorkflowEvent {
+                    entity: editing_entity,
+                    name: state.name.clone(),
+                    building_set: state.building_set.clone(),
+                    steps: state.steps.clone(),
+                    desired_worker_count: state.desired_worker_count,
+                });
+                info!(name = %state.name, steps = state.steps.len(), "workflow updated");
+            } else {
+                create_events.write(CreateWorkflowEvent {
+                    name: state.name.clone(),
+                    building_set: state.building_set.clone(),
+                    steps: state.steps.clone(),
+                    desired_worker_count: state.desired_worker_count,
+                });
+                info!(name = %state.name, steps = state.steps.len(), "workflow created");
+            }
             for entity in &modals {
                 commands.entity(entity).despawn();
             }

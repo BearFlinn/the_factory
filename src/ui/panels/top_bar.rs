@@ -32,11 +32,11 @@ fn setup_top_bar(mut commands: Commands, icon_atlas: Res<IconAtlas>) {
     let bar = commands
         .spawn((
             Node {
-                width: Val::Percent(100.0),
+                width: Val::Percent(80.0),
                 height: Val::Px(TOP_BAR_HEIGHT),
                 position_type: PositionType::Absolute,
                 top: Val::Px(0.0),
-                left: Val::Px(0.0),
+                left: Val::Percent(10.0),
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
@@ -54,7 +54,7 @@ fn setup_top_bar(mut commands: Commands, icon_atlas: Res<IconAtlas>) {
         .spawn(Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: Val::Px(16.0),
+            column_gap: Val::Px(20.0),
             ..default()
         })
         .id();
@@ -125,18 +125,18 @@ fn spawn_stat_group(
         .spawn(Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: Val::Px(4.0),
+            column_gap: Val::Px(6.0),
             ..default()
         })
         .id();
 
-    let icon_entity = spawn_icon(commands, icon_atlas, icon, 14.0);
+    let icon_entity = spawn_icon(commands, icon_atlas, icon, 18.0);
 
     let text_entity = commands
         .spawn((
             Text::new(initial_text),
             TextFont {
-                font_size: 13.0,
+                font_size: 16.0,
                 ..default()
             },
             TextColor(color),

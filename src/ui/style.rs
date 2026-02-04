@@ -35,7 +35,7 @@ pub const SCORE_COLOR: Color = Color::srgb(1.0, 0.78, 0.2);
 pub const WARNING_COLOR: Color = Color::srgb(1.0, 0.85, 0.3);
 pub const DANGER_COLOR: Color = Color::srgb(1.0, 0.3, 0.3);
 
-pub const TOP_BAR_HEIGHT: f32 = 36.0;
+pub const TOP_BAR_HEIGHT: f32 = 44.0;
 pub const ACTION_BAR_WIDTH: f32 = 48.0;
 pub const ACTION_BUTTON_SIZE: f32 = 40.0;
 

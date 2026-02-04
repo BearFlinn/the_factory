@@ -40,42 +40,57 @@ pub enum ActionBarButton {
 
 fn setup_action_bar(mut commands: Commands, icon_atlas: Res<IconAtlas>) {
     commands
-        .spawn((
-            Node {
-                width: Val::Px(ACTION_BAR_WIDTH),
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(TOP_BAR_HEIGHT + 4.0),
-                bottom: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                padding: UiRect::vertical(Val::Px(4.0)),
-                row_gap: Val::Px(4.0),
-                ..default()
-            },
-            BackgroundColor(ACTION_BAR_BG),
-            ActionBar,
-        ))
-        .with_children(|parent| {
-            spawn_action_button(parent, &icon_atlas, GameIcon::Build, ActionBarButton::Build);
-            spawn_action_button(
-                parent,
-                &icon_atlas,
-                GameIcon::Workflows,
-                ActionBarButton::Workflows,
-            );
-            spawn_action_button(
-                parent,
-                &icon_atlas,
-                GameIcon::SpawnWorker,
-                ActionBarButton::SpawnWorker,
-            );
-            spawn_action_button(
-                parent,
-                &icon_atlas,
-                GameIcon::FactoryInfo,
-                ActionBarButton::FactoryInfo,
-            );
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(TOP_BAR_HEIGHT),
+            bottom: Val::Px(0.0),
+            width: Val::Px(ACTION_BAR_WIDTH),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+        .with_children(|outer| {
+            outer
+                .spawn((
+                    Node {
+                        height: Val::Percent(80.0),
+                        width: Val::Px(ACTION_BAR_WIDTH),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        padding: UiRect::vertical(Val::Px(4.0)),
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    },
+                    BackgroundColor(ACTION_BAR_BG),
+                    ActionBar,
+                ))
+                .with_children(|parent| {
+                    spawn_action_button(
+                        parent,
+                        &icon_atlas,
+                        GameIcon::Build,
+                        ActionBarButton::Build,
+                    );
+                    spawn_action_button(
+                        parent,
+                        &icon_atlas,
+                        GameIcon::Workflows,
+                        ActionBarButton::Workflows,
+                    );
+                    spawn_action_button(
+                        parent,
+                        &icon_atlas,
+                        GameIcon::SpawnWorker,
+                        ActionBarButton::SpawnWorker,
+                    );
+                    spawn_action_button(
+                        parent,
+                        &icon_atlas,
+                        GameIcon::FactoryInfo,
+                        ActionBarButton::FactoryInfo,
+                    );
+                });
         });
 }
 
@@ -180,10 +195,10 @@ fn handle_action_bar_hotkeys(
     }
 
     if keyboard.just_pressed(KeyCode::Tab) {
-        if *active_panel == ActivePanel::Workflows {
+        if *active_panel == ActivePanel::Build {
             *active_panel = ActivePanel::None;
         } else {
-            *active_panel = ActivePanel::Workflows;
+            *active_panel = ActivePanel::Build;
         }
     }
 }
@@ -242,6 +257,18 @@ fn sync_action_bar_checked(
     }
 }
 
+fn clear_selection_on_panel_close(
+    active_panel: Res<ActivePanel>,
+    mut selected_building: ResMut<crate::ui::SelectedBuilding>,
+) {
+    if !active_panel.is_changed() {
+        return;
+    }
+    if *active_panel != ActivePanel::Build && selected_building.building_name.is_some() {
+        selected_building.building_name = None;
+    }
+}
+
 pub struct ActionBarPlugin;
 
 impl Plugin for ActionBarPlugin {
@@ -254,7 +281,8 @@ impl Plugin for ActionBarPlugin {
                     (handle_action_bar_hotkeys,).in_set(UISystemSet::InputDetection),
                     (
                         handle_action_bar_clicks.in_set(WorkersSystemSet::Lifecycle),
-                        manage_panel_lifecycle.in_set(UISystemSet::EntityManagement),
+                        (manage_panel_lifecycle, clear_selection_on_panel_close)
+                            .in_set(UISystemSet::EntityManagement),
                         sync_action_bar_checked.in_set(UISystemSet::VisualUpdates),
                     ),
                 ),

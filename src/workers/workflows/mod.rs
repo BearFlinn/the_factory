@@ -28,6 +28,7 @@ impl Plugin for WorkflowsPlugin {
             .add_message::<AssignWorkersEvent>()
             .add_message::<UnassignWorkersEvent>()
             .add_message::<BatchAssignWorkersEvent>()
+            .add_message::<UpdateWorkflowEvent>()
             .init_resource::<WorkflowRegistry>()
             .configure_sets(
                 Update,
@@ -51,6 +52,7 @@ impl Plugin for WorkflowsPlugin {
                         handle_assign_workers,
                         handle_unassign_workers,
                         handle_batch_assign_workers,
+                        handle_update_workflow,
                     )
                         .in_set(WorkflowSystemSet::Management),
                     process_workflow_workers.in_set(WorkflowSystemSet::Processing),
