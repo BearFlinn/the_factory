@@ -12,6 +12,7 @@ use crate::{
     resources::{ResourceNode, ResourceNodeRecipe},
     systems::NetworkChangedEvent,
 };
+use bevy::prelude::Name;
 
 #[derive(Component)]
 pub struct Building;
@@ -215,6 +216,7 @@ pub fn place_hub(
         .spawn((
             Building,
             Hub,
+            Name::new("Hub"),
             Position {
                 x: center_x,
                 y: center_y,
