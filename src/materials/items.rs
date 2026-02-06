@@ -102,6 +102,7 @@ impl InventoryAccess for OutputPort {
 pub struct InputPort {
     pub items: HashMap<ItemName, u32>,
     pub capacity: u32,
+    pub item_limits: HashMap<ItemName, u32>,
 }
 
 impl InputPort {
@@ -110,6 +111,7 @@ impl InputPort {
         Self {
             items: HashMap::new(),
             capacity,
+            item_limits: HashMap::new(),
         }
     }
 }
@@ -303,6 +305,10 @@ pub fn validate_item_transfer(
             continue;
         };
 
+        let item_limits: HashMap<ItemName, u32> = input_ports
+            .get(request.receiver)
+            .map_or_else(|_| HashMap::new(), |port| port.item_limits.clone());
+
         let mut validated_transfer = HashMap::new();
         let mut current_receiver_total = receiver_total;
 
@@ -313,6 +319,10 @@ pub fn validate_item_transfer(
                 continue;
             }
 
+            if !item_limits.is_empty() && !item_limits.contains_key(item_name) {
+                continue;
+            }
+
             let transfer_quantity = available.min(requested_quantity);
             let remaining_capacity = receiver_capacity.saturating_sub(current_receiver_total);
 
@@ -320,7 +330,15 @@ pub fn validate_item_transfer(
                 break;
             }
 
-            let final_quantity = transfer_quantity.min(remaining_capacity);
+            let mut final_quantity = transfer_quantity.min(remaining_capacity);
+
+            if let Some(&limit) = item_limits.get(item_name) {
+                let current_in_port = input_ports
+                    .get(request.receiver)
+                    .map_or(0, |p| p.get_item_quantity(item_name));
+                let per_item_remaining = limit.saturating_sub(current_in_port);
+                final_quantity = final_quantity.min(per_item_remaining);
+            }
 
             if final_quantity > 0 {
                 validated_transfer.insert(item_name.clone(), final_quantity);
@@ -605,5 +623,36 @@ mod tests {
         let mut storage = StoragePort::new(100);
         storage.add_item("iron", 101);
         assert!(storage.is_full());
+    }
+
+    #[test]
+    fn input_port_new_has_empty_item_limits() {
+        let port = InputPort::new(50);
+        assert!(port.item_limits.is_empty());
+    }
+
+    #[test]
+    fn input_port_default_has_empty_item_limits() {
+        let port = InputPort::default();
+        assert!(port.item_limits.is_empty());
+    }
+
+    #[test]
+    fn input_port_item_limits_can_be_set() {
+        let mut port = InputPort::new(50);
+        port.item_limits.insert("Iron Ore".to_string(), 34);
+        port.item_limits.insert("Coal".to_string(), 17);
+
+        assert_eq!(port.item_limits.get("Iron Ore").copied().unwrap(), 34);
+        assert_eq!(port.item_limits.get("Coal").copied().unwrap(), 17);
+        assert_eq!(port.item_limits.len(), 2);
+    }
+
+    #[test]
+    fn input_port_item_limits_unlisted_item_defaults_to_zero() {
+        let mut port = InputPort::new(50);
+        port.item_limits.insert("Iron Ore".to_string(), 34);
+
+        assert_eq!(port.item_limits.get("Coal").copied().unwrap_or(0), 0);
     }
 }

@@ -75,6 +75,7 @@ impl Plugin for BuildingsPlugin {
                         commitment::evaluate_recipe_commitments
                             .run_if(commitment::any_needs_evaluation),
                         commitment::commit_pending_recipes,
+                        sync_input_port_limits,
                         update_port_crafters,
                         update_source_port_crafters,
                         update_sink_port_crafters,
