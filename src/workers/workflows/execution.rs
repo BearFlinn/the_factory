@@ -84,8 +84,7 @@ fn resolve_step_target(
     building_set: &HashSet<Entity>,
     positions: &Query<&Position>,
     names: &Query<&Name>,
-    round_robin: &mut HashMap<(Entity, usize), usize>,
-    workflow_entity: Entity,
+    round_robin_counters: &mut HashMap<usize, usize>,
     step_index: usize,
 ) -> Option<Entity> {
     match &step.target {
@@ -120,8 +119,7 @@ fn resolve_step_target(
                     .then_with(|| a.0.cmp(&b.0))
             });
 
-            let key = (workflow_entity, step_index);
-            let counter = round_robin.entry(key).or_insert(0);
+            let counter = round_robin_counters.entry(step_index).or_insert(0);
             let idx = *counter % candidates.len();
             *counter += 1;
 
@@ -135,16 +133,14 @@ pub fn process_workflow_workers(
         (Entity, &mut WorkflowAssignment, &Position, &mut WorkerPath),
         (With<Worker>, Without<WaitingForItems>),
     >,
-    workflows: Query<&Workflow>,
+    mut workflows: Query<&mut Workflow>,
     positions: Query<&Position>,
     names: Query<&Name>,
     network: Res<NetworkConnectivity>,
     grid: Res<Grid>,
 ) {
-    let mut round_robin: HashMap<(Entity, usize), usize> = HashMap::new();
-
     for (_worker_entity, mut assignment, worker_pos, mut path) in &mut workers {
-        let Ok(workflow) = workflows.get(assignment.workflow) else {
+        let Ok(mut workflow) = workflows.get_mut(assignment.workflow) else {
             continue;
         };
 
@@ -156,7 +152,7 @@ pub fn process_workflow_workers(
             continue;
         }
 
-        let Some(step) = workflow.steps.get(assignment.current_step) else {
+        let Some(step) = workflow.steps.get(assignment.current_step).cloned() else {
             continue;
         };
 
@@ -164,13 +160,13 @@ pub fn process_workflow_workers(
             continue;
         }
 
+        let wf = &mut *workflow;
         let Some(target_entity) = resolve_step_target(
-            step,
-            &workflow.building_set,
+            &step,
+            &wf.building_set,
             &positions,
             &names,
-            &mut round_robin,
-            assignment.workflow,
+            &mut wf.round_robin_counters,
             assignment.current_step,
         ) else {
             assignment.current_step = workflow.next_step(assignment.current_step);
@@ -493,7 +489,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 5, y: 5 }, Name::new("Smelter")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let mut building_set = HashSet::new();
         building_set.insert(building);
         let step = WorkflowStep {
@@ -504,15 +499,8 @@ mod tests {
         app.world_mut()
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
-                let result = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
+                let result =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
                 assert_eq!(result, Some(building));
             })
             .unwrap();
@@ -525,7 +513,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 5, y: 5 }, Name::new("Smelter")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let building_set = HashSet::new();
         let step = WorkflowStep {
             target: StepTarget::Specific(building),
@@ -535,15 +522,8 @@ mod tests {
         app.world_mut()
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
-                let result = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
+                let result =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
                 assert!(result.is_none());
             })
             .unwrap();
@@ -564,7 +544,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 8, y: 0 }, Name::new("Smelter")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let mut building_set = HashSet::new();
         building_set.insert(smelter_a);
         building_set.insert(smelter_b);
@@ -577,42 +556,10 @@ mod tests {
         app.world_mut()
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
-                let r1 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
-                let r2 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
-                let r3 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
-                let r4 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
+                let r1 = resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
+                let r2 = resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
+                let r3 = resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
+                let r4 = resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
 
                 assert_eq!(r1, Some(smelter_a));
                 assert_eq!(r2, Some(smelter_b));
@@ -629,7 +576,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 5, y: 5 }, Name::new("Mining Drill")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let mut building_set = HashSet::new();
         building_set.insert(drill);
         let step = WorkflowStep {
@@ -640,15 +586,8 @@ mod tests {
         app.world_mut()
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
-                let result = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
+                let result =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
                 assert!(result.is_none());
             })
             .unwrap();
@@ -665,7 +604,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 5, y: 0 }, Name::new("Smelter")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let mut building_set = HashSet::new();
         building_set.insert(smelter_a);
         building_set.insert(smelter_b);
@@ -678,37 +616,16 @@ mod tests {
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
 
-                let r_step0 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
-                let r_step1 = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    1,
-                );
+                let r_step0 =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
+                let r_step1 =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 1);
 
                 assert_eq!(r_step0, Some(smelter_a));
                 assert_eq!(r_step1, Some(smelter_a));
 
-                let r_step0_again = resolve_step_target(
-                    &step,
-                    &building_set,
-                    &positions,
-                    &names,
-                    &mut rr,
-                    workflow_entity,
-                    0,
-                );
+                let r_step0_again =
+                    resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
                 assert_eq!(r_step0_again, Some(smelter_b));
             })
             .unwrap();
@@ -721,7 +638,6 @@ mod tests {
             .world_mut()
             .spawn((Position { x: 3, y: 3 }, Name::new("Smelter")))
             .id();
-        let workflow_entity = app.world_mut().spawn_empty().id();
         let mut building_set = HashSet::new();
         building_set.insert(smelter);
         let step = WorkflowStep {
@@ -733,15 +649,8 @@ mod tests {
             .run_system_once(move |positions: Query<&Position>, names: Query<&Name>| {
                 let mut rr = HashMap::new();
                 for _ in 0..5 {
-                    let result = resolve_step_target(
-                        &step,
-                        &building_set,
-                        &positions,
-                        &names,
-                        &mut rr,
-                        workflow_entity,
-                        0,
-                    );
+                    let result =
+                        resolve_step_target(&step, &building_set, &positions, &names, &mut rr, 0);
                     assert_eq!(result, Some(smelter));
                 }
             })

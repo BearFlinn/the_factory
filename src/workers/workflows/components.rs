@@ -28,6 +28,7 @@ pub struct Workflow {
     pub steps: Vec<WorkflowStep>,
     pub is_paused: bool,
     pub desired_worker_count: u32,
+    pub round_robin_counters: HashMap<usize, usize>,
 }
 
 impl Workflow {
@@ -181,6 +182,7 @@ mod tests {
             steps: vec![],
             is_paused: false,
             desired_worker_count: 1,
+            round_robin_counters: HashMap::new(),
         };
         assert!(!workflow.is_paused);
     }
@@ -226,6 +228,7 @@ mod tests {
             ],
             is_paused: false,
             desired_worker_count: 1,
+            round_robin_counters: HashMap::new(),
         };
 
         assert_eq!(workflow.next_step(0), 1);
@@ -240,6 +243,7 @@ mod tests {
             steps: vec![],
             is_paused: false,
             desired_worker_count: 0,
+            round_robin_counters: HashMap::new(),
         };
         assert_eq!(workflow.next_step(0), 0);
     }
@@ -279,6 +283,7 @@ mod tests {
             steps: vec![],
             is_paused: false,
             desired_worker_count: 1,
+            round_robin_counters: HashMap::new(),
         };
         assert!(workflow.building_set.contains(&Entity::PLACEHOLDER));
         assert_eq!(workflow.building_set.len(), 1);

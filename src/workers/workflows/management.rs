@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use crate::{grid::Position, workers::Worker};
 
@@ -21,6 +22,7 @@ pub fn handle_create_workflow(
                 steps: event.steps.clone(),
                 is_paused: false,
                 desired_worker_count: event.desired_worker_count,
+                round_robin_counters: HashMap::new(),
             })
             .id();
         registry.workflows.push(entity);
@@ -163,6 +165,7 @@ pub fn handle_update_workflow(
             workflow.building_set.clone_from(&event.building_set);
             workflow.steps.clone_from(&event.steps);
             workflow.desired_worker_count = event.desired_worker_count;
+            workflow.round_robin_counters.clear();
         }
     }
 }
@@ -331,6 +334,7 @@ mod tests {
                 steps: vec![],
                 is_paused: false,
                 desired_worker_count: 2,
+                round_robin_counters: HashMap::new(),
             })
             .id();
 
@@ -364,6 +368,7 @@ mod tests {
                 steps: vec![],
                 is_paused: false,
                 desired_worker_count: 1,
+                round_robin_counters: HashMap::new(),
             })
             .id();
 
@@ -402,6 +407,7 @@ mod tests {
                 steps: vec![],
                 is_paused: false,
                 desired_worker_count: 2,
+                round_robin_counters: HashMap::new(),
             })
             .id();
 
