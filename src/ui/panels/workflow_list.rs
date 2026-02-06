@@ -15,8 +15,8 @@ use crate::{
     workers::{
         workflows::components::{
             AssignWorkersEvent, DeleteWorkflowEvent, PauseWorkflowEvent, StepTarget,
-            UnassignWorkersEvent, WaitingForItems, Workflow, WorkflowAction, WorkflowAssignment,
-            WorkflowRegistry,
+            UnassignWorkersEvent, WaitingForItems, WaitingForSpace, Workflow, WorkflowAction,
+            WorkflowAssignment, WorkflowRegistry,
         },
         Worker,
     },
@@ -288,7 +288,14 @@ fn update_workflow_panel_content(
     list_containers: Query<Entity, With<WorkflowListContainer>>,
     registry: Res<WorkflowRegistry>,
     workflows: Query<&Workflow>,
-    assigned_workers: Query<(&WorkflowAssignment, Has<WaitingForItems>), With<Worker>>,
+    assigned_workers: Query<
+        (
+            &WorkflowAssignment,
+            Has<WaitingForItems>,
+            Has<WaitingForSpace>,
+        ),
+        With<Worker>,
+    >,
     names: Query<&Name>,
 ) {
     for container in &list_containers {
@@ -320,10 +327,10 @@ fn update_workflow_panel_content(
 
                 let mut current_workers = 0u32;
                 let mut waiting_workers = 0u32;
-                for (assignment, is_waiting) in &assigned_workers {
+                for (assignment, is_waiting_items, is_waiting_space) in &assigned_workers {
                     if assignment.workflow == workflow_entity {
                         current_workers += 1;
-                        if is_waiting {
+                        if is_waiting_items || is_waiting_space {
                             waiting_workers += 1;
                         }
                     }

@@ -1,5 +1,5 @@
 use super::components::{
-    StepTarget, WaitingForItems, Workflow, WorkflowAction, WorkflowAssignment,
+    StepTarget, WaitingForItems, WaitingForSpace, Workflow, WorkflowAction, WorkflowAssignment,
 };
 use crate::{
     grid::{Grid, Position},
@@ -35,6 +35,20 @@ fn get_available_items_at(
         }
     }
     HashMap::new()
+}
+
+fn get_available_space_at(
+    target: Entity,
+    input_ports: &Query<&InputPort>,
+    storage_ports: &Query<&StoragePort>,
+) -> u32 {
+    if let Ok(port) = input_ports.get(target) {
+        return port.capacity().saturating_sub(port.get_total_quantity());
+    }
+    if let Ok(port) = storage_ports.get(target) {
+        return port.capacity().saturating_sub(port.get_total_quantity());
+    }
+    0
 }
 
 fn compute_pickup_items(
@@ -131,7 +145,11 @@ fn resolve_step_target(
 pub fn process_workflow_workers(
     mut workers: Query<
         (Entity, &mut WorkflowAssignment, &Position, &mut WorkerPath),
-        (With<Worker>, Without<WaitingForItems>),
+        (
+            With<Worker>,
+            Without<WaitingForItems>,
+            Without<WaitingForSpace>,
+        ),
     >,
     mut workflows: Query<&mut Workflow>,
     positions: Query<&Position>,
@@ -245,7 +263,25 @@ pub fn handle_workflow_arrivals(
                 let cargo_items = cargo.get_all_items();
                 let items = compute_dropoff_items(&cargo_items, filter.as_ref());
 
-                request_transfer_specific_items(event.worker, target, items, &mut transfer_events);
+                if !items.is_empty() {
+                    let total_to_drop: u32 = items.values().sum();
+                    let space = get_available_space_at(target, &input_ports, &storage_ports);
+
+                    request_transfer_specific_items(
+                        event.worker,
+                        target,
+                        items,
+                        &mut transfer_events,
+                    );
+
+                    if space < total_to_drop {
+                        assignment.resolved_action = Some(action);
+                        commands
+                            .entity(event.worker)
+                            .insert(WaitingForSpace::default());
+                        continue;
+                    }
+                }
             }
         }
 
@@ -290,6 +326,109 @@ pub fn recheck_waiting_workers(
         if !items.is_empty() {
             commands.entity(worker_entity).remove::<WaitingForItems>();
             request_transfer_specific_items(target, worker_entity, items, &mut transfer_events);
+
+            let Ok(workflow) = workflows.get(assignment.workflow) else {
+                continue;
+            };
+
+            assignment.resolved_target = None;
+            assignment.resolved_action = None;
+            assignment.current_step = workflow.next_step(assignment.current_step);
+        }
+    }
+}
+
+pub fn recheck_waiting_for_space(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut workers: Query<
+        (
+            Entity,
+            &mut WaitingForSpace,
+            &mut WorkflowAssignment,
+            &Cargo,
+        ),
+        With<Worker>,
+    >,
+    workflows: Query<&Workflow>,
+    input_ports: Query<&InputPort>,
+    storage_ports: Query<&StoragePort>,
+    mut transfer_events: MessageWriter<ItemTransferRequestEvent>,
+) {
+    for (worker_entity, mut waiting, mut assignment, cargo) in &mut workers {
+        waiting.timer.tick(time.delta());
+
+        if !waiting.timer.just_finished() {
+            continue;
+        }
+
+        if waiting.retries >= waiting.max_retries {
+            warn!(
+                worker = ?worker_entity,
+                retries = waiting.retries,
+                "dropoff wait timed out, force-advancing workflow step"
+            );
+            commands.entity(worker_entity).remove::<WaitingForSpace>();
+
+            let Ok(workflow) = workflows.get(assignment.workflow) else {
+                continue;
+            };
+
+            assignment.resolved_target = None;
+            assignment.resolved_action = None;
+            assignment.current_step = workflow.next_step(assignment.current_step);
+            continue;
+        }
+
+        waiting.retries += 1;
+
+        if cargo.is_empty() {
+            commands.entity(worker_entity).remove::<WaitingForSpace>();
+
+            let Ok(workflow) = workflows.get(assignment.workflow) else {
+                continue;
+            };
+
+            assignment.resolved_target = None;
+            assignment.resolved_action = None;
+            assignment.current_step = workflow.next_step(assignment.current_step);
+            continue;
+        }
+
+        let Some(target) = assignment.resolved_target else {
+            continue;
+        };
+
+        let space = get_available_space_at(target, &input_ports, &storage_ports);
+        if space == 0 {
+            continue;
+        }
+
+        let Some(WorkflowAction::Dropoff(ref filter)) = assignment.resolved_action else {
+            continue;
+        };
+
+        let cargo_items = cargo.get_all_items();
+        let items = compute_dropoff_items(&cargo_items, filter.as_ref());
+
+        if items.is_empty() {
+            commands.entity(worker_entity).remove::<WaitingForSpace>();
+
+            let Ok(workflow) = workflows.get(assignment.workflow) else {
+                continue;
+            };
+
+            assignment.resolved_target = None;
+            assignment.resolved_action = None;
+            assignment.current_step = workflow.next_step(assignment.current_step);
+            continue;
+        }
+
+        let total_to_drop: u32 = items.values().sum();
+        request_transfer_specific_items(worker_entity, target, items, &mut transfer_events);
+
+        if space >= total_to_drop {
+            commands.entity(worker_entity).remove::<WaitingForSpace>();
 
             let Ok(workflow) = workflows.get(assignment.workflow) else {
                 continue;
@@ -653,6 +792,72 @@ mod tests {
                     assert_eq!(result, Some(smelter));
                 }
             })
+            .unwrap();
+    }
+
+    #[test]
+    fn get_available_space_empty_entity_returns_zero() {
+        let mut app = App::new();
+        let target = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .run_system_once(
+                move |input_ports: Query<&InputPort>, storage_ports: Query<&StoragePort>| {
+                    let result = get_available_space_at(target, &input_ports, &storage_ports);
+                    assert_eq!(result, 0);
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn get_available_space_input_port_with_space() {
+        let mut app = App::new();
+        let mut port = InputPort::new(10);
+        port.add_item("iron_ore", 3);
+        let target = app.world_mut().spawn(port).id();
+
+        app.world_mut()
+            .run_system_once(
+                move |input_ports: Query<&InputPort>, storage_ports: Query<&StoragePort>| {
+                    let result = get_available_space_at(target, &input_ports, &storage_ports);
+                    assert_eq!(result, 7);
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn get_available_space_full_input_port() {
+        let mut app = App::new();
+        let mut port = InputPort::new(5);
+        port.add_item("iron_ore", 5);
+        let target = app.world_mut().spawn(port).id();
+
+        app.world_mut()
+            .run_system_once(
+                move |input_ports: Query<&InputPort>, storage_ports: Query<&StoragePort>| {
+                    let result = get_available_space_at(target, &input_ports, &storage_ports);
+                    assert_eq!(result, 0);
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn get_available_space_storage_port_fallback() {
+        let mut app = App::new();
+        let mut port = StoragePort::new(20);
+        port.add_item("copper_plate", 8);
+        let target = app.world_mut().spawn(port).id();
+
+        app.world_mut()
+            .run_system_once(
+                move |input_ports: Query<&InputPort>, storage_ports: Query<&StoragePort>| {
+                    let result = get_available_space_at(target, &input_ports, &storage_ports);
+                    assert_eq!(result, 12);
+                },
+            )
             .unwrap();
     }
 }

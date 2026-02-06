@@ -57,7 +57,8 @@ impl Plugin for WorkflowsPlugin {
                         .in_set(WorkflowSystemSet::Management),
                     process_workflow_workers.in_set(WorkflowSystemSet::Processing),
                     handle_workflow_arrivals.in_set(WorkflowSystemSet::Arrivals),
-                    recheck_waiting_workers.in_set(WorkflowSystemSet::Waiting),
+                    (recheck_waiting_workers, recheck_waiting_for_space)
+                        .in_set(WorkflowSystemSet::Waiting),
                     (
                         cleanup_invalid_workflow_refs,
                         emergency_dropoff_unassigned_workers,

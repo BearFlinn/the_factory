@@ -61,6 +61,23 @@ impl Default for WaitingForItems {
     }
 }
 
+#[derive(Component)]
+pub struct WaitingForSpace {
+    pub timer: Timer,
+    pub retries: u32,
+    pub max_retries: u32,
+}
+
+impl Default for WaitingForSpace {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(0.5, TimerMode::Repeating),
+            retries: 0,
+            max_retries: 20,
+        }
+    }
+}
+
 #[derive(Message)]
 pub struct CreateWorkflowEvent {
     pub name: String,
@@ -300,5 +317,14 @@ mod tests {
             StepTarget::ByType(name) => assert_eq!(name, "Mining Drill"),
             StepTarget::Specific(_) => panic!("clone did not preserve ByType"),
         }
+    }
+
+    #[test]
+    fn waiting_for_space_timer_repeating() {
+        let waiting = WaitingForSpace::default();
+        assert_eq!(waiting.timer.mode(), TimerMode::Repeating);
+        assert!((waiting.timer.duration().as_secs_f32() - 0.5).abs() < f32::EPSILON);
+        assert_eq!(waiting.retries, 0);
+        assert_eq!(waiting.max_retries, 20);
     }
 }

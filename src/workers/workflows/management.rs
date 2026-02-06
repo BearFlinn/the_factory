@@ -5,8 +5,8 @@ use crate::{grid::Position, workers::Worker};
 
 use super::components::{
     AssignWorkersEvent, BatchAssignWorkersEvent, CreateWorkflowEvent, DeleteWorkflowEvent,
-    PauseWorkflowEvent, UnassignWorkersEvent, UpdateWorkflowEvent, Workflow, WorkflowAssignment,
-    WorkflowRegistry,
+    PauseWorkflowEvent, UnassignWorkersEvent, UpdateWorkflowEvent, WaitingForItems,
+    WaitingForSpace, Workflow, WorkflowAssignment, WorkflowRegistry,
 };
 
 pub fn handle_create_workflow(
@@ -43,7 +43,9 @@ pub fn handle_delete_workflow(
             if assignment.workflow == event.workflow {
                 commands
                     .entity(worker_entity)
-                    .remove::<WorkflowAssignment>();
+                    .remove::<WorkflowAssignment>()
+                    .remove::<WaitingForItems>()
+                    .remove::<WaitingForSpace>();
             }
         }
     }
@@ -82,7 +84,11 @@ pub fn handle_unassign_workers(
 ) {
     for event in events.read() {
         for &worker in &event.workers {
-            commands.entity(worker).remove::<WorkflowAssignment>();
+            commands
+                .entity(worker)
+                .remove::<WorkflowAssignment>()
+                .remove::<WaitingForItems>()
+                .remove::<WaitingForSpace>();
         }
     }
 }
