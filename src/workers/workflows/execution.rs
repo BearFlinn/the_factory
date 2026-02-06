@@ -138,8 +138,9 @@ pub fn process_workflow_workers(
     names: Query<&Name>,
     network: Res<NetworkConnectivity>,
     grid: Res<Grid>,
+    mut arrival_events: MessageWriter<WorkerArrivedEvent>,
 ) {
-    for (_worker_entity, mut assignment, worker_pos, mut path) in &mut workers {
+    for (worker_entity, mut assignment, worker_pos, mut path) in &mut workers {
         let Ok(mut workflow) = workflows.get_mut(assignment.workflow) else {
             continue;
         };
@@ -188,6 +189,13 @@ pub fn process_workflow_workers(
             let first = waypoints.pop_front();
             path.waypoints = waypoints;
             path.current_target = first;
+
+            if path.current_target.is_none() {
+                arrival_events.write(WorkerArrivedEvent {
+                    worker: worker_entity,
+                    position: (worker_pos.x, worker_pos.y),
+                });
+            }
         } else {
             assignment.current_step = workflow.next_step(assignment.current_step);
         }
