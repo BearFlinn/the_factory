@@ -70,6 +70,7 @@ pub fn handle_assign_workers(
                 workflow: event.workflow,
                 current_step: 0,
                 resolved_target: None,
+                resolved_action: None,
             });
         }
     }
@@ -150,6 +151,7 @@ pub fn handle_batch_assign_workers(
                 workflow: event.workflow,
                 current_step: 0,
                 resolved_target: None,
+                resolved_action: None,
             });
         }
     }

@@ -156,7 +156,7 @@ pub fn process_workflow_workers(
             continue;
         };
 
-        if path.current_target.is_some() {
+        if path.current_target.is_some() || assignment.resolved_target.is_some() {
             continue;
         }
 
@@ -174,6 +174,7 @@ pub fn process_workflow_workers(
         };
 
         assignment.resolved_target = Some(target_entity);
+        assignment.resolved_action = Some(step.action.clone());
 
         let Ok(target_pos) = positions.get(target_entity) else {
             assignment.current_step = workflow.next_step(assignment.current_step);
@@ -208,33 +209,22 @@ pub fn handle_workflow_arrivals(
             continue;
         };
 
-        let Ok(workflow) = workflows.get(assignment.workflow) else {
+        let Some(target) = assignment.resolved_target else {
             continue;
         };
 
-        if workflow.steps.is_empty() {
-            continue;
-        }
-
-        let Some(step) = workflow.steps.get(assignment.current_step) else {
+        let Some(action) = assignment.resolved_action.take() else {
             continue;
         };
 
-        let target = match assignment.resolved_target {
-            Some(entity) => entity,
-            None => match &step.target {
-                StepTarget::Specific(entity) => *entity,
-                StepTarget::ByType(_) => continue,
-            },
-        };
-
-        match &step.action {
+        match &action {
             WorkflowAction::Pickup(filter) => {
                 let available =
                     get_available_items_at(target, &output_ports, &storage_ports, &input_ports);
                 let items = compute_pickup_items(&available, filter.as_ref());
 
                 if items.is_empty() {
+                    assignment.resolved_action = Some(action);
                     commands
                         .entity(event.worker)
                         .insert(WaitingForItems::default());
@@ -251,7 +241,12 @@ pub fn handle_workflow_arrivals(
             }
         }
 
+        let Ok(workflow) = workflows.get(assignment.workflow) else {
+            continue;
+        };
+
         assignment.resolved_target = None;
+        assignment.resolved_action = None;
         assignment.current_step = workflow.next_step(assignment.current_step);
     }
 }
@@ -273,33 +268,28 @@ pub fn recheck_waiting_workers(
             continue;
         }
 
-        let Ok(workflow) = workflows.get(assignment.workflow) else {
+        let Some(target) = assignment.resolved_target else {
             continue;
         };
 
-        let Some(step) = workflow.steps.get(assignment.current_step) else {
+        let Some(WorkflowAction::Pickup(ref filter)) = assignment.resolved_action else {
             continue;
         };
 
-        let target = match assignment.resolved_target {
-            Some(entity) => entity,
-            None => match &step.target {
-                StepTarget::Specific(entity) => *entity,
-                StepTarget::ByType(_) => continue,
-            },
-        };
+        let available = get_available_items_at(target, &output_ports, &storage_ports, &input_ports);
+        let items = compute_pickup_items(&available, filter.as_ref());
 
-        if let WorkflowAction::Pickup(filter) = &step.action {
-            let available =
-                get_available_items_at(target, &output_ports, &storage_ports, &input_ports);
-            let items = compute_pickup_items(&available, filter.as_ref());
+        if !items.is_empty() {
+            commands.entity(worker_entity).remove::<WaitingForItems>();
+            request_transfer_specific_items(target, worker_entity, items, &mut transfer_events);
 
-            if !items.is_empty() {
-                commands.entity(worker_entity).remove::<WaitingForItems>();
-                request_transfer_specific_items(target, worker_entity, items, &mut transfer_events);
-                assignment.resolved_target = None;
-                assignment.current_step = workflow.next_step(assignment.current_step);
-            }
+            let Ok(workflow) = workflows.get(assignment.workflow) else {
+                continue;
+            };
+
+            assignment.resolved_target = None;
+            assignment.resolved_action = None;
+            assignment.current_step = workflow.next_step(assignment.current_step);
         }
     }
 }
@@ -327,6 +317,7 @@ pub fn cleanup_invalid_workflow_refs(
         if let Some(resolved) = assignment.resolved_target {
             if positions.get(resolved).is_err() {
                 assignment.resolved_target = None;
+                assignment.resolved_action = None;
             }
         }
 

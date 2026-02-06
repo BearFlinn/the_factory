@@ -45,6 +45,7 @@ pub struct WorkflowAssignment {
     pub workflow: Entity,
     pub current_step: usize,
     pub resolved_target: Option<Entity>,
+    pub resolved_action: Option<WorkflowAction>,
 }
 
 #[derive(Component)]
@@ -193,9 +194,11 @@ mod tests {
             workflow: Entity::PLACEHOLDER,
             current_step: 0,
             resolved_target: None,
+            resolved_action: None,
         };
         assert_eq!(assignment.current_step, 0);
         assert!(assignment.resolved_target.is_none());
+        assert!(assignment.resolved_action.is_none());
     }
 
     #[test]
