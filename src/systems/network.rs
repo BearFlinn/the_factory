@@ -46,14 +46,10 @@ impl NetworkConnectivity {
             .any(|pos| self.core_network_cells.contains(pos))
     }
 
-    /// Adds a cell to the connected network. Only available in test builds.
-    #[cfg(test)]
     pub fn add_connected_cell(&mut self, x: i32, y: i32) {
         self.connected_cells.insert((x, y));
     }
 
-    /// Adds a cell to the core network. Only available in test builds.
-    #[cfg(test)]
     pub fn add_core_network_cell(&mut self, x: i32, y: i32) {
         self.core_network_cells.insert((x, y));
     }

@@ -35,9 +35,16 @@ pub fn move_workers(
 ) {
     for (worker_entity, mut transform, mut path, mut worker_pos, speed) in &mut workers {
         if let Some(target) = path.current_target {
-            let direction = (target - transform.translation.truncate()).normalize_or_zero();
-            let movement = direction * speed.value * time.delta_secs();
-            transform.translation += movement.extend(0.0);
+            let current_pos = transform.translation.truncate();
+            let distance_to_target = (target - current_pos).length();
+            let max_move = speed.value * time.delta_secs();
+
+            if max_move >= distance_to_target {
+                transform.translation = target.extend(transform.translation.z);
+            } else {
+                let direction = (target - current_pos).normalize_or_zero();
+                transform.translation += (direction * max_move).extend(0.0);
+            }
 
             let distance_to_target = (target - transform.translation.truncate()).length();
 
