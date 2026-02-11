@@ -1,3 +1,5 @@
+// This is temporary code to automatically pull materials into construction sites. It will be replaced by a more robust logistics system in the future.
+
 use crate::{
     grid::Position,
     materials::{InputPort, InventoryAccess, ItemName, ItemTransferRequestEvent, StoragePort},
