@@ -1,10 +1,10 @@
-# the_factory
+# You Are The Factory
 
 A factory management simulation built with Bevy, where players construct production facilities, manage workers, and optimize production chains on an infinite procedurally-generated grid.
 
 ## Overview
 
-the_factory is a personal project built to sharpen Rust and system design skills. The game drops you onto a procedurally-generated grid with ore deposits and a single Hub building. From there, you expand outward: mining raw materials, smelting them into ingots, assembling components, and launching finished goods for score.
+You Are The Factory is a personal project built to sharpen Rust and system design skills. The game drops you onto a procedurally-generated grid with ore deposits and a single Hub building. From there, you expand outward: mining raw materials, smelting them into ingots, assembling components, and launching finished goods for score.
 
 Current state: playable core loop with 10 buildings, 10 items across 4 tiers, 21 recipes, and automated worker logistics. ~6,000 lines of Rust on Bevy 0.18.
 
